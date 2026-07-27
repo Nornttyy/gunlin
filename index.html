@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#101719" />
+  <title>归林｜森林生存恐怖</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main id="app">
+    <section id="titleScreen" class="screen title-screen">
+      <div class="title-card">
+        <p class="eyebrow">FOREST SURVIVAL HORROR</p>
+        <h1>归林</h1>
+        <p class="subtitle">白天收集，夜晚活下去。</p>
+        <div class="class-picker" aria-label="选择职业">
+          <p>选择职业</p>
+          <div class="class-buttons">
+            <button class="class-button selected" data-class="0">枪手</button>
+            <button class="class-button" data-class="1">护士</button>
+            <button class="class-button" data-class="2">伐木工</button>
+            <button class="class-button" data-class="3">守望者</button>
+            <button class="class-button" data-class="4">棒球女</button>
+            <button class="class-button" data-class="5">科学家</button>
+          </div>
+        </div>
+        <button id="startButton" class="primary-button">进入森林</button>
+        <p class="title-tip">第一版原型 · 由你的像素素材驱动</p>
+      </div>
+    </section>
+
+    <section id="gameScreen" class="screen game-screen hidden">
+      <canvas id="gameCanvas" width="960" height="540" aria-label="归林游戏画面"></canvas>
+      <div class="hud">
+        <div class="hud-row">
+          <span id="phaseLabel">白天</span>
+          <span id="dayLabel">第 1 天</span>
+          <span id="healthLabel">生命 100</span>
+        </div>
+        <div class="hud-row secondary">
+          <span id="resourceLabel">木材 12　石头 4</span>
+          <span id="flashlightLabel">手电筒 开</span>
+        </div>
+      </div>
+      <div id="message" class="message" aria-live="polite"></div>
+      <div class="controls">WASD 移动　Shift 奔跑　E 采集　B 建造木墙　Space 攻击　F 手电筒</div>
+      <div id="gameOver" class="game-over hidden">
+        <h2>你倒在了森林里</h2>
+        <button id="restartButton" class="primary-button">重新开始</button>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="game.js"></script>
+</body>
+</html>

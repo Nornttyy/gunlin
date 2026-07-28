@@ -390,12 +390,12 @@ button.inventory-slot { font: inherit; cursor: default; }
   image-rendering: pixelated;
 }
 
-.item-wood { background-position: 0 -32px; }
-.item-stone { background-position: -32px -32px; }
-.item-berry { background-position: -64px -32px; }
-.inventory-slot[data-item-type="wood"] .item-sprite { background-position: 0 -32px; }
-.inventory-slot[data-item-type="stone"] .item-sprite { background-position: -32px -32px; }
-.inventory-slot[data-item-type="berry"] .item-sprite { background-position: -64px -32px; }
+.item-wood { background-position: 0 -64px; }
+.item-stone { background-position: -32px -64px; }
+.item-berry { background-position: -64px -64px; }
+.inventory-slot[data-item-type="wood"] .item-sprite { background-position: 0 -64px; }
+.inventory-slot[data-item-type="stone"] .item-sprite { background-position: -32px -64px; }
+.inventory-slot[data-item-type="berry"] .item-sprite { background-position: -64px -64px; }
 
 .inventory-count {
   position: absolute;
@@ -584,9 +584,9 @@ button.inventory-slot { font: inherit; cursor: default; }
   text-align: center;
 }
 
-.quick-slot[data-item-type="wood"] .item-sprite { background-position: 0 -32px; }
-.quick-slot[data-item-type="stone"] .item-sprite { background-position: -32px -32px; }
-.quick-slot[data-item-type="berry"] .item-sprite { background-position: -64px -32px; }
+.quick-slot[data-item-type="wood"] .item-sprite { background-position: 0 -64px; }
+.quick-slot[data-item-type="stone"] .item-sprite { background-position: -32px -64px; }
+.quick-slot[data-item-type="berry"] .item-sprite { background-position: -64px -64px; }
 
 .quick-slot.slot-empty::after {
   content: "空";

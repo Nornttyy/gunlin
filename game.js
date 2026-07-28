@@ -50,6 +50,9 @@ const classSelectPanel = document.getElementById("classSelectPanel");
 const classLabel = document.getElementById("classLabel");
 const phaseProgress = document.getElementById("phaseProgress");
 const healthBar = document.getElementById("healthBar");
+const objectiveLabel = document.getElementById("objectiveLabel");
+const threatLabel = document.getElementById("threatLabel");
+const threatMeter = document.getElementById("threatMeter");
 const phaseLabel = document.getElementById("phaseLabel");
 const dayLabel = document.getElementById("dayLabel");
 const healthLabel = document.getElementById("healthLabel");
@@ -1140,6 +1143,36 @@ function quickbarItemAmount(item) {
   return null;
 }
 
+function updateSurvivalReadout() {
+  if (objectiveLabel) {
+    if (classSelectionOpen) {
+      objectiveLabel.textContent = "选择职业后进入森林";
+    } else if (player.health <= 30) {
+      objectiveLabel.textContent = "寻找浆果，先处理伤势";
+    } else if (isNight()) {
+      objectiveLabel.textContent = player.flashlight ? "保持光照，熬到黎明" : "打开手电筒，远离动静";
+    } else if (craftedCounts.every((count) => count === 0)) {
+      objectiveLabel.textContent = "收集材料，制作第一件防御";
+    } else {
+      objectiveLabel.textContent = "加固营火周围，准备入夜";
+    }
+  }
+
+  let nearestMonster = Infinity;
+  for (const monster of monsters) {
+    nearestMonster = Math.min(nearestMonster, Math.hypot(monster.x - player.x, monster.y - player.y));
+  }
+  const threatStrength = Number.isFinite(nearestMonster)
+    ? Math.round(Math.max(0, Math.min(1, 1 - nearestMonster / 650)) * 100)
+    : 0;
+  const threatState = threatStrength >= 70 ? "danger" : threatStrength >= 30 ? "watch" : "calm";
+  if (threatLabel) {
+    threatLabel.textContent = threatState === "danger" ? "正在逼近" : threatState === "watch" ? "发现动静" : "安静";
+  }
+  if (threatMeter) threatMeter.style.width = `${threatStrength}%`;
+  gameScreen.dataset.threat = threatState;
+}
+
 function updateHud() {
   const cycle = elapsed % CYCLE_LENGTH;
   if (!isNight() && cycle > DAY_LENGTH - 8) {
@@ -1164,6 +1197,7 @@ function updateHud() {
   healthLabel.classList.toggle("danger", player.health <= 30);
   resourceLabel.textContent = `木材 ${player.wood}　石头 ${player.stone}　浆果 ${player.berry}`;
   flashlightLabel.textContent = `手电筒 ${player.flashlight ? "开" : "关"}`;
+  updateSurvivalReadout();
   const selected = BUILD_TYPES[selectedBuild];
   renderInventory();
   syncResourceQuickbar();

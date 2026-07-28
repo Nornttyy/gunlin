@@ -9,7 +9,7 @@
   <link rel="preload" href="assets/tree-sprites.png?v=20260728-tree-visible2" as="image" />
   <link rel="preload" href="assets/forest-assets.png?v=20260728-assets2" as="image" />
   <link rel="preload" href="assets/ark-pixel-12px-zh_cn.woff2?v=20260728-assets2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=20260728-item-icons1" />
+  <link rel="stylesheet" href="styles.css?v=20260728-ui-terminal1" />
 </head>
 <body>
   <main id="app">
@@ -64,7 +64,19 @@
           <span id="buildingLabel">当前：空手</span>
           <span id="flashlightLabel">手电筒 开</span>
         </div>
+        <div class="survival-row">
+          <span class="objective-cell">
+            <small>当前行动</small>
+            <strong id="objectiveLabel">选择职业后进入森林</strong>
+          </span>
+          <span class="threat-cell">
+            <small>附近动静</small>
+            <strong id="threatLabel">安静</strong>
+            <i class="threat-track" aria-hidden="true"><b id="threatMeter"></b></i>
+          </span>
+        </div>
       </div>
+      <div class="night-alert" aria-hidden="true"><span></span>夜间警报 // 保持光照</div>
       <span id="resourceLabel" class="hidden" aria-hidden="true">木材 0　石头 0　浆果 0</span>
       <button id="inventoryButton" class="inventory-button" aria-expanded="false" aria-controls="inventoryWorkspace">
         <span id="inventoryButtonLabel">背包</span> <span>[I]</span>
@@ -152,6 +164,6 @@
       </div>
     </section>
   </main>
-  <script type="module" src="game.js?v=20260728-visible-colliders1"></script>
+  <script type="module" src="game.js?v=20260728-ui-terminal1"></script>
 </body>
 </html>

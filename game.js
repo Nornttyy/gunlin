@@ -17,6 +17,10 @@ const CAMP_POSITION = {
   y: Math.floor(WORLD.height / 2 / TILE_SIZE) * TILE_SIZE + TILE_SIZE / 2
 };
 const PLAYER_START = { x: CAMP_POSITION.x, y: CAMP_POSITION.y + 110 };
+const SPAWN_CORRIDOR = {
+  halfLength: 600,
+  radius: 84
+};
 const DAY_LENGTH = 62;
 const NIGHT_LENGTH = 42;
 const CYCLE_LENGTH = DAY_LENGTH + NIGHT_LENGTH;
@@ -190,6 +194,11 @@ function resourceChunkKey(chunkX, chunkY) {
   return `${chunkX}:${chunkY}`;
 }
 
+function isInsideSpawnCorridor(x, y) {
+  const segmentOffsetX = Math.max(0, Math.abs(x - PLAYER_START.x) - SPAWN_CORRIDOR.halfLength);
+  return Math.hypot(segmentOffsetX, y - PLAYER_START.y) < SPAWN_CORRIDOR.radius;
+}
+
 function generateResourceChunk(chunkX, chunkY) {
   const key = resourceChunkKey(chunkX, chunkY);
   if (loadedResourceChunks.has(key)) return;
@@ -205,6 +214,7 @@ function generateResourceChunk(chunkX, chunkY) {
     const y = originY + 36 + gridHash(chunkX, chunkY, candidate * 4 + 2) * (RESOURCE_CHUNK_SIZE - 72);
     if (x < WORLD.margin || y < WORLD.margin || x > WORLD.width - WORLD.margin || y > WORLD.height - WORLD.margin) continue;
     if (Math.hypot(x - campfire.x, y - campfire.y) < 230) continue;
+    if (isInsideSpawnCorridor(x, y)) continue;
     const roll = gridHash(chunkX, chunkY, candidate * 4 + 3);
     const type = roll < 0.58 ? "tree" : roll < 0.82 ? "rock" : "berry";
     const radius = type === "tree" ? 24 : type === "rock" ? 15 : 18;

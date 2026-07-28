@@ -9,7 +9,7 @@
   <link rel="preload" href="assets/tree-sprites.png?v=20260728-tree-visible2" as="image" />
   <link rel="preload" href="assets/forest-assets.png?v=20260728-assets2" as="image" />
   <link rel="preload" href="assets/ark-pixel-12px-zh_cn.woff2?v=20260728-assets2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=20260728-ui-terminal1" />
+  <link rel="stylesheet" href="styles.css?v=20260728-mimic-behavior1" />
 </head>
 <body>
   <main id="app">
@@ -157,6 +157,10 @@
         </button>
       </nav>
       <div class="controls">WASD 移动　/　左键 攻击或采集　/　右键 建造　/　E 互动　/　F 手电筒　/　I 背包</div>
+      <div id="mimicJumpscare" class="mimic-jumpscare" aria-hidden="true">
+        <div class="mimic-jumpscare-face" aria-hidden="true"></div>
+        <span>信号中断 // 模仿者</span>
+      </div>
       <div id="gameOver" class="game-over hidden">
         <h2>你倒在了森林里</h2>
         <p>雾正在覆盖你留下的脚印</p>
@@ -164,6 +168,6 @@
       </div>
     </section>
   </main>
-  <script type="module" src="game.js?v=20260728-ui-terminal1"></script>
+  <script type="module" src="game.js?v=20260728-mimic-behavior1"></script>
 </body>
 </html>

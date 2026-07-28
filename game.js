@@ -24,6 +24,12 @@ const SPAWN_CORRIDOR = {
 const DAY_LENGTH = 62;
 const NIGHT_LENGTH = 42;
 const CYCLE_LENGTH = DAY_LENGTH + NIGHT_LENGTH;
+const MIMIC_DETECTION_DISTANCE = 360;
+const MIMIC_LOSE_DISTANCE = 540;
+const MIMIC_ATTACK_DISTANCE = 27;
+const MIMIC_JUMPSCARE_DAMAGE = 50;
+const MIMIC_TELEPORT_MIN_DISTANCE = 650;
+const MIMIC_TELEPORT_MAX_DISTANCE = 860;
 const BUILD_GRID_SIZE = TILE_SIZE;
 const DEFENSE_COLLIDER = {
   wall: { length: 48, thickness: 15, edgeOffset: 16 },
@@ -44,6 +50,7 @@ const loadingProgress = document.getElementById("loadingProgress");
 const retryAssetsButton = document.getElementById("retryAssetsButton");
 const restartButton = document.getElementById("restartButton");
 const gameOverPanel = document.getElementById("gameOver");
+const mimicJumpscare = document.getElementById("mimicJumpscare");
 const messageElement = document.getElementById("message");
 const classButtons = [...document.querySelectorAll(".class-button")];
 const classSelectPanel = document.getElementById("classSelectPanel");
@@ -142,6 +149,7 @@ let selectedClass = -1;
 let classSelectionOpen = false;
 let inventoryOpen = false;
 let draggedInventorySlot = -1;
+let jumpscareSequence = 0;
 let nightMaskCanvas = null;
 let nightMaskContext = null;
 let assetsReady = false;
@@ -405,6 +413,11 @@ function startGame() {
   selectedQuickSlot = -1;
   selectedClass = -1;
   classSelectionOpen = true;
+  jumpscareSequence += 1;
+  if (mimicJumpscare) {
+    mimicJumpscare.classList.remove("active");
+    mimicJumpscare.setAttribute("aria-hidden", "true");
+  }
   draggedInventorySlot = -1;
   inventoryItems.fill(null);
   quickbarItems.fill(null);
@@ -1001,7 +1014,50 @@ function spawnMonster() {
   const distance = 560 + Math.random() * 180;
   const x = Math.max(WORLD.margin, Math.min(WORLD.width - WORLD.margin, player.x + Math.cos(angle) * distance));
   const y = Math.max(WORLD.margin, Math.min(WORLD.height - WORLD.margin, player.y + Math.sin(angle) * distance));
-  monsters.push({ x, y, radius: 13, health: 70 + dayNumber * 7, speed: 37 + dayNumber * 3, attackCooldown: 0, hurtTimer: 0 });
+  monsters.push({
+    type: "mimic",
+    name: "模仿者",
+    x,
+    y,
+    radius: 13,
+    health: 70 + dayNumber * 7,
+    speed: 37 + dayNumber * 3,
+    alerted: false,
+    detectionCooldown: 0,
+    attackCooldown: 0,
+    hurtTimer: 0
+  });
+}
+
+function triggerMimicJumpscare() {
+  if (!mimicJumpscare) return;
+  const sequence = ++jumpscareSequence;
+  mimicJumpscare.classList.remove("active");
+  void mimicJumpscare.offsetWidth;
+  mimicJumpscare.classList.add("active");
+  mimicJumpscare.setAttribute("aria-hidden", "false");
+  setTimeout(() => {
+    if (sequence !== jumpscareSequence) return;
+    mimicJumpscare.classList.remove("active");
+    mimicJumpscare.setAttribute("aria-hidden", "true");
+  }, 560);
+}
+
+function teleportMimicAway(monster) {
+  for (let attempt = 0; attempt < 14; attempt += 1) {
+    const angle = Math.random() * Math.PI * 2;
+    const distance = MIMIC_TELEPORT_MIN_DISTANCE
+      + Math.random() * (MIMIC_TELEPORT_MAX_DISTANCE - MIMIC_TELEPORT_MIN_DISTANCE);
+    const x = Math.max(WORLD.margin, Math.min(WORLD.width - WORLD.margin, player.x + Math.cos(angle) * distance));
+    const y = Math.max(WORLD.margin, Math.min(WORLD.height - WORLD.margin, player.y + Math.sin(angle) * distance));
+    if (Math.hypot(x - player.x, y - player.y) < MIMIC_TELEPORT_MIN_DISTANCE * 0.9) continue;
+    if (terrainAtWorld(x, y) === TERRAIN_FRAME.water) continue;
+    monster.x = x;
+    monster.y = y;
+    return;
+  }
+  monster.x = Math.max(WORLD.margin, Math.min(WORLD.width - WORLD.margin, player.x + MIMIC_TELEPORT_MIN_DISTANCE));
+  monster.y = player.y;
 }
 
 function updateTraps(delta) {
@@ -1028,8 +1084,10 @@ function updateTraps(delta) {
 function updateMonsters(delta, night) {
   for (let i = monsters.length - 1; i >= 0; i -= 1) {
     const monster = monsters[i];
-    monster.attackCooldown = Math.max(0, monster.attackCooldown - delta);
+    monster.attackCooldown = Math.max(0, (monster.attackCooldown || 0) - delta);
+    monster.detectionCooldown = Math.max(0, (monster.detectionCooldown || 0) - delta);
     if (!night) {
+      monster.alerted = false;
       const retreatX = monster.x - player.x;
       const retreatY = monster.y - player.y;
       const retreatDistance = Math.hypot(retreatX, retreatY) || 1;
@@ -1041,22 +1099,36 @@ function updateMonsters(delta, night) {
     const dx = player.x - monster.x;
     const dy = player.y - monster.y;
     const distance = Math.hypot(dx, dy) || 1;
-    if (distance > 27) {
-      const nextX = monster.x + (dx / distance) * monster.speed * delta;
-      const nextY = monster.y + (dy / distance) * monster.speed * delta;
-      const defense = findBlockingDefense(nextX, nextY, monster.radius);
-      if (defense) {
-        attackDefense(monster, defense);
+
+    if (!monster.alerted && monster.detectionCooldown <= 0 && distance <= MIMIC_DETECTION_DISTANCE) {
+      monster.alerted = true;
+      showMessage("附近传来模仿你的脚步声", 1.2);
+    } else if (monster.alerted && distance > MIMIC_LOSE_DISTANCE) {
+      monster.alerted = false;
+    }
+
+    if (monster.alerted) {
+      if (distance > MIMIC_ATTACK_DISTANCE) {
+        const nextX = monster.x + (dx / distance) * monster.speed * delta;
+        const nextY = monster.y + (dy / distance) * monster.speed * delta;
+        const defense = findBlockingDefense(nextX, nextY, monster.radius);
+        if (defense) {
+          attackDefense(monster, defense);
+        } else {
+          monster.x = nextX;
+          monster.y = nextY;
+        }
       } else {
-        monster.x = nextX;
-        monster.y = nextY;
-      }
-    } else {
-      if (monster.attackCooldown <= 0 && player.hurtTimer <= 0) {
-        player.health = Math.max(0, player.health - 12);
-        player.hurtTimer = 0.8;
-        monster.attackCooldown = 1.1;
-        showMessage("你被怪物抓伤了", 0.8);
+        if (monster.attackCooldown <= 0 && player.hurtTimer <= 0) {
+          player.health = Math.max(0, player.health - MIMIC_JUMPSCARE_DAMAGE);
+          player.hurtTimer = 0.9;
+          monster.attackCooldown = 2.2;
+          monster.alerted = false;
+          monster.detectionCooldown = 1.4;
+          triggerMimicJumpscare();
+          teleportMimicAway(monster);
+          showMessage("模仿者扑到了你脸上！生命 -50", 1.25);
+        }
       }
     }
     monster.hurtTimer = Math.max(0, monster.hurtTimer - delta);

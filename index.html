@@ -10,7 +10,7 @@
   <link rel="preload" href="assets/mimic.png?v=20260728-mimic-drawn1" as="image" />
   <link rel="preload" href="assets/forest-assets.png?v=20260728-assets2" as="image" />
   <link rel="preload" href="assets/ark-pixel-12px-zh_cn.woff2?v=20260728-assets2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=20260728-spatial-audio1" />
+  <link rel="stylesheet" href="styles.css?v=20260728-workbench-gather1" />
 </head>
 <body>
   <main id="app">
@@ -92,7 +92,7 @@
               <p>合成栏</p>
               <span>制作后进入快捷栏</span>
             </div>
-            <span>配方 06</span>
+            <span>配方 08</span>
           </div>
           <div class="craft-list">
             <button type="button" class="craft-button" data-recipe="0"><span class="item-sprite quick-wall" aria-hidden="true"></span><span class="craft-copy"><strong>木墙</strong><small>木材 3 · 石头 1</small></span><span class="craft-owned">0</span></button>
@@ -101,6 +101,14 @@
             <button type="button" class="craft-button" data-recipe="3"><span class="item-sprite quick-chest" aria-hidden="true"></span><span class="craft-copy"><strong>储物箱</strong><small>木材 5</small></span><span class="craft-owned">0</span></button>
             <button type="button" class="craft-button" data-recipe="4"><span class="item-sprite quick-workbench" aria-hidden="true"></span><span class="craft-copy"><strong>工作台</strong><small>木材 6 · 石头 2</small></span><span class="craft-owned">0</span></button>
             <button type="button" class="craft-button" data-recipe="5"><span class="item-sprite quick-trap" aria-hidden="true"></span><span class="craft-copy"><strong>陷阱</strong><small>木材 2 · 石头 1</small></span><span class="craft-owned">0</span></button>
+          </div>
+          <div class="workbench-craft-header">
+            <span>工作台武器</span>
+            <small id="workbenchStatus">靠近工作台后解锁</small>
+          </div>
+          <div class="weapon-craft-list">
+            <button type="button" class="weapon-craft-button" data-weapon-recipe="0"><span class="item-sprite weapon-club" aria-hidden="true"></span><span class="craft-copy"><strong>木棒</strong><small>木材 4 · 伤害 25</small></span></button>
+            <button type="button" class="weapon-craft-button" data-weapon-recipe="1"><span class="item-sprite weapon-axe" aria-hidden="true"></span><span class="craft-copy"><strong>石斧</strong><small>木材 4 · 石头 3 · 伤害 45</small></span></button>
           </div>
           <p id="craftStatus" class="craft-status">收集材料后可以制作</p>
         </section>
@@ -172,6 +180,6 @@
       </div>
     </section>
   </main>
-  <script type="module" src="game.js?v=20260728-spatial-audio1"></script>
+  <script type="module" src="game.js?v=20260728-workbench-gather1"></script>
 </body>
 </html>

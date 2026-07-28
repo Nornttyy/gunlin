@@ -47,8 +47,12 @@ const inventoryBerryCount = document.getElementById("inventoryBerryCount");
 const inventoryCapacity = document.getElementById("inventoryCapacity");
 const useBerryButton = document.getElementById("useBerryButton");
 const quickSlots = [...document.querySelectorAll(".quick-slot")];
-const quickBerryCount = document.getElementById("quickBerryCount");
 const quickbarItems = Array(9).fill(null);
+const RESOURCE_QUICK_ITEMS = [
+  { type: "wood", kind: "material", label: "木材", preferredSlot: 0 },
+  { type: "stone", kind: "material", label: "石头", preferredSlot: 1 },
+  { type: "berry", kind: "food", label: "浆果", preferredSlot: 2 }
+];
 
 const ASSET_VERSION = "20260728-assets2";
 const sprite = new Image();
@@ -635,10 +639,12 @@ function canBuildAt(x, y, silent = false) {
 }
 
 function buildSelected() {
-  if (selectedQuickSlot < 0 || selectedQuickSlot >= BUILD_TYPES.length) {
-    showMessage("请先用 1-6 选择一种建筑");
+  const heldItem = quickbarItems[selectedQuickSlot];
+  if (heldItem?.kind !== "building") {
+    showMessage("手上没有可以建造的物品");
     return;
   }
+  selectedBuild = heldItem.buildIndex;
   const selected = BUILD_TYPES[selectedBuild];
   if (selected.type === "wall") {
     buildBarricade();
@@ -828,6 +834,34 @@ function attackDefense(monster, defense) {
   showMessage(`${defense.label}被怪物破坏了！`, 1.4);
 }
 
+function syncResourceQuickbar() {
+  for (const definition of RESOURCE_QUICK_ITEMS) {
+    const amount = player[definition.type];
+    const existingIndex = quickbarItems.findIndex((item) => (
+      item?.source === "inventory" && item.type === definition.type
+    ));
+    if (amount <= 0) {
+      if (existingIndex >= 0) {
+        quickbarItems[existingIndex] = null;
+        if (selectedQuickSlot === existingIndex) selectedQuickSlot = -1;
+      }
+      continue;
+    }
+    if (existingIndex >= 0) continue;
+    const preferredIsFree = quickbarItems[definition.preferredSlot] === null;
+    const targetIndex = preferredIsFree
+      ? definition.preferredSlot
+      : quickbarItems.findIndex((item) => item === null);
+    if (targetIndex < 0) continue;
+    quickbarItems[targetIndex] = { ...definition, source: "inventory" };
+  }
+}
+
+function quickbarItemAmount(item) {
+  if (!item || item.source !== "inventory") return null;
+  return player[item.type];
+}
+
 function updateHud() {
   const cycle = elapsed % CYCLE_LENGTH;
   if (!isNight() && cycle > DAY_LENGTH - 8) {
@@ -853,24 +887,32 @@ function updateHud() {
   inventoryCapacity.textContent = `${occupiedSlots} / 12 格`;
   useBerryButton.classList.toggle("unavailable", player.berry <= 0);
   useBerryButton.setAttribute("aria-disabled", String(player.berry <= 0));
-  quickBerryCount.textContent = player.berry;
+  syncResourceQuickbar();
   quickSlots.forEach((slot, index) => {
     const item = quickbarItems[index];
+    const amount = quickbarItemAmount(item);
     const selectedSlot = Boolean(item) && index === selectedQuickSlot;
     slot.classList.toggle("selected", selectedSlot);
     slot.classList.toggle("slot-empty", !item);
     slot.classList.toggle("quick-empty", !item);
     slot.dataset.itemKind = item?.kind || "empty";
-    if (!item) slot.title = "空快捷格";
+    slot.dataset.itemType = item?.type || "empty";
+    slot.dataset.label = item?.label || "空";
+    slot.dataset.count = amount === null ? "" : String(amount);
+    slot.title = item
+      ? `${item.label}${amount === null ? "" : ` ×${amount}`}`
+      : "空快捷格";
     slot.setAttribute("aria-pressed", String(selectedSlot));
   });
   const selectedItem = quickbarItems[selectedQuickSlot];
   if (selectedItem?.kind === "building") {
     buildingLabel.textContent = `快捷 ${selectedQuickSlot + 1}：${selected.label}（木${selected.cost.wood} 石${selected.cost.stone}）`;
   } else if (selectedItem?.kind === "food" && selectedItem.type === "berry") {
-    buildingLabel.textContent = `快捷 7：浆果（${player.berry}）`;
+    buildingLabel.textContent = `快捷 ${selectedQuickSlot + 1}：浆果（${player.berry}）`;
   } else if (selectedItem?.kind === "weapon") {
     buildingLabel.textContent = `当前武器：${selectedItem.label || "武器"}`;
+  } else if (selectedItem?.kind === "material") {
+    buildingLabel.textContent = `当前物品：${selectedItem.label}`;
   } else {
     buildingLabel.textContent = "当前：空手";
   }

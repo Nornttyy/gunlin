@@ -188,6 +188,21 @@ h1 {
 
 .game-screen { position: relative; display: grid; place-items: center; overflow: hidden; background: #020506; }
 
+.game-screen::before {
+  content: "";
+  position: absolute;
+  inset: -4%;
+  z-index: 2;
+  background:
+    radial-gradient(circle at 16% 52%, rgba(45, 6, 10, .2), transparent 31%),
+    radial-gradient(circle at 88% 24%, rgba(0, 5, 7, .72), transparent 38%),
+    linear-gradient(115deg, rgba(0, 5, 7, .16), rgba(20, 2, 5, .13));
+  opacity: .24;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  animation: horror-breathe 8s ease-in-out infinite alternate;
+}
+
 .game-screen::after {
   content: "";
   position: absolute;
@@ -200,13 +215,14 @@ h1 {
       rgba(0, 0, 0, 0) 3px,
       rgba(0, 3, 4, .14) 4px
     );
-  opacity: .08;
+  opacity: .2;
   mix-blend-mode: multiply;
   pointer-events: none;
   transition: opacity 1.4s ease;
 }
 
-.game-screen.is-night::after { opacity: .7; }
+.game-screen.is-night::before { opacity: .48; }
+.game-screen.is-night::after { opacity: .86; }
 
 #gameCanvas {
   position: relative;
@@ -217,8 +233,13 @@ h1 {
   image-rendering: crisp-edges;
   background: #284535;
   cursor: crosshair;
-  filter: saturate(.82) contrast(1.08);
+  filter: saturate(.64) contrast(1.16) brightness(.9);
   box-shadow: 0 0 90px rgba(0, 0, 0, .95);
+  transition: filter 2s ease;
+}
+
+.game-screen.is-night #gameCanvas {
+  filter: saturate(.43) contrast(1.25) brightness(.84);
 }
 
 .hud {
@@ -590,6 +611,12 @@ button.inventory-slot { font: inherit; cursor: default; }
 
 @keyframes danger-pulse {
   50% { opacity: .58; }
+}
+
+@keyframes horror-breathe {
+  0% { transform: scale(1); filter: blur(0); }
+  45% { transform: scale(1.025); filter: blur(1px); }
+  100% { transform: scale(1.055); filter: blur(2px); }
 }
 
 @media (max-width: 560px) {

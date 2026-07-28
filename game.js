@@ -1327,18 +1327,21 @@ function drawAtmosphere() {
   drawNightCurtain(darkness);
   drawCampfireGlow(darkness);
   drawFlashlightGlow(darkness);
+  drawDistantFigures(darkness);
   drawDriftingFog(darkness);
   drawWatchingEyes(darkness);
+  drawAirborneSpecks(darkness);
   drawEdgeShadows(darkness);
+  drawFilmGrain(darkness);
   drawVignette(darkness);
   drawDamageFlash();
 }
 
 function drawSkyTint(darkness) {
   const tint = ctx.createLinearGradient(0, 0, 0, H);
-  tint.addColorStop(0, `rgba(2, 6, 12, ${0.08 + darkness * 0.7})`);
-  tint.addColorStop(0.62, `rgba(3, 7, 10, ${0.04 + darkness * 0.64})`);
-  tint.addColorStop(1, `rgba(0, 3, 6, ${0.12 + darkness * 0.72})`);
+  tint.addColorStop(0, `rgba(2, 6, 12, ${0.16 + darkness * 0.62})`);
+  tint.addColorStop(0.62, `rgba(3, 7, 10, ${0.11 + darkness * 0.57})`);
+  tint.addColorStop(1, `rgba(0, 3, 6, ${0.18 + darkness * 0.66})`);
   ctx.fillStyle = tint;
   ctx.fillRect(0, 0, W, H);
 }
@@ -1350,19 +1353,20 @@ function drawNightCurtain(darkness) {
   const fireX = campfire.x - camera.x;
   const fireY = campfire.y - camera.y - 18;
   const angle = Math.atan2(player.dirY, player.dirX);
-  const beamRadius = 285;
+  const beamRadius = 232;
+  const beamHalfAngle = 0.39;
 
   ctx.save();
-  ctx.fillStyle = `rgba(0, 1, 3, ${darkness * (player.flashlight ? 0.66 : 0.82)})`;
+  ctx.fillStyle = `rgba(0, 1, 3, ${darkness * (player.flashlight ? 0.74 : 0.9)})`;
   ctx.beginPath();
   ctx.rect(0, 0, W, H);
 
   if (player.flashlight) {
     ctx.moveTo(px, py);
-    ctx.arc(px, py, beamRadius, angle - 0.5, angle + 0.5);
+    ctx.arc(px, py, beamRadius, angle - beamHalfAngle, angle + beamHalfAngle);
     ctx.closePath();
-    ctx.moveTo(px + 58, py);
-    ctx.arc(px, py, 58, 0, Math.PI * 2);
+    ctx.moveTo(px + 48, py);
+    ctx.arc(px, py, 48, 0, Math.PI * 2);
     ctx.closePath();
   }
 
@@ -1399,8 +1403,9 @@ function drawFlashlightGlow(darkness) {
   const px = player.x - camera.x;
   const py = player.y - camera.y - 12;
   const angle = Math.atan2(player.dirY, player.dirX);
-  const radius = 285;
-  const flicker = 0.91 + Math.sin(elapsed * 21) * 0.04 + Math.sin(elapsed * 7.7) * 0.025;
+  const radius = 238;
+  const stutter = darkness > 0.55 && Math.sin(elapsed * 0.73) > 0.985 ? 0.42 : 1;
+  const flicker = (0.89 + Math.sin(elapsed * 21) * 0.055 + Math.sin(elapsed * 7.7) * 0.035) * stutter;
 
   ctx.save();
   ctx.globalCompositeOperation = "screen";
@@ -1408,7 +1413,7 @@ function drawFlashlightGlow(darkness) {
   ctx.rotate(angle);
   ctx.beginPath();
   ctx.moveTo(0, 0);
-  ctx.arc(0, 0, radius, -0.5, 0.5);
+  ctx.arc(0, 0, radius, -0.39, 0.39);
   ctx.closePath();
   ctx.clip();
   const beam = ctx.createRadialGradient(0, 0, 14, 0, 0, radius);
@@ -1429,15 +1434,78 @@ function drawFlashlightGlow(darkness) {
   ctx.restore();
 }
 
+function drawDistantFigures(darkness) {
+  const px = player.x - camera.x;
+  const py = player.y - camera.y - 12;
+  const flashlightAngle = Math.atan2(player.dirY, player.dirX);
+  const positions = [
+    { x: 0.045, y: 0.21, seed: 401 },
+    { x: 0.955, y: 0.3, seed: 419 },
+    { x: 0.08, y: 0.68, seed: 433 },
+    { x: 0.92, y: 0.73, seed: 449 },
+    { x: 0.28, y: 0.055, seed: 461 },
+    { x: 0.72, y: 0.94, seed: 479 }
+  ];
+
+  for (let index = 0; index < positions.length; index += 1) {
+    const position = positions[index];
+    const x = W * position.x + Math.sin(elapsed * 0.085 + position.seed) * 14;
+    const y = H * position.y + Math.cos(elapsed * 0.07 + position.seed) * 9;
+    const dx = x - px;
+    const dy = y - py;
+    const distance = Math.hypot(dx, dy);
+    const reveal = Math.max(0, Math.sin(elapsed * 0.23 + position.seed));
+    let alpha = (0.1 + darkness * 0.54) * (0.18 + Math.pow(reveal, 3) * 0.62);
+
+    if (player.flashlight && distance < 300) {
+      const figureAngle = Math.atan2(dy, dx);
+      const angleDifference = Math.abs(Math.atan2(
+        Math.sin(figureAngle - flashlightAngle),
+        Math.cos(figureAngle - flashlightAngle)
+      ));
+      if (angleDifference < 0.47) alpha *= 0.035;
+    }
+    if (distance < 115) alpha *= 0.12;
+
+    const scale = 0.76 + hash(position.seed) * 0.52;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
+    ctx.globalAlpha = alpha;
+    ctx.shadowColor = darkness > 0.45 ? "#263a35" : "#000304";
+    ctx.shadowBlur = 19;
+    ctx.fillStyle = darkness > 0.45 ? "#07100f" : "#000304";
+    ctx.beginPath();
+    ctx.ellipse(0, -27, 7, 9, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-7, -19);
+    ctx.quadraticCurveTo(-14, 6, -18, 32);
+    ctx.lineTo(17, 32);
+    ctx.quadraticCurveTo(13, 5, 7, -19);
+    ctx.closePath();
+    ctx.fill();
+    if (darkness > 0.58 && reveal > 0.52) {
+      ctx.globalAlpha = alpha * 0.42;
+      ctx.shadowColor = "#879b8f";
+      ctx.shadowBlur = 5;
+      ctx.fillStyle = "#a4b2a8";
+      ctx.fillRect(-4, -29, 2, 1);
+      ctx.fillRect(2, -29, 2, 1);
+    }
+    ctx.restore();
+  }
+}
+
 function drawDriftingFog(darkness) {
-  for (let index = 0; index < 12; index += 1) {
+  for (let index = 0; index < 18; index += 1) {
     const width = 160 + hash(index + 70) * 260;
     const height = 22 + hash(index + 90) * 40;
     const speed = 5 + hash(index + 110) * 9;
     const loopWidth = W + width * 2;
     const x = ((hash(index + 130) * loopWidth + elapsed * speed - camera.x * 0.025) % loopWidth) - width;
     const y = hash(index + 150) * H + Math.sin(elapsed * 0.16 + index) * 18;
-    const alpha = (0.025 + darkness * 0.075) * (0.55 + hash(index + 170));
+    const alpha = (0.048 + darkness * 0.105) * (0.55 + hash(index + 170));
     ctx.save();
     ctx.translate(x, y);
     ctx.scale(width * 0.5, height * 0.5);
@@ -1454,7 +1522,6 @@ function drawDriftingFog(darkness) {
 }
 
 function drawWatchingEyes(darkness) {
-  if (darkness < 0.62) return;
   const px = player.x - camera.x;
   const py = player.y - camera.y - 12;
   const flashlightAngle = Math.atan2(player.dirY, player.dirX);
@@ -1462,7 +1529,9 @@ function drawWatchingEyes(darkness) {
     { x: 0.08, y: 0.28, seed: 241 },
     { x: 0.91, y: 0.38, seed: 257 },
     { x: 0.14, y: 0.76, seed: 269 },
-    { x: 0.84, y: 0.78, seed: 283 }
+    { x: 0.84, y: 0.78, seed: 283 },
+    { x: 0.35, y: 0.09, seed: 307 },
+    { x: 0.66, y: 0.91, seed: 331 }
   ];
 
   for (let index = 0; index < positions.length; index += 1) {
@@ -1475,7 +1544,7 @@ function drawWatchingEyes(darkness) {
     const dy = y - py;
     const distance = Math.hypot(dx, dy);
     const pulse = Math.max(0, Math.sin(elapsed * 0.58 + index * 1.91));
-    let alpha = darkness * (0.07 + Math.pow(pulse, 5) * 0.43);
+    let alpha = (0.12 + darkness * 0.88) * (0.015 + Math.pow(pulse, 7) * (0.07 + darkness * 0.42));
 
     if (player.flashlight && distance < 330) {
       const eyeAngle = Math.atan2(dy, dx);
@@ -1496,11 +1565,24 @@ function drawWatchingEyes(darkness) {
   }
 }
 
+function drawAirborneSpecks(darkness) {
+  ctx.save();
+  for (let index = 0; index < 46; index += 1) {
+    const drift = elapsed * (3 + hash(index + 521) * 8);
+    const x = (hash(index + 503) * (W + 80) + drift - camera.x * 0.012) % (W + 80) - 40;
+    const y = (hash(index + 547) * (H + 60) + Math.sin(elapsed * 0.3 + index) * 13) % (H + 60) - 30;
+    const size = hash(index + 563) > 0.78 ? 2 : 1;
+    ctx.globalAlpha = (0.08 + darkness * 0.11) * (0.4 + hash(index + 577));
+    ctx.fillStyle = hash(index + 593) > 0.72 ? "#a8b1a5" : "#07100d";
+    ctx.fillRect(Math.round(x), Math.round(y), size, size);
+  }
+  ctx.restore();
+}
+
 function drawEdgeShadows(darkness) {
-  if (darkness < 0.35) return;
   const sway = Math.sin(elapsed * 0.42) * 10;
   ctx.save();
-  ctx.globalAlpha = darkness * 0.64;
+  ctx.globalAlpha = 0.18 + darkness * 0.55;
   ctx.strokeStyle = "#010405";
   ctx.fillStyle = "#010405";
   ctx.lineCap = "round";
@@ -1529,12 +1611,26 @@ function drawEdgeShadows(darkness) {
   ctx.restore();
 }
 
+function drawFilmGrain(darkness) {
+  const frameSeed = Math.floor(elapsed * 10);
+  ctx.save();
+  ctx.globalAlpha = 0.035 + darkness * 0.045;
+  for (let index = 0; index < 95; index += 1) {
+    const x = Math.floor(hash(frameSeed * 191 + index * 17) * W);
+    const y = Math.floor(hash(frameSeed * 223 + index * 29) * H);
+    const light = hash(frameSeed * 251 + index * 31) > 0.83;
+    ctx.fillStyle = light ? "#b5beb4" : "#000304";
+    ctx.fillRect(x, y, light ? 1 : 2, 1);
+  }
+  ctx.restore();
+}
+
 function drawVignette(darkness) {
   const breathing = darkness * (0.02 + (Math.sin(elapsed * 0.72) + 1) * 0.018);
   const vignette = ctx.createRadialGradient(W / 2, H / 2, H * 0.16, W / 2, H / 2, W * 0.67);
   vignette.addColorStop(0, "rgba(1, 4, 6, 0)");
-  vignette.addColorStop(0.63, `rgba(1, 4, 6, ${0.03 + darkness * 0.08})`);
-  vignette.addColorStop(1, `rgba(0, 2, 4, ${0.38 + darkness * 0.34 + breathing})`);
+  vignette.addColorStop(0.55, `rgba(1, 4, 6, ${0.055 + darkness * 0.1})`);
+  vignette.addColorStop(1, `rgba(0, 2, 4, ${0.5 + darkness * 0.34 + breathing})`);
   ctx.fillStyle = vignette;
   ctx.fillRect(0, 0, W, H);
 }

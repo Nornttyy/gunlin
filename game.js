@@ -244,17 +244,22 @@ function resetWorld() {
   barricadeId = 0;
   doorId = 0;
   buildingId = 0;
-  for (let i = 0; i < 78; i += 1) {
+  // 多准备一些候选位置；遇到水面、沙滩或篝火周围就跳过，
+  // 直到放满 78 个有效资源，避免过滤后地图变得太空。
+  for (let i = 0; i < 150 && resources.length < 78; i += 1) {
     const x = 120 + hash(i * 3 + 1) * 2160;
     const y = 120 + hash(i * 3 + 2) * 1360;
     if (Math.hypot(x - campfire.x, y - campfire.y) < 230) continue;
     const roll = hash(i * 3 + 3);
+    const type = roll < 0.58 ? "tree" : roll < 0.82 ? "rock" : "berry";
+    const radius = type === "tree" ? 24 : type === "rock" ? 15 : 18;
+    if ((type === "tree" || type === "berry") && !canPlantGrowAt(x, y, radius)) continue;
     resources.push({
       id: resourceId++,
       x,
       y,
-      type: roll < 0.58 ? "tree" : roll < 0.82 ? "rock" : "berry",
-      radius: roll < 0.58 ? 24 : roll < 0.82 ? 15 : 18
+      type,
+      radius
     });
   }
   // 先放一扇测试门，后续可由建造系统生成更多门。
@@ -958,6 +963,25 @@ function terrainAt(tileX, tileY) {
   if (isWaterTile(tileX, tileY)) return TERRAIN_FRAME.water;
   if (isBesideWater(tileX, tileY)) return TERRAIN_FRAME.sand;
   return TERRAIN_FRAME.grass;
+}
+
+function terrainAtWorld(worldX, worldY) {
+  return terrainAt(Math.floor(worldX / 48), Math.floor(worldY / 48));
+}
+
+// 植物不仅检查中心，还检查根部周围，防止树或灌木压到沙滩和水面上。
+function canPlantGrowAt(x, y, radius) {
+  const footprint = Math.max(12, radius * 0.72);
+  const points = [
+    [0, 0],
+    [-footprint, 0],
+    [footprint, 0],
+    [0, -footprint],
+    [0, footprint]
+  ];
+  return points.every(([offsetX, offsetY]) => (
+    terrainAtWorld(x + offsetX, y + offsetY) === TERRAIN_FRAME.grass
+  ));
 }
 
 function drawTerrainTile(frame, x, y) {

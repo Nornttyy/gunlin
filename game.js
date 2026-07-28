@@ -24,6 +24,21 @@ const flashlightLabel = document.getElementById("flashlightLabel");
 
 const sprite = new Image();
 sprite.src = "assets/player.png";
+const worldSprite = new Image();
+worldSprite.src = "assets/forest-assets.png";
+
+// 建筑素材在 128×96 图集的第 4 行（每格 16×16）。
+const BUILDING_ROW = 3;
+const BUILDING_FRAME = {
+  campfire: 0,
+  wall: 1,
+  doorClosed: 2,
+  doorOpen: 3,
+  floor: 4,
+  chest: 5,
+  workbench: 6,
+  trap: 7
+};
 
 const keys = new Set();
 let state = "title";
@@ -35,6 +50,7 @@ let messageTimer = 0;
 let spawnTimer = 0;
 let resourceId = 0;
 let barricadeId = 0;
+let doorId = 0;
 
 const player = {
   x: 330,
@@ -58,6 +74,7 @@ const player = {
 const resources = [];
 const monsters = [];
 const barricades = [];
+const doors = [];
 const camera = { x: 0, y: 0 };
 const campfire = { x: 330, y: 710 };
 
@@ -70,8 +87,10 @@ function resetWorld() {
   resources.length = 0;
   monsters.length = 0;
   barricades.length = 0;
+  doors.length = 0;
   resourceId = 0;
   barricadeId = 0;
+  doorId = 0;
   for (let i = 0; i < 78; i += 1) {
     const x = 120 + hash(i * 3 + 1) * 2160;
     const y = 120 + hash(i * 3 + 2) * 1360;
@@ -85,6 +104,8 @@ function resetWorld() {
       radius: roll < 0.58 ? 24 : roll < 0.82 ? 15 : 18
     });
   }
+  // 先放一扇测试门，后续可由建造系统生成更多门。
+  doors.push({ id: doorId++, x: 790, y: 790, width: 48, height: 18, open: false, animation: 0 });
 }
 
 function startGame() {
@@ -134,6 +155,7 @@ function update(delta) {
   }
 
   updatePlayer(delta);
+  updateDoors(delta);
   updateMonsters(delta, night);
   spawnTimer -= delta;
   if (night && spawnTimer <= 0) {
@@ -182,6 +204,9 @@ function updatePlayer(delta) {
 }
 
 function collides(x, y) {
+  for (const door of doors) {
+    if (door.animation < 0.82 && Math.abs(x - door.x) < door.width / 2 + player.radius && Math.abs(y - door.y) < door.height / 2 + player.radius) return true;
+  }
   for (const barricade of barricades) {
     if (Math.abs(x - barricade.x) < barricade.width / 2 + player.radius && Math.abs(y - barricade.y) < barricade.height / 2 + player.radius) return true;
   }
@@ -192,7 +217,22 @@ function collides(x, y) {
   return false;
 }
 
+function updateDoors(delta) {
+  for (const door of doors) {
+    const target = door.open ? 1 : 0;
+    const speed = 5.5;
+    if (door.animation < target) door.animation = Math.min(target, door.animation + delta * speed);
+    if (door.animation > target) door.animation = Math.max(target, door.animation - delta * speed);
+  }
+}
+
 function interact() {
+  const nearbyDoor = doors.find((door) => Math.hypot(player.x - door.x, player.y - door.y) < 72);
+  if (nearbyDoor) {
+    nearbyDoor.open = !nearbyDoor.open;
+    showMessage(nearbyDoor.open ? "木门打开了" : "木门关上了", 1.1);
+    return;
+  }
   let closest = null;
   let distance = 48;
   for (const resource of resources) {
@@ -317,6 +357,7 @@ function render() {
   drawForest();
   drawCampfire();
   drawBarricades();
+  drawDoors();
   drawResources();
   drawMonsters();
   drawPlayer();
@@ -347,6 +388,10 @@ function drawForest() {
 }
 
 function drawCampfire() {
+  if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
+    ctx.drawImage(worldSprite, BUILDING_FRAME.campfire * 16, BUILDING_ROW * 16, 16, 16, campfire.x - 24, campfire.y - 42, 48, 48);
+    return;
+  }
   ctx.fillStyle = "#593b2a";
   ctx.fillRect(campfire.x - 22, campfire.y - 5, 44, 10);
   ctx.fillRect(campfire.x - 5, campfire.y - 22, 10, 44);
@@ -387,10 +432,28 @@ function drawResources() {
 
 function drawBarricades() {
   for (const barricade of barricades) {
+    if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
+      ctx.drawImage(worldSprite, BUILDING_FRAME.wall * 16, BUILDING_ROW * 16, 16, 16, barricade.x - 24, barricade.y - 24, 48, 48);
+      continue;
+    }
     ctx.fillStyle = "#6d452d";
     ctx.fillRect(barricade.x - barricade.width / 2, barricade.y - barricade.height / 2, barricade.width, barricade.height);
     ctx.fillStyle = "#a06c3f";
     ctx.fillRect(barricade.x - barricade.width / 2, barricade.y - 2, barricade.width, 4);
+  }
+}
+
+function drawDoors() {
+  for (const door of doors) {
+    const frame = door.animation > 0.5 ? (door.open ? BUILDING_FRAME.doorOpen : BUILDING_FRAME.doorClosed) : (door.open ? BUILDING_FRAME.doorClosed : BUILDING_FRAME.doorOpen);
+    if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
+      ctx.drawImage(worldSprite, frame * 16, BUILDING_ROW * 16, 16, 16, door.x - 24, door.y - 24, 48, 48);
+      continue;
+    }
+    ctx.fillStyle = door.animation > 0.82 ? "rgba(120,78,46,.35)" : "#75492d";
+    ctx.fillRect(door.x - door.width / 2, door.y - door.height / 2, door.width, door.height);
+    ctx.fillStyle = "#b27a47";
+    ctx.fillRect(door.x - door.width / 2 + 4, door.y - 2, door.width - 8, 4);
   }
 }
 

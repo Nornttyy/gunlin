@@ -1333,7 +1333,6 @@ function drawAtmosphere() {
   drawDriftingFog(darkness);
   drawWatchingEyes(darkness);
   drawAirborneSpecks(darkness);
-  drawEdgeShadows(darkness);
   drawFilmGrain(darkness);
   drawVignette(darkness);
   drawDamageFlash();
@@ -1594,38 +1593,6 @@ function drawAirborneSpecks(darkness) {
     ctx.fillStyle = hash(index + 593) > 0.72 ? "#a8b1a5" : "#07100d";
     ctx.fillRect(Math.round(x), Math.round(y), size, size);
   }
-  ctx.restore();
-}
-
-function drawEdgeShadows(darkness) {
-  const sway = Math.sin(elapsed * 0.42) * 10;
-  ctx.save();
-  ctx.globalAlpha = 0.18 + darkness * 0.55;
-  ctx.strokeStyle = "#010405";
-  ctx.fillStyle = "#010405";
-  ctx.lineCap = "round";
-
-  ctx.lineWidth = 17;
-  ctx.beginPath();
-  ctx.moveTo(-18, H * 0.18);
-  ctx.quadraticCurveTo(W * 0.08 + sway, H * 0.22, W * 0.16, H * 0.34);
-  ctx.moveTo(W + 18, H * 0.1);
-  ctx.quadraticCurveTo(W * 0.89 - sway, H * 0.19, W * 0.84, H * 0.3);
-  ctx.moveTo(W + 14, H * 0.7);
-  ctx.quadraticCurveTo(W * 0.9 + sway * 0.5, H * 0.67, W * 0.86, H * 0.59);
-  ctx.stroke();
-
-  ctx.lineWidth = 7;
-  ctx.beginPath();
-  ctx.moveTo(W * 0.09, H * 0.25);
-  ctx.lineTo(W * 0.12 + sway * 0.3, H * 0.13);
-  ctx.moveTo(W * 0.09, H * 0.25);
-  ctx.lineTo(W * 0.2, H * 0.2);
-  ctx.moveTo(W * 0.91, H * 0.2);
-  ctx.lineTo(W * 0.82 - sway * 0.25, H * 0.11);
-  ctx.moveTo(W * 0.91, H * 0.2);
-  ctx.lineTo(W * 0.78, H * 0.25);
-  ctx.stroke();
   ctx.restore();
 }
 

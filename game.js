@@ -4,11 +4,23 @@ ctx.imageSmoothingEnabled = false;
 
 const W = canvas.width;
 const H = canvas.height;
-const WORLD = { width: 2400, height: 1600, margin: 72 };
+const TILE_SIZE = 48;
+const WORLD = {
+  tileWidth: 3000,
+  tileHeight: 3000,
+  width: 3000 * TILE_SIZE,
+  height: 3000 * TILE_SIZE,
+  margin: 72
+};
+const CAMP_POSITION = {
+  x: Math.floor(WORLD.width / 2 / TILE_SIZE) * TILE_SIZE + TILE_SIZE / 2,
+  y: Math.floor(WORLD.height / 2 / TILE_SIZE) * TILE_SIZE + TILE_SIZE / 2
+};
+const PLAYER_START = { x: CAMP_POSITION.x, y: CAMP_POSITION.y + 110 };
 const DAY_LENGTH = 62;
 const NIGHT_LENGTH = 42;
 const CYCLE_LENGTH = DAY_LENGTH + NIGHT_LENGTH;
-const BUILD_GRID_SIZE = 48;
+const BUILD_GRID_SIZE = TILE_SIZE;
 const DEFENSE_COLLIDER = {
   wall: { length: 48, thickness: 15, edgeOffset: 16 },
   door: { length: 48, thickness: 9, edgeOffset: 16 }
@@ -114,8 +126,8 @@ let assetsReady = false;
 let assetsLoading = false;
 
 const player = {
-  x: 330,
-  y: 820,
+  x: PLAYER_START.x,
+  y: PLAYER_START.y,
   radius: 10,
   speed: 132,
   health: 100,
@@ -134,16 +146,101 @@ const player = {
 };
 
 const resources = [];
+const terrainCache = new Map();
+const loadedResourceChunks = new Set();
+const harvestedResourceKeys = new Set();
+const RESOURCE_CHUNK_TILES = 16;
+const RESOURCE_CHUNK_SIZE = RESOURCE_CHUNK_TILES * TILE_SIZE;
+const RESOURCE_CHUNK_LOAD_RADIUS = 1;
+const RESOURCE_CHUNK_KEEP_RADIUS = 2;
+let activeResourceChunk = "";
 const monsters = [];
 const barricades = [];
 const doors = [];
 const buildings = [];
 const camera = { x: 0, y: 0 };
-const campfire = { x: 330, y: 710 };
+const campfire = { ...CAMP_POSITION };
 
 function hash(index) {
   const value = Math.sin(index * 91.173 + 12.91) * 43758.5453;
   return value - Math.floor(value);
+}
+
+function gridHash(x, y, seed = 0) {
+  return hash(x * 374761 + y * 668265 + seed * 69069);
+}
+
+function resourceChunkKey(chunkX, chunkY) {
+  return `${chunkX}:${chunkY}`;
+}
+
+function generateResourceChunk(chunkX, chunkY) {
+  const key = resourceChunkKey(chunkX, chunkY);
+  if (loadedResourceChunks.has(key)) return;
+  loadedResourceChunks.add(key);
+  const originX = chunkX * RESOURCE_CHUNK_SIZE;
+  const originY = chunkY * RESOURCE_CHUNK_SIZE;
+  let generated = 0;
+
+  for (let candidate = 0; candidate < 30 && generated < 14; candidate += 1) {
+    const spawnKey = `${key}:${candidate}`;
+    if (harvestedResourceKeys.has(spawnKey)) continue;
+    const x = originX + 36 + gridHash(chunkX, chunkY, candidate * 4 + 1) * (RESOURCE_CHUNK_SIZE - 72);
+    const y = originY + 36 + gridHash(chunkX, chunkY, candidate * 4 + 2) * (RESOURCE_CHUNK_SIZE - 72);
+    if (x < WORLD.margin || y < WORLD.margin || x > WORLD.width - WORLD.margin || y > WORLD.height - WORLD.margin) continue;
+    if (Math.hypot(x - campfire.x, y - campfire.y) < 230) continue;
+    const roll = gridHash(chunkX, chunkY, candidate * 4 + 3);
+    const type = roll < 0.58 ? "tree" : roll < 0.82 ? "rock" : "berry";
+    const radius = type === "tree" ? 24 : type === "rock" ? 15 : 18;
+    if ((type === "tree" || type === "berry") && !canPlantGrowAt(x, y, radius)) continue;
+    if (resources.some((item) => Math.hypot(x - item.x, y - item.y) < radius + item.radius + 22)) continue;
+    resources.push({
+      id: resourceId++,
+      spawnKey,
+      chunkX,
+      chunkY,
+      x,
+      y,
+      type,
+      radius
+    });
+    generated += 1;
+  }
+}
+
+function updateResourceChunks(force = false) {
+  const chunkX = Math.floor(player.x / RESOURCE_CHUNK_SIZE);
+  const chunkY = Math.floor(player.y / RESOURCE_CHUNK_SIZE);
+  const currentKey = resourceChunkKey(chunkX, chunkY);
+  if (!force && currentKey === activeResourceChunk) return;
+  activeResourceChunk = currentKey;
+  const maxChunkX = Math.ceil(WORLD.width / RESOURCE_CHUNK_SIZE) - 1;
+  const maxChunkY = Math.ceil(WORLD.height / RESOURCE_CHUNK_SIZE) - 1;
+
+  for (let offsetY = -RESOURCE_CHUNK_LOAD_RADIUS; offsetY <= RESOURCE_CHUNK_LOAD_RADIUS; offsetY += 1) {
+    for (let offsetX = -RESOURCE_CHUNK_LOAD_RADIUS; offsetX <= RESOURCE_CHUNK_LOAD_RADIUS; offsetX += 1) {
+      const targetX = chunkX + offsetX;
+      const targetY = chunkY + offsetY;
+      if (targetX < 0 || targetY < 0 || targetX > maxChunkX || targetY > maxChunkY) continue;
+      generateResourceChunk(targetX, targetY);
+    }
+  }
+
+  for (let index = resources.length - 1; index >= 0; index -= 1) {
+    const item = resources[index];
+    if (!Number.isInteger(item.chunkX) || !Number.isInteger(item.chunkY)) continue;
+    if (Math.abs(item.chunkX - chunkX) > RESOURCE_CHUNK_KEEP_RADIUS
+      || Math.abs(item.chunkY - chunkY) > RESOURCE_CHUNK_KEEP_RADIUS) {
+      resources.splice(index, 1);
+    }
+  }
+  for (const key of [...loadedResourceChunks]) {
+    const [loadedX, loadedY] = key.split(":").map(Number);
+    if (Math.abs(loadedX - chunkX) > RESOURCE_CHUNK_KEEP_RADIUS
+      || Math.abs(loadedY - chunkY) > RESOURCE_CHUNK_KEEP_RADIUS) {
+      loadedResourceChunks.delete(key);
+    }
+  }
 }
 
 function assetUrl(path, retry = 0) {
@@ -242,6 +339,9 @@ async function loadGameAssets() {
 
 function resetWorld() {
   resources.length = 0;
+  loadedResourceChunks.clear();
+  harvestedResourceKeys.clear();
+  activeResourceChunk = "";
   monsters.length = 0;
   barricades.length = 0;
   doors.length = 0;
@@ -250,29 +350,12 @@ function resetWorld() {
   barricadeId = 0;
   doorId = 0;
   buildingId = 0;
-  // 多准备一些候选位置；遇到水面、沙滩或篝火周围就跳过，
-  // 直到放满 78 个有效资源，避免过滤后地图变得太空。
-  for (let i = 0; i < 150 && resources.length < 78; i += 1) {
-    const x = 120 + hash(i * 3 + 1) * 2160;
-    const y = 120 + hash(i * 3 + 2) * 1360;
-    if (Math.hypot(x - campfire.x, y - campfire.y) < 230) continue;
-    const roll = hash(i * 3 + 3);
-    const type = roll < 0.58 ? "tree" : roll < 0.82 ? "rock" : "berry";
-    const radius = type === "tree" ? 24 : type === "rock" ? 15 : 18;
-    if ((type === "tree" || type === "berry") && !canPlantGrowAt(x, y, radius)) continue;
-    resources.push({
-      id: resourceId++,
-      x,
-      y,
-      type,
-      radius
-    });
-  }
+  updateResourceChunks(true);
   // 先放一扇测试门，后续可由建造系统生成更多门。
   doors.push({
     id: doorId++,
-    x: 790,
-    y: 790,
+    x: campfire.x + 460,
+    y: campfire.y + 80,
     vertical: false,
     rotation: 0,
     open: false,
@@ -300,7 +383,19 @@ function startGame() {
   draggedInventorySlot = -1;
   inventoryItems.fill(null);
   quickbarItems.fill(null);
-  Object.assign(player, { x: 330, y: 820, health: 100, wood: 0, stone: 0, berry: 0, flashlight: true, attackTimer: 0, attackCooldown: 0 });
+  Object.assign(player, {
+    x: PLAYER_START.x,
+    y: PLAYER_START.y,
+    health: 100,
+    wood: 0,
+    stone: 0,
+    berry: 0,
+    flashlight: true,
+    attackTimer: 0,
+    attackCooldown: 0
+  });
+  camera.x = Math.max(0, Math.min(WORLD.width - W, player.x - W / 2));
+  camera.y = Math.max(0, Math.min(WORLD.height - H, player.y - H / 2));
   setInventoryOpen(false);
   resetWorld();
   showMessage("白天开始：按 I 可以打开物品栏");
@@ -400,6 +495,7 @@ function updatePlayer(delta) {
   if (!collides(player.x, nextY)) player.y = nextY;
   player.x = Math.max(WORLD.margin, Math.min(WORLD.width - WORLD.margin, player.x));
   player.y = Math.max(WORLD.margin, Math.min(WORLD.height - WORLD.margin, player.y));
+  updateResourceChunks();
 
   if (player.health <= 0) endGame();
 }
@@ -526,6 +622,7 @@ function collectResource() {
 
   const index = resources.indexOf(target);
   resources.splice(index, 1);
+  if (target.spawnKey) harvestedResourceKeys.add(target.spawnKey);
   if (target.type === "tree") {
     addResource("wood", 3);
     showMessage("获得木材 ×3");
@@ -775,9 +872,10 @@ function aimAtPointer(event) {
 }
 
 function spawnMonster() {
-  const side = Math.floor(Math.random() * 4);
-  const x = side === 0 ? 100 : side === 1 ? WORLD.width - 100 : 160 + Math.random() * (WORLD.width - 320);
-  const y = side === 2 ? 100 : side === 3 ? WORLD.height - 100 : 160 + Math.random() * (WORLD.height - 320);
+  const angle = Math.random() * Math.PI * 2;
+  const distance = 560 + Math.random() * 180;
+  const x = Math.max(WORLD.margin, Math.min(WORLD.width - WORLD.margin, player.x + Math.cos(angle) * distance));
+  const y = Math.max(WORLD.margin, Math.min(WORLD.height - WORLD.margin, player.y + Math.sin(angle) * distance));
   monsters.push({ x, y, radius: 13, health: 70 + dayNumber * 7, speed: 37 + dayNumber * 3, attackCooldown: 0, hurtTimer: 0 });
 }
 
@@ -807,9 +905,12 @@ function updateMonsters(delta, night) {
     const monster = monsters[i];
     monster.attackCooldown = Math.max(0, monster.attackCooldown - delta);
     if (!night) {
-      monster.x += (monster.x < WORLD.width / 2 ? -1 : 1) * 20 * delta;
-      monster.y += (monster.y < WORLD.height / 2 ? -1 : 1) * 20 * delta;
-      if (monster.x < 40 || monster.x > WORLD.width - 40 || monster.y < 40 || monster.y > WORLD.height - 40) monsters.splice(i, 1);
+      const retreatX = monster.x - player.x;
+      const retreatY = monster.y - player.y;
+      const retreatDistance = Math.hypot(retreatX, retreatY) || 1;
+      monster.x += (retreatX / retreatDistance) * 28 * delta;
+      monster.y += (retreatY / retreatDistance) * 28 * delta;
+      if (retreatDistance > 980) monsters.splice(i, 1);
       continue;
     }
     const dx = player.x - monster.x;
@@ -988,14 +1089,44 @@ function render() {
 }
 
 function drawForest() {
-  for (let x = 0; x < WORLD.width; x += 48) {
-    for (let y = 0; y < WORLD.height; y += 48) {
-      drawTerrainTile(terrainAt(x / 48, y / 48), x, y);
+  const startTileX = Math.max(0, Math.floor(camera.x / TILE_SIZE) - 1);
+  const endTileX = Math.min(WORLD.tileWidth - 1, Math.ceil((camera.x + W) / TILE_SIZE) + 1);
+  const startTileY = Math.max(0, Math.floor(camera.y / TILE_SIZE) - 1);
+  const endTileY = Math.min(WORLD.tileHeight - 1, Math.ceil((camera.y + H) / TILE_SIZE) + 1);
+  for (let tileY = startTileY; tileY <= endTileY; tileY += 1) {
+    for (let tileX = startTileX; tileX <= endTileX; tileX += 1) {
+      drawTerrainTile(terrainAt(tileX, tileY), tileX * TILE_SIZE, tileY * TILE_SIZE);
     }
   }
+
+  const viewLeft = camera.x - 8;
+  const viewRight = camera.x + W + 8;
+  const viewTop = camera.y - 8;
+  const viewBottom = camera.y + H + 8;
+  const left = WORLD.margin;
+  const right = WORLD.width - WORLD.margin;
+  const top = WORLD.margin;
+  const bottom = WORLD.height - WORLD.margin;
   ctx.strokeStyle = "#526f4c";
   ctx.lineWidth = 4;
-  ctx.strokeRect(WORLD.margin, WORLD.margin, WORLD.width - WORLD.margin * 2, WORLD.height - WORLD.margin * 2);
+  ctx.beginPath();
+  if (left >= viewLeft && left <= viewRight) {
+    ctx.moveTo(left, Math.max(top, viewTop));
+    ctx.lineTo(left, Math.min(bottom, viewBottom));
+  }
+  if (right >= viewLeft && right <= viewRight) {
+    ctx.moveTo(right, Math.max(top, viewTop));
+    ctx.lineTo(right, Math.min(bottom, viewBottom));
+  }
+  if (top >= viewTop && top <= viewBottom) {
+    ctx.moveTo(Math.max(left, viewLeft), top);
+    ctx.lineTo(Math.min(right, viewRight), top);
+  }
+  if (bottom >= viewTop && bottom <= viewBottom) {
+    ctx.moveTo(Math.max(left, viewLeft), bottom);
+    ctx.lineTo(Math.min(right, viewRight), bottom);
+  }
+  ctx.stroke();
 }
 
 function isBuildMode() {
@@ -1070,11 +1201,29 @@ function drawBuildPreview() {
   ctx.restore();
 }
 
-// 湖泊由固定公式生成，所以每次进入游戏，水域形状都保持一致。
+// 每个 48×48 地块区域都有确定的湖泊参数，因此超大地图不需要预存 900 万格。
 function isWaterTile(tileX, tileY) {
-  const lakeA = ((tileX - 35) / 8) ** 2 + ((tileY - 9) / 5) ** 2 < 1;
-  const lakeB = ((tileX - 11) / 5) ** 2 + ((tileY - 27) / 4) ** 2 < 1;
-  return lakeA || lakeB;
+  if (tileX < 0 || tileY < 0 || tileX >= WORLD.tileWidth || tileY >= WORLD.tileHeight) return false;
+  const campTileX = Math.floor(campfire.x / TILE_SIZE);
+  const campTileY = Math.floor(campfire.y / TILE_SIZE);
+  if (Math.abs(tileX - campTileX) <= 7 && Math.abs(tileY - campTileY) <= 7) return false;
+  const lakeRegionSize = 48;
+  const regionX = Math.floor(tileX / lakeRegionSize);
+  const regionY = Math.floor(tileY / lakeRegionSize);
+
+  for (let offsetY = -1; offsetY <= 1; offsetY += 1) {
+    for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
+      const lakeRegionX = regionX + offsetX;
+      const lakeRegionY = regionY + offsetY;
+      const centerX = lakeRegionX * lakeRegionSize + 10 + gridHash(lakeRegionX, lakeRegionY, 1) * 28;
+      const centerY = lakeRegionY * lakeRegionSize + 10 + gridHash(lakeRegionX, lakeRegionY, 2) * 28;
+      const radiusX = 5 + gridHash(lakeRegionX, lakeRegionY, 3) * 7;
+      const radiusY = 4 + gridHash(lakeRegionX, lakeRegionY, 4) * 6;
+      const insideLake = ((tileX - centerX) / radiusX) ** 2 + ((tileY - centerY) / radiusY) ** 2 < 1;
+      if (insideLake) return true;
+    }
+  }
+  return false;
 }
 
 // 只有紧挨着水面的方块才会变成沙滩，不会在草地中间乱生成沙子。
@@ -1089,13 +1238,21 @@ function isBesideWater(tileX, tileY) {
 }
 
 function terrainAt(tileX, tileY) {
-  if (isWaterTile(tileX, tileY)) return TERRAIN_FRAME.water;
-  if (isBesideWater(tileX, tileY)) return TERRAIN_FRAME.sand;
-  return TERRAIN_FRAME.grass;
+  const key = `${tileX}:${tileY}`;
+  const cached = terrainCache.get(key);
+  if (cached !== undefined) return cached;
+  const terrain = isWaterTile(tileX, tileY)
+    ? TERRAIN_FRAME.water
+    : isBesideWater(tileX, tileY)
+      ? TERRAIN_FRAME.sand
+      : TERRAIN_FRAME.grass;
+  if (terrainCache.size > 50000) terrainCache.clear();
+  terrainCache.set(key, terrain);
+  return terrain;
 }
 
 function terrainAtWorld(worldX, worldY) {
-  return terrainAt(Math.floor(worldX / 48), Math.floor(worldY / 48));
+  return terrainAt(Math.floor(worldX / TILE_SIZE), Math.floor(worldY / TILE_SIZE));
 }
 
 // 植物不仅检查中心，还检查根部周围，防止树或灌木压到沙滩和水面上。
@@ -1115,7 +1272,7 @@ function canPlantGrowAt(x, y, radius) {
 
 function drawTerrainTile(frame, x, y) {
   if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
-    ctx.drawImage(worldSprite, frame * 16, 0, 16, 16, x, y, 48, 48);
+    ctx.drawImage(worldSprite, frame * 16, 0, 16, 16, x, y, TILE_SIZE, TILE_SIZE);
     return;
   }
   const fallback = {
@@ -1124,7 +1281,7 @@ function drawTerrainTile(frame, x, y) {
     [TERRAIN_FRAME.water]: "#2d92a0"
   };
   ctx.fillStyle = fallback[frame] || fallback[TERRAIN_FRAME.grass];
-  ctx.fillRect(x, y, 48, 48);
+  ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
 }
 
 function drawBuildings() {
@@ -1168,6 +1325,8 @@ function drawCampfire() {
 
 function drawResources() {
   for (const resource of resources) {
+    if (resource.x < camera.x - 80 || resource.x > camera.x + W + 80
+      || resource.y < camera.y - 90 || resource.y > camera.y + H + 90) continue;
     if (resource.type === "tree") {
       ctx.fillStyle = "#5c3d2b";
       ctx.fillRect(resource.x - 7, resource.y - 2, 14, 36);

@@ -64,10 +64,13 @@ const RESOURCE_ITEMS = [
 
 const ASSET_VERSION = "20260728-assets2";
 const PLAYER_ASSET_VERSION = "20260728-player-redraw1";
+const TREE_ASSET_VERSION = "20260728-tree-redraw1";
 const sprite = new Image();
 const worldSprite = new Image();
+const treeSprite = new Image();
 sprite.decoding = "async";
 worldSprite.decoding = "async";
+treeSprite.decoding = "async";
 
 // 建筑素材在 128×96 图集的第 4 行（每格 16×16）。
 const BUILDING_ROW = 3;
@@ -193,6 +196,7 @@ function generateResourceChunk(chunkX, chunkY) {
     const roll = gridHash(chunkX, chunkY, candidate * 4 + 3);
     const type = roll < 0.58 ? "tree" : roll < 0.82 ? "rock" : "berry";
     const radius = type === "tree" ? 24 : type === "rock" ? 15 : 18;
+    const treeFrame = type === "tree" && gridHash(chunkX, chunkY, candidate * 7 + 101) < 0.22 ? 1 : 0;
     if ((type === "tree" || type === "berry") && !canPlantGrowAt(x, y, radius)) continue;
     if (resources.some((item) => Math.hypot(x - item.x, y - item.y) < radius + item.radius + 22)) continue;
     resources.push({
@@ -203,6 +207,7 @@ function generateResourceChunk(chunkX, chunkY) {
       x,
       y,
       type,
+      treeFrame,
       radius
     });
     generated += 1;
@@ -246,7 +251,9 @@ function updateResourceChunks(force = false) {
 
 function assetUrl(path, retry = 0) {
   const retryText = retry > 0 ? `&retry=${retry}` : "";
-  const version = path === "assets/player.png" ? PLAYER_ASSET_VERSION : ASSET_VERSION;
+  const version = path === "assets/player.png"
+    ? PLAYER_ASSET_VERSION
+    : path === "assets/tree-sprites.png" ? TREE_ASSET_VERSION : ASSET_VERSION;
   return `${path}?v=${version}${retryText}`;
 }
 
@@ -307,12 +314,13 @@ async function loadGameAssets() {
   startButton.textContent = "素材加载中…";
   retryAssetsButton.classList.add("hidden");
   loadingStatus.classList.remove("ready", "failed");
-  showLoadingProgress(0, 3, "正在准备像素素材…");
+  showLoadingProgress(0, 4, "正在准备像素素材…");
 
   let loaded = 0;
   const jobs = [
     ["玩家图", () => loadImageWithRetry(sprite, "assets/player.png")],
     ["场景图", () => loadImageWithRetry(worldSprite, "assets/forest-assets.png")],
+    ["树木图", () => loadImageWithRetry(treeSprite, "assets/tree-sprites.png")],
     ["像素字体", loadFontWithRetry]
   ];
   const results = await Promise.allSettled(jobs.map(async ([label, load]) => {
@@ -1327,9 +1335,14 @@ function drawCampfire() {
 
 function drawResources() {
   for (const resource of resources) {
-    if (resource.x < camera.x - 80 || resource.x > camera.x + W + 80
-      || resource.y < camera.y - 90 || resource.y > camera.y + H + 90) continue;
+    if (resource.x < camera.x - 100 || resource.x > camera.x + W + 100
+      || resource.y < camera.y - 90 || resource.y > camera.y + H + 180) continue;
     if (resource.type === "tree") {
+      if (treeSprite.complete && treeSprite.naturalWidth >= 64 && treeSprite.naturalHeight >= 64) {
+        const frame = resource.treeFrame === 1 ? 1 : 0;
+        ctx.drawImage(treeSprite, frame * 32, 0, 32, 64, resource.x - 48, resource.y - 160, 96, 192);
+        continue;
+      }
       ctx.fillStyle = "#5c3d2b";
       ctx.fillRect(resource.x - 7, resource.y - 2, 14, 36);
       ctx.fillStyle = "#153b2c";

@@ -21,6 +21,7 @@ const dayLabel = document.getElementById("dayLabel");
 const healthLabel = document.getElementById("healthLabel");
 const resourceLabel = document.getElementById("resourceLabel");
 const flashlightLabel = document.getElementById("flashlightLabel");
+const buildingLabel = document.getElementById("buildingLabel");
 
 const sprite = new Image();
 sprite.src = "assets/player.png";
@@ -40,6 +41,15 @@ const BUILDING_FRAME = {
   trap: 7
 };
 
+const BUILD_TYPES = [
+  { type: "wall", label: "木墙", cost: { wood: 3, stone: 1 } },
+  { type: "door", label: "木门", cost: { wood: 4, stone: 1 } },
+  { type: "floor", label: "木地板", cost: { wood: 2, stone: 0 } },
+  { type: "chest", label: "储物箱", cost: { wood: 5, stone: 0 } },
+  { type: "workbench", label: "工作台", cost: { wood: 6, stone: 2 } },
+  { type: "trap", label: "陷阱", cost: { wood: 2, stone: 1 } }
+];
+
 const keys = new Set();
 let state = "title";
 let lastTime = 0;
@@ -51,6 +61,8 @@ let spawnTimer = 0;
 let resourceId = 0;
 let barricadeId = 0;
 let doorId = 0;
+let buildingId = 0;
+let selectedBuild = 0;
 
 const player = {
   x: 330,
@@ -75,6 +87,7 @@ const resources = [];
 const monsters = [];
 const barricades = [];
 const doors = [];
+const buildings = [];
 const camera = { x: 0, y: 0 };
 const campfire = { x: 330, y: 710 };
 
@@ -88,9 +101,11 @@ function resetWorld() {
   monsters.length = 0;
   barricades.length = 0;
   doors.length = 0;
+  buildings.length = 0;
   resourceId = 0;
   barricadeId = 0;
   doorId = 0;
+  buildingId = 0;
   for (let i = 0; i < 78; i += 1) {
     const x = 120 + hash(i * 3 + 1) * 2160;
     const y = 120 + hash(i * 3 + 2) * 1360;
@@ -119,7 +134,7 @@ function startGame() {
   spawnTimer = 4;
   Object.assign(player, { x: 330, y: 820, health: 100, wood: 12, stone: 4, flashlight: true, attackTimer: 0, attackCooldown: 0 });
   resetWorld();
-  showMessage("白天开始：先收集材料并建造营地");
+  showMessage("白天开始：1-6 选择建筑，B 建造");
   lastTime = performance.now();
   requestAnimationFrame(loop);
 }
@@ -279,6 +294,52 @@ function buildBarricade() {
   showMessage("建造了一段木墙");
 }
 
+function buildDoor() {
+  if (player.wood < 4 || player.stone < 1) {
+    showMessage("建造木门需要木材 ×4、石头 ×1");
+    return;
+  }
+  const x = Math.round((player.x + player.dirX * 42) / 16) * 16;
+  const y = Math.round((player.y + player.dirY * 42) / 16) * 16;
+  doors.push({ id: doorId++, x, y, width: 48, height: 18, open: false, animation: 0 });
+  player.wood -= 4;
+  player.stone -= 1;
+  showMessage("建造了一扇木门");
+}
+
+function buildProp(type, cost, label) {
+  if (player.wood < cost.wood || player.stone < cost.stone) {
+    const stoneText = cost.stone ? `、石头 ×${cost.stone}` : "";
+    showMessage(`建造${label}需要木材 ×${cost.wood}${stoneText}`);
+    return;
+  }
+  const x = Math.round((player.x + player.dirX * 42) / 16) * 16;
+  const y = Math.round((player.y + player.dirY * 42) / 16) * 16;
+  buildings.push({ id: buildingId++, type, x, y });
+  player.wood -= cost.wood;
+  player.stone -= cost.stone;
+  showMessage(`建造了${label}`);
+}
+
+function buildSelected() {
+  const selected = BUILD_TYPES[selectedBuild];
+  if (selected.type === "wall") {
+    buildBarricade();
+  } else if (selected.type === "door") {
+    buildDoor();
+  } else {
+    buildProp(selected.type, selected.cost, selected.label);
+  }
+}
+
+function selectBuild(index) {
+  if (index < 0 || index >= BUILD_TYPES.length) return;
+  selectedBuild = index;
+  const selected = BUILD_TYPES[selectedBuild];
+  showMessage(`选择建筑：${selected.label}`, 0.9);
+  updateHud();
+}
+
 function attack() {
   if (player.attackCooldown > 0) return;
   player.attackCooldown = 0.38;
@@ -343,6 +404,8 @@ function updateHud() {
   healthLabel.textContent = `生命 ${Math.max(0, Math.round(player.health))}`;
   resourceLabel.textContent = `木材 ${player.wood}　石头 ${player.stone}`;
   flashlightLabel.textContent = `手电筒 ${player.flashlight ? "开" : "关"}`;
+  const selected = BUILD_TYPES[selectedBuild];
+  buildingLabel.textContent = `建筑 ${selectedBuild + 1}：${selected.label}`;
 }
 
 function render() {
@@ -355,6 +418,7 @@ function render() {
   ctx.save();
   ctx.translate(-Math.floor(camera.x), -Math.floor(camera.y));
   drawForest();
+  drawBuildings();
   drawCampfire();
   drawBarricades();
   drawDoors();
@@ -385,6 +449,18 @@ function drawForest() {
   ctx.strokeStyle = "#526f4c";
   ctx.lineWidth = 4;
   ctx.strokeRect(WORLD.margin, WORLD.margin, WORLD.width - WORLD.margin * 2, WORLD.height - WORLD.margin * 2);
+}
+
+function drawBuildings() {
+  for (const building of buildings) {
+    if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
+      const frame = BUILDING_FRAME[building.type];
+      ctx.drawImage(worldSprite, frame * 16, BUILDING_ROW * 16, 16, 16, building.x - 24, building.y - 24, 48, 48);
+      continue;
+    }
+    ctx.fillStyle = building.type === "floor" ? "#76543a" : "#67432d";
+    ctx.fillRect(building.x - 22, building.y - 22, 44, 44);
+  }
 }
 
 function drawCampfire() {
@@ -523,8 +599,14 @@ window.addEventListener("keydown", (event) => {
   if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.code)) event.preventDefault();
   keys.add(event.code);
   if (state !== "game") return;
+  if (event.code.startsWith("Digit")) {
+    selectBuild(Number(event.code.slice(5)) - 1);
+    return;
+  }
+  // E 等一次性操作不能因为按键自动重复而反复开关或重复建造。
+  if (event.repeat && ["KeyE", "KeyB", "Space", "KeyF"].includes(event.code)) return;
   if (event.code === "KeyE") interact();
-  if (event.code === "KeyB") buildBarricade();
+  if (event.code === "KeyB") buildSelected();
   if (event.code === "Space") attack();
   if (event.code === "KeyF") {
     player.flashlight = !player.flashlight;

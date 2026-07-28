@@ -30,6 +30,8 @@ const MIMIC_ATTACK_DISTANCE = 27;
 const MIMIC_JUMPSCARE_DAMAGE = 50;
 const MIMIC_TELEPORT_MIN_DISTANCE = 650;
 const MIMIC_TELEPORT_MAX_DISTANCE = 860;
+const MIMIC_FRAME_SIZE = 32;
+const MIMIC_DEATH_DURATION = 0.72;
 const BUILD_GRID_SIZE = TILE_SIZE;
 const DEFENSE_COLLIDER = {
   wall: { length: 48, thickness: 15, edgeOffset: 16 },
@@ -87,12 +89,15 @@ const CLASS_NAMES = ["枪手", "护士", "伐木工", "守望者", "棒球女", 
 const ASSET_VERSION = "20260728-assets2";
 const PLAYER_ASSET_VERSION = "20260728-player-redraw1";
 const TREE_ASSET_VERSION = "20260728-tree-visible2";
+const MIMIC_ASSET_VERSION = "20260728-mimic-drawn1";
 const sprite = new Image();
 const worldSprite = new Image();
 const treeSprite = new Image();
+const mimicSprite = new Image();
 sprite.decoding = "async";
 worldSprite.decoding = "async";
 treeSprite.decoding = "async";
+mimicSprite.decoding = "async";
 
 // 建筑素材在 128×96 图集的第 4 行（每格 16×16）。
 const BUILDING_ROW = 3;
@@ -286,7 +291,9 @@ function assetUrl(path, retry = 0) {
   const retryText = retry > 0 ? `&retry=${retry}` : "";
   const version = path === "assets/player.png"
     ? PLAYER_ASSET_VERSION
-    : path === "assets/tree-sprites.png" ? TREE_ASSET_VERSION : ASSET_VERSION;
+    : path === "assets/tree-sprites.png"
+      ? TREE_ASSET_VERSION
+      : path === "assets/mimic.png" ? MIMIC_ASSET_VERSION : ASSET_VERSION;
   return `${path}?v=${version}${retryText}`;
 }
 
@@ -347,13 +354,14 @@ async function loadGameAssets() {
   startButton.textContent = "素材加载中…";
   retryAssetsButton.classList.add("hidden");
   loadingStatus.classList.remove("ready", "failed");
-  showLoadingProgress(0, 4, "正在准备像素素材…");
+  showLoadingProgress(0, 5, "正在准备像素素材…");
 
   let loaded = 0;
   const jobs = [
     ["玩家图", () => loadImageWithRetry(sprite, "assets/player.png")],
     ["场景图", () => loadImageWithRetry(worldSprite, "assets/forest-assets.png")],
     ["树木图", () => loadImageWithRetry(treeSprite, "assets/tree-sprites.png")],
+    ["模仿者", () => loadImageWithRetry(mimicSprite, "assets/mimic.png")],
     ["像素字体", loadFontWithRetry]
   ];
   const results = await Promise.allSettled(jobs.map(async ([label, load]) => {
@@ -974,6 +982,7 @@ function attack() {
   player.attackTimer = 0.16;
   let hit = false;
   for (const monster of monsters) {
+    if (monster.dead) continue;
     const dx = monster.x - player.x;
     const dy = monster.y - player.y;
     if (Math.hypot(dx, dy) < 58) {
@@ -1025,7 +1034,10 @@ function spawnMonster() {
     alerted: false,
     detectionCooldown: 0,
     attackCooldown: 0,
-    hurtTimer: 0
+    hurtTimer: 0,
+    animation: Math.random() * 2,
+    dead: false,
+    deathTimer: 0
   });
 }
 
@@ -1066,7 +1078,7 @@ function updateTraps(delta) {
     if (trap.type !== "trap") continue;
     trap.cooldown = Math.max(0, trap.cooldown - delta);
     if (trap.cooldown > 0) continue;
-    const monster = monsters.find((item) => Math.hypot(item.x - trap.x, item.y - trap.y) < 35);
+    const monster = monsters.find((item) => !item.dead && Math.hypot(item.x - trap.x, item.y - trap.y) < 35);
     if (!monster) continue;
     monster.health -= 45;
     monster.hurtTimer = 0.25;
@@ -1086,6 +1098,25 @@ function updateMonsters(delta, night) {
     const monster = monsters[i];
     monster.attackCooldown = Math.max(0, (monster.attackCooldown || 0) - delta);
     monster.detectionCooldown = Math.max(0, (monster.detectionCooldown || 0) - delta);
+    monster.hurtTimer = Math.max(0, (monster.hurtTimer || 0) - delta);
+
+    if (monster.dead) {
+      monster.deathTimer = (monster.deathTimer || 0) + delta;
+      if (monster.deathTimer >= MIMIC_DEATH_DURATION) {
+        monsters.splice(i, 1);
+        if (Math.random() < .45) addResource("wood", 1);
+        showMessage("模仿者倒下了");
+      }
+      continue;
+    }
+    if (monster.health <= 0) {
+      monster.dead = true;
+      monster.alerted = false;
+      monster.deathTimer = 0;
+      continue;
+    }
+
+    monster.animation = (monster.animation || 0) + delta * (monster.alerted ? 7.5 : 2.2);
     if (!night) {
       monster.alerted = false;
       const retreatX = monster.x - player.x;
@@ -1130,12 +1161,6 @@ function updateMonsters(delta, night) {
           showMessage("模仿者扑到了你脸上！生命 -50", 1.25);
         }
       }
-    }
-    monster.hurtTimer = Math.max(0, monster.hurtTimer - delta);
-    if (monster.health <= 0) {
-      monsters.splice(i, 1);
-      if (Math.random() < .45) addResource("wood", 1);
-      showMessage("怪物倒下了");
     }
   }
 }
@@ -1232,6 +1257,7 @@ function updateSurvivalReadout() {
 
   let nearestMonster = Infinity;
   for (const monster of monsters) {
+    if (monster.dead) continue;
     nearestMonster = Math.min(nearestMonster, Math.hypot(monster.x - player.x, monster.y - player.y));
   }
   const threatStrength = Number.isFinite(nearestMonster)
@@ -1668,14 +1694,33 @@ function drawDefenseHealth(defense) {
 
 function drawMonsters() {
   for (const monster of monsters) {
-    const bob = Math.sin(elapsed * 4.6 + monster.x * 0.025) * 2;
+    const bob = monster.dead
+      ? 0
+      : Math.sin(elapsed * (monster.alerted ? 8 : 3.5) + monster.x * 0.025) * (monster.alerted ? 2 : 1);
     ctx.save();
-    ctx.globalAlpha = monster.hurtTimer > 0 ? .5 : 1;
     ctx.fillStyle = "rgba(3, 7, 9, .45)";
     ctx.beginPath();
-    ctx.ellipse(monster.x, monster.y + 15, 20, 7, 0, 0, Math.PI * 2);
+    ctx.ellipse(monster.x, monster.y + 15, monster.dead ? 17 : 20, monster.dead ? 5 : 7, 0, 0, Math.PI * 2);
     ctx.fill();
 
+    if (mimicSprite.complete && mimicSprite.naturalWidth >= 384 && mimicSprite.naturalHeight >= 32) {
+      const frame = getMimicFrame(monster);
+      ctx.drawImage(
+        mimicSprite,
+        frame * MIMIC_FRAME_SIZE,
+        0,
+        MIMIC_FRAME_SIZE,
+        MIMIC_FRAME_SIZE,
+        monster.x - 32,
+        monster.y - 48 + bob,
+        64,
+        64
+      );
+      ctx.restore();
+      continue;
+    }
+
+    ctx.globalAlpha = monster.hurtTimer > 0 ? .5 : 1;
     ctx.translate(monster.x, monster.y + bob);
     ctx.fillStyle = "#0a0e12";
     ctx.beginPath();
@@ -1696,6 +1741,16 @@ function drawMonsters() {
     ctx.shadowBlur = 0;
     ctx.restore();
   }
+}
+
+function getMimicFrame(monster) {
+  if (monster.dead) {
+    const progress = Math.max(0, Math.min(0.999, (monster.deathTimer || 0) / MIMIC_DEATH_DURATION));
+    return 8 + Math.floor(progress * 4);
+  }
+  if (monster.hurtTimer > 0) return 7;
+  if (monster.alerted) return 2 + (Math.floor(monster.animation || 0) % 5);
+  return Math.floor(monster.animation || 0) % 2;
 }
 
 function drawPlayer() {

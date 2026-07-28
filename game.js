@@ -39,19 +39,15 @@ const buildingLabel = document.getElementById("buildingLabel");
 const inventoryButton = document.getElementById("inventoryButton");
 const inventoryButtonLabel = document.getElementById("inventoryButtonLabel");
 const inventoryPanel = document.getElementById("inventoryPanel");
-const inventoryWoodSlot = document.getElementById("inventoryWoodSlot");
-const inventoryStoneSlot = document.getElementById("inventoryStoneSlot");
-const inventoryWoodCount = document.getElementById("inventoryWoodCount");
-const inventoryStoneCount = document.getElementById("inventoryStoneCount");
-const inventoryBerryCount = document.getElementById("inventoryBerryCount");
 const inventoryCapacity = document.getElementById("inventoryCapacity");
-const useBerryButton = document.getElementById("useBerryButton");
+const inventorySlots = [...document.querySelectorAll(".inventory-slot")];
+const inventoryItems = Array(12).fill(null);
 const quickSlots = [...document.querySelectorAll(".quick-slot")];
 const quickbarItems = Array(9).fill(null);
-const RESOURCE_QUICK_ITEMS = [
-  { type: "wood", kind: "material", label: "木材", preferredSlot: 0 },
-  { type: "stone", kind: "material", label: "石头", preferredSlot: 1 },
-  { type: "berry", kind: "food", label: "浆果", preferredSlot: 2 }
+const RESOURCE_ITEMS = [
+  { type: "wood", kind: "material", label: "木材" },
+  { type: "stone", kind: "material", label: "石头" },
+  { type: "berry", kind: "food", label: "浆果" }
 ];
 
 const ASSET_VERSION = "20260728-assets2";
@@ -111,6 +107,7 @@ let buildingId = 0;
 let selectedBuild = 0;
 let selectedQuickSlot = -1;
 let inventoryOpen = false;
+let draggedInventorySlot = -1;
 let assetsReady = false;
 let assetsLoading = false;
 
@@ -298,6 +295,8 @@ function startGame() {
   spawnTimer = 4;
   selectedBuild = 0;
   selectedQuickSlot = -1;
+  draggedInventorySlot = -1;
+  inventoryItems.fill(null);
   quickbarItems.fill(null);
   Object.assign(player, { x: 330, y: 820, health: 100, wood: 0, stone: 0, berry: 0, flashlight: true, attackTimer: 0, attackCooldown: 0 });
   setInventoryOpen(false);
@@ -469,6 +468,38 @@ function interact() {
   }
 }
 
+function resourceItemDefinition(type) {
+  return RESOURCE_ITEMS.find((item) => item.type === type);
+}
+
+function ensureInventoryResource(type) {
+  const definition = resourceItemDefinition(type);
+  if (!definition || inventoryItems.some((item) => item?.type === type)) return;
+  const emptyIndex = inventoryItems.findIndex((item) => item === null);
+  if (emptyIndex >= 0) {
+    inventoryItems[emptyIndex] = { ...definition, source: "inventory" };
+  }
+}
+
+function ensureQuickbarResource(type) {
+  const definition = resourceItemDefinition(type);
+  if (!definition || quickbarItems.some((item) => (
+    item?.source === "inventory" && item.type === type
+  ))) return;
+  const emptyIndex = quickbarItems.findIndex((item) => item === null);
+  if (emptyIndex >= 0) {
+    quickbarItems[emptyIndex] = { ...definition, source: "inventory" };
+  }
+}
+
+// 资源第一次到手时进入最前面的空格，所以顺序取决于实际采集先后。
+function addResource(type, amount) {
+  if (!resourceItemDefinition(type) || amount <= 0) return;
+  player[type] += amount;
+  ensureInventoryResource(type);
+  ensureQuickbarResource(type);
+}
+
 function collectResource() {
   let target = null;
   let bestScore = Infinity;
@@ -494,13 +525,13 @@ function collectResource() {
   const index = resources.indexOf(target);
   resources.splice(index, 1);
   if (target.type === "tree") {
-    player.wood += 3;
+    addResource("wood", 3);
     showMessage("获得木材 ×3");
   } else if (target.type === "rock") {
-    player.stone += 2;
+    addResource("stone", 2);
     showMessage("获得石头 ×2");
   } else {
-    player.berry += 1;
+    addResource("berry", 1);
     showMessage("浆果已放进物品栏");
   }
   updateHud();
@@ -803,7 +834,7 @@ function updateMonsters(delta, night) {
     monster.hurtTimer = Math.max(0, monster.hurtTimer - delta);
     if (monster.health <= 0) {
       monsters.splice(i, 1);
-      if (Math.random() < .45) player.wood += 1;
+      if (Math.random() < .45) addResource("wood", 1);
       showMessage("怪物倒下了");
     }
   }
@@ -834,26 +865,44 @@ function attackDefense(monster, defense) {
   showMessage(`${defense.label}被怪物破坏了！`, 1.4);
 }
 
+function syncInventoryItems() {
+  inventoryItems.forEach((item, index) => {
+    if (item && player[item.type] <= 0) inventoryItems[index] = null;
+  });
+  // 兼容已有测试或以后直接写入数量的系统；正常采集仍由 addResource 保留到达顺序。
+  for (const definition of RESOURCE_ITEMS) {
+    if (player[definition.type] > 0) ensureInventoryResource(definition.type);
+  }
+}
+
+function renderInventory() {
+  syncInventoryItems();
+  inventorySlots.forEach((slot, index) => {
+    const item = inventoryItems[index];
+    const amount = item ? player[item.type] : 0;
+    slot.classList.toggle("item-empty", !item);
+    slot.classList.toggle("empty-slot", !item);
+    slot.dataset.itemType = item?.type || "empty";
+    slot.dataset.label = item?.label || "";
+    slot.dataset.count = item ? String(amount) : "";
+    slot.draggable = Boolean(item);
+    slot.title = item
+      ? `${item.label} ×${amount}${item.type === "berry" ? "，点击食用" : ""}；拖动可整理`
+      : "空格，可以把物品拖到这里";
+    slot.setAttribute("aria-label", slot.title);
+  });
+  inventoryCapacity.textContent = `${inventoryItems.filter(Boolean).length} / 12 格`;
+}
+
 function syncResourceQuickbar() {
-  for (const definition of RESOURCE_QUICK_ITEMS) {
-    const amount = player[definition.type];
-    const existingIndex = quickbarItems.findIndex((item) => (
-      item?.source === "inventory" && item.type === definition.type
-    ));
-    if (amount <= 0) {
-      if (existingIndex >= 0) {
-        quickbarItems[existingIndex] = null;
-        if (selectedQuickSlot === existingIndex) selectedQuickSlot = -1;
-      }
-      continue;
+  quickbarItems.forEach((item, index) => {
+    if (item?.source === "inventory" && player[item.type] <= 0) {
+      quickbarItems[index] = null;
+      if (selectedQuickSlot === index) selectedQuickSlot = -1;
     }
-    if (existingIndex >= 0) continue;
-    const preferredIsFree = quickbarItems[definition.preferredSlot] === null;
-    const targetIndex = preferredIsFree
-      ? definition.preferredSlot
-      : quickbarItems.findIndex((item) => item === null);
-    if (targetIndex < 0) continue;
-    quickbarItems[targetIndex] = { ...definition, source: "inventory" };
+  });
+  for (const item of inventoryItems) {
+    if (item && player[item.type] > 0) ensureQuickbarResource(item.type);
   }
 }
 
@@ -877,16 +926,7 @@ function updateHud() {
   resourceLabel.textContent = `木材 ${player.wood}　石头 ${player.stone}　浆果 ${player.berry}`;
   flashlightLabel.textContent = `手电筒 ${player.flashlight ? "开" : "关"}`;
   const selected = BUILD_TYPES[selectedBuild];
-  inventoryWoodCount.textContent = player.wood;
-  inventoryStoneCount.textContent = player.stone;
-  inventoryBerryCount.textContent = player.berry;
-  inventoryWoodSlot.classList.toggle("item-empty", player.wood <= 0);
-  inventoryStoneSlot.classList.toggle("item-empty", player.stone <= 0);
-  useBerryButton.classList.toggle("item-empty", player.berry <= 0);
-  const occupiedSlots = [player.wood, player.stone, player.berry].filter((amount) => amount > 0).length;
-  inventoryCapacity.textContent = `${occupiedSlots} / 12 格`;
-  useBerryButton.classList.toggle("unavailable", player.berry <= 0);
-  useBerryButton.setAttribute("aria-disabled", String(player.berry <= 0));
+  renderInventory();
   syncResourceQuickbar();
   quickSlots.forEach((slot, index) => {
     const item = quickbarItems[index];
@@ -1567,7 +1607,48 @@ startButton.addEventListener("click", startGame);
 retryAssetsButton.addEventListener("click", loadGameAssets);
 restartButton.addEventListener("click", startGame);
 inventoryButton.addEventListener("click", () => setInventoryOpen(!inventoryOpen));
-useBerryButton.addEventListener("click", useBerry);
+inventorySlots.forEach((slot, index) => {
+  slot.addEventListener("dragstart", (event) => {
+    if (!inventoryItems[index]) {
+      event.preventDefault();
+      return;
+    }
+    draggedInventorySlot = index;
+    slot.classList.add("dragging");
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", String(index));
+    }
+  });
+  slot.addEventListener("dragover", (event) => {
+    if (draggedInventorySlot < 0) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+    inventorySlots.forEach((item) => item.classList.remove("drag-over"));
+    slot.classList.add("drag-over");
+  });
+  slot.addEventListener("dragleave", () => slot.classList.remove("drag-over"));
+  slot.addEventListener("drop", (event) => {
+    event.preventDefault();
+    const sourceIndex = draggedInventorySlot;
+    inventorySlots.forEach((item) => item.classList.remove("dragging", "drag-over"));
+    draggedInventorySlot = -1;
+    if (sourceIndex < 0 || sourceIndex === index || !inventoryItems[sourceIndex]) return;
+    [inventoryItems[sourceIndex], inventoryItems[index]] = [
+      inventoryItems[index],
+      inventoryItems[sourceIndex]
+    ];
+    updateHud();
+    showMessage(inventoryItems[sourceIndex] ? "两个物品交换了位置" : "物品已移动", 0.9);
+  });
+  slot.addEventListener("dragend", () => {
+    draggedInventorySlot = -1;
+    inventorySlots.forEach((item) => item.classList.remove("dragging", "drag-over"));
+  });
+  slot.addEventListener("click", () => {
+    if (inventoryItems[index]?.type === "berry") useBerry();
+  });
+});
 quickSlots.forEach((slot) => {
   slot.addEventListener("click", () => activateQuickSlot(Number(slot.dataset.quickSlot)));
 });

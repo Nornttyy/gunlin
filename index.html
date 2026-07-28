@@ -8,7 +8,7 @@
   <link rel="preload" href="assets/player.png?v=20260728-assets2" as="image" />
   <link rel="preload" href="assets/forest-assets.png?v=20260728-assets2" as="image" />
   <link rel="preload" href="assets/ark-pixel-12px-zh_cn.woff2?v=20260728-assets2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=20260728-quickresources1" />
+  <link rel="stylesheet" href="styles.css?v=20260728-inventorydrag1" />
 </head>
 <body>
   <main id="app">
@@ -67,32 +67,20 @@
           <span id="inventoryCapacity" class="inventory-capacity">0 / 12 格</span>
         </div>
         <div class="inventory-grid">
-          <div id="inventoryWoodSlot" class="inventory-slot item-empty" title="木材">
-            <span class="item-sprite item-wood" aria-hidden="true"></span>
-            <span id="inventoryWoodCount" class="inventory-count">0</span>
-            <span class="inventory-name">木材</span>
-          </div>
-          <div id="inventoryStoneSlot" class="inventory-slot item-empty" title="石头">
-            <span class="item-sprite item-stone" aria-hidden="true"></span>
-            <span id="inventoryStoneCount" class="inventory-count">0</span>
-            <span class="inventory-name">石头</span>
-          </div>
-          <button id="useBerryButton" class="inventory-slot usable-slot item-empty" title="点击食用，恢复 12 点生命">
-            <span class="item-sprite item-berry" aria-hidden="true"></span>
-            <span id="inventoryBerryCount" class="inventory-count">0</span>
-            <span class="inventory-name">浆果</span>
-          </button>
-          <div class="inventory-slot empty-slot"></div>
-          <div class="inventory-slot empty-slot"></div>
-          <div class="inventory-slot empty-slot"></div>
-          <div class="inventory-slot empty-slot"></div>
-          <div class="inventory-slot empty-slot"></div>
-          <div class="inventory-slot empty-slot"></div>
-          <div class="inventory-slot empty-slot"></div>
-          <div class="inventory-slot empty-slot"></div>
-          <div class="inventory-slot empty-slot"></div>
+          <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="0"><span class="item-sprite" aria-hidden="true"></span></button>
+          <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="1"><span class="item-sprite" aria-hidden="true"></span></button>
+          <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="2"><span class="item-sprite" aria-hidden="true"></span></button>
+          <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="3"><span class="item-sprite" aria-hidden="true"></span></button>
+          <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="4"><span class="item-sprite" aria-hidden="true"></span></button>
+          <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="5"><span class="item-sprite" aria-hidden="true"></span></button>
+          <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="6"><span class="item-sprite" aria-hidden="true"></span></button>
+          <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="7"><span class="item-sprite" aria-hidden="true"></span></button>
+          <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="8"><span class="item-sprite" aria-hidden="true"></span></button>
+          <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="9"><span class="item-sprite" aria-hidden="true"></span></button>
+          <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="10"><span class="item-sprite" aria-hidden="true"></span></button>
+          <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="11"><span class="item-sprite" aria-hidden="true"></span></button>
         </div>
-        <p class="inventory-tip">点击浆果即可食用并恢复生命</p>
+        <p class="inventory-tip">拖动物品可以移动或交换位置，点击浆果可以食用</p>
       </section>
       <div id="message" class="message" aria-live="polite"></div>
       <nav id="quickbar" class="quickbar" aria-label="快捷栏">
@@ -132,6 +120,6 @@
       </div>
     </section>
   </main>
-  <script type="module" src="game.js?v=20260728-quickresources1"></script>
+  <script type="module" src="game.js?v=20260728-inventorydrag1"></script>
 </body>
 </html>

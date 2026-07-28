@@ -311,9 +311,10 @@ h1 {
   box-shadow: inset 2px 2px 0 rgba(255, 255, 255, .04), inset -2px -2px 0 rgba(0, 0, 0, .22);
 }
 
-button.inventory-slot { font: inherit; cursor: pointer; }
-.usable-slot:hover { border-color: #d0e8ad; background: #30493a; }
-.usable-slot.unavailable { opacity: .52; cursor: default; }
+button.inventory-slot { font: inherit; cursor: default; }
+.inventory-slot[draggable="true"] { cursor: grab; }
+.inventory-slot[draggable="true"]:active { cursor: grabbing; }
+.inventory-slot:not(.item-empty):hover { border-color: #d0e8ad; background: #30493a; }
 .empty-slot { background: #111d19; }
 .inventory-slot.item-empty { background: #111d19; }
 .inventory-slot.item-empty > .item-sprite,
@@ -334,6 +335,9 @@ button.inventory-slot { font: inherit; cursor: pointer; }
 .item-wood { background-position: 0 -32px; }
 .item-stone { background-position: -32px -32px; }
 .item-berry { background-position: -64px -32px; }
+.inventory-slot[data-item-type="wood"] .item-sprite { background-position: 0 -32px; }
+.inventory-slot[data-item-type="stone"] .item-sprite { background-position: -32px -32px; }
+.inventory-slot[data-item-type="berry"] .item-sprite { background-position: -64px -32px; }
 
 .inventory-count {
   position: absolute;
@@ -355,6 +359,45 @@ button.inventory-slot { font: inherit; cursor: pointer; }
   color: #c4d2bf;
   text-align: center;
   font-size: 10px;
+}
+
+.inventory-slot:not(.item-empty)::after {
+  content: attr(data-label);
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 2px;
+  overflow: hidden;
+  color: #c4d2bf;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+}
+
+.inventory-slot[data-count]:not([data-count=""])::before {
+  content: attr(data-count);
+  position: absolute;
+  right: 4px;
+  top: 3px;
+  z-index: 1;
+  min-width: 17px;
+  padding: 1px 3px;
+  color: #fff5c8;
+  background: rgba(7, 12, 10, .78);
+  text-align: center;
+  font-size: 11px;
+}
+
+.inventory-slot.dragging {
+  opacity: .35;
+  transform: scale(.94);
+}
+
+.inventory-slot.drag-over {
+  border-color: #eef7b7;
+  background: #3a5743;
+  box-shadow: inset 0 0 0 2px rgba(216, 243, 166, .2), 0 0 8px rgba(185, 224, 136, .35);
 }
 
 .inventory-tip {

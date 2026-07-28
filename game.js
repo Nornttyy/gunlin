@@ -1450,21 +1450,42 @@ function drawFlashlightGlow(darkness) {
   ctx.restore();
 }
 
+function getFogShape(index, time = elapsed, darkness = nightIntensity()) {
+  const baseWidth = 320 + hash(index + 70) * 480;
+  const baseHeight = 58 + hash(index + 90) * 105;
+  const speed = 8 + hash(index + 110) * 14;
+  const direction = hash(index + 121) > 0.5 ? 1 : -1;
+  const widthBreath = 0.88 + Math.sin(time * (0.12 + hash(index + 181) * 0.16) + index) * 0.18;
+  const heightBreath = 0.86 + Math.cos(time * (0.15 + hash(index + 193) * 0.13) + index * 1.7) * 0.2;
+  const width = baseWidth * widthBreath;
+  const height = baseHeight * heightBreath;
+  const loopWidth = W + baseWidth * 2;
+  const rawX = hash(index + 130) * loopWidth + time * speed * direction - camera.x * 0.04;
+  const wrappedX = ((rawX % loopWidth) + loopWidth) % loopWidth;
+  const y = hash(index + 150) * H
+    + Math.sin(time * 0.19 + index * 1.31) * 34
+    + Math.cos(time * 0.075 + index) * 17;
+  const alphaPulse = 0.7 + Math.sin(time * 0.29 + index * 2.17) * 0.3;
+  return {
+    width,
+    height,
+    x: wrappedX - baseWidth,
+    y,
+    rotation: Math.sin(time * 0.11 + index) * 0.055,
+    alpha: (0.052 + darkness * 0.115) * (0.62 + hash(index + 170)) * alphaPulse
+  };
+}
+
 function drawDriftingFog(darkness) {
-  for (let index = 0; index < 18; index += 1) {
-    const width = 160 + hash(index + 70) * 260;
-    const height = 22 + hash(index + 90) * 40;
-    const speed = 5 + hash(index + 110) * 9;
-    const loopWidth = W + width * 2;
-    const x = ((hash(index + 130) * loopWidth + elapsed * speed - camera.x * 0.025) % loopWidth) - width;
-    const y = hash(index + 150) * H + Math.sin(elapsed * 0.16 + index) * 18;
-    const alpha = (0.048 + darkness * 0.105) * (0.55 + hash(index + 170));
+  for (let index = 0; index < 16; index += 1) {
+    const fogShape = getFogShape(index, elapsed, darkness);
     ctx.save();
-    ctx.translate(x, y);
-    ctx.scale(width * 0.5, height * 0.5);
+    ctx.translate(fogShape.x, fogShape.y);
+    ctx.rotate(fogShape.rotation);
+    ctx.scale(fogShape.width * 0.5, fogShape.height * 0.5);
     const fog = ctx.createRadialGradient(0, 0, 0.08, 0, 0, 1);
-    fog.addColorStop(0, `rgba(185, 199, 191, ${alpha})`);
-    fog.addColorStop(0.56, `rgba(154, 174, 165, ${alpha * 0.56})`);
+    fog.addColorStop(0, `rgba(185, 199, 191, ${fogShape.alpha})`);
+    fog.addColorStop(0.56, `rgba(154, 174, 165, ${fogShape.alpha * 0.56})`);
     fog.addColorStop(1, "rgba(125, 149, 140, 0)");
     ctx.fillStyle = fog;
     ctx.beginPath();

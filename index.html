@@ -9,7 +9,7 @@
   <link rel="preload" href="assets/tree-sprites.png?v=20260728-tree-redraw1" as="image" />
   <link rel="preload" href="assets/forest-assets.png?v=20260728-assets2" as="image" />
   <link rel="preload" href="assets/ark-pixel-12px-zh_cn.woff2?v=20260728-assets2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=20260728-horrorui2" />
+  <link rel="stylesheet" href="styles.css?v=20260728-craftaim1" />
 </head>
 <body>
   <main id="app">
@@ -66,33 +66,53 @@
         </div>
       </div>
       <span id="resourceLabel" class="hidden" aria-hidden="true">木材 0　石头 0　浆果 0</span>
-      <button id="inventoryButton" class="inventory-button" aria-expanded="false" aria-controls="inventoryPanel">
+      <button id="inventoryButton" class="inventory-button" aria-expanded="false" aria-controls="inventoryWorkspace">
         <span id="inventoryButtonLabel">背包</span> <span>[I]</span>
       </button>
-      <section id="inventoryPanel" class="inventory-panel hidden" aria-label="玩家物品栏">
-        <div class="inventory-header">
-          <div>
-            <p>随身物品</p>
-            <span>时间已暂停</span>
+      <div id="inventoryWorkspace" class="inventory-workspace hidden">
+        <section id="craftPanel" class="craft-panel" aria-label="合成栏">
+          <div class="craft-header">
+            <div>
+              <p>合成栏</p>
+              <span>制作后进入快捷栏</span>
+            </div>
+            <span>配方 06</span>
           </div>
-          <span id="inventoryCapacity" class="inventory-capacity">0 / 12 格</span>
-        </div>
-        <div class="inventory-grid">
-          <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="0"><span class="item-sprite" aria-hidden="true"></span></button>
-          <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="1"><span class="item-sprite" aria-hidden="true"></span></button>
-          <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="2"><span class="item-sprite" aria-hidden="true"></span></button>
-          <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="3"><span class="item-sprite" aria-hidden="true"></span></button>
-          <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="4"><span class="item-sprite" aria-hidden="true"></span></button>
-          <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="5"><span class="item-sprite" aria-hidden="true"></span></button>
-          <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="6"><span class="item-sprite" aria-hidden="true"></span></button>
-          <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="7"><span class="item-sprite" aria-hidden="true"></span></button>
-          <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="8"><span class="item-sprite" aria-hidden="true"></span></button>
-          <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="9"><span class="item-sprite" aria-hidden="true"></span></button>
-          <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="10"><span class="item-sprite" aria-hidden="true"></span></button>
-          <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="11"><span class="item-sprite" aria-hidden="true"></span></button>
-        </div>
-        <p class="inventory-tip">拖动物品可以移动或交换位置，点击浆果可以食用</p>
-      </section>
+          <div class="craft-list">
+            <button type="button" class="craft-button" data-recipe="0"><span class="item-sprite quick-wall" aria-hidden="true"></span><span class="craft-copy"><strong>木墙</strong><small>木材 3 · 石头 1</small></span><span class="craft-owned">0</span></button>
+            <button type="button" class="craft-button" data-recipe="1"><span class="item-sprite quick-door" aria-hidden="true"></span><span class="craft-copy"><strong>木门</strong><small>木材 4 · 石头 1</small></span><span class="craft-owned">0</span></button>
+            <button type="button" class="craft-button" data-recipe="2"><span class="item-sprite quick-floor" aria-hidden="true"></span><span class="craft-copy"><strong>木地板</strong><small>木材 2</small></span><span class="craft-owned">0</span></button>
+            <button type="button" class="craft-button" data-recipe="3"><span class="item-sprite quick-chest" aria-hidden="true"></span><span class="craft-copy"><strong>储物箱</strong><small>木材 5</small></span><span class="craft-owned">0</span></button>
+            <button type="button" class="craft-button" data-recipe="4"><span class="item-sprite quick-workbench" aria-hidden="true"></span><span class="craft-copy"><strong>工作台</strong><small>木材 6 · 石头 2</small></span><span class="craft-owned">0</span></button>
+            <button type="button" class="craft-button" data-recipe="5"><span class="item-sprite quick-trap" aria-hidden="true"></span><span class="craft-copy"><strong>陷阱</strong><small>木材 2 · 石头 1</small></span><span class="craft-owned">0</span></button>
+          </div>
+          <p id="craftStatus" class="craft-status">收集材料后可以制作</p>
+        </section>
+        <section id="inventoryPanel" class="inventory-panel hidden" aria-label="玩家物品栏">
+          <div class="inventory-header">
+            <div>
+              <p>随身物品</p>
+              <span>时间已暂停</span>
+            </div>
+            <span id="inventoryCapacity" class="inventory-capacity">0 / 12 格</span>
+          </div>
+          <div class="inventory-grid">
+            <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="0"><span class="item-sprite" aria-hidden="true"></span></button>
+            <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="1"><span class="item-sprite" aria-hidden="true"></span></button>
+            <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="2"><span class="item-sprite" aria-hidden="true"></span></button>
+            <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="3"><span class="item-sprite" aria-hidden="true"></span></button>
+            <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="4"><span class="item-sprite" aria-hidden="true"></span></button>
+            <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="5"><span class="item-sprite" aria-hidden="true"></span></button>
+            <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="6"><span class="item-sprite" aria-hidden="true"></span></button>
+            <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="7"><span class="item-sprite" aria-hidden="true"></span></button>
+            <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="8"><span class="item-sprite" aria-hidden="true"></span></button>
+            <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="9"><span class="item-sprite" aria-hidden="true"></span></button>
+            <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="10"><span class="item-sprite" aria-hidden="true"></span></button>
+            <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="11"><span class="item-sprite" aria-hidden="true"></span></button>
+          </div>
+          <p class="inventory-tip">拖动物品可以移动或交换位置，点击浆果可以食用</p>
+        </section>
+      </div>
       <div id="message" class="message" aria-live="polite"></div>
       <nav id="quickbar" class="quickbar" aria-label="快捷栏">
         <button class="quick-slot quick-empty slot-empty" data-quick-slot="0" data-item-kind="empty" title="空快捷格">
@@ -132,6 +152,6 @@
       </div>
     </section>
   </main>
-  <script type="module" src="game.js?v=20260728-horrorui2"></script>
+  <script type="module" src="game.js?v=20260728-craftaim1"></script>
 </body>
 </html>

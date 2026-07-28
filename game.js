@@ -54,9 +54,12 @@ const flashlightLabel = document.getElementById("flashlightLabel");
 const buildingLabel = document.getElementById("buildingLabel");
 const inventoryButton = document.getElementById("inventoryButton");
 const inventoryButtonLabel = document.getElementById("inventoryButtonLabel");
+const inventoryWorkspace = document.getElementById("inventoryWorkspace");
 const inventoryPanel = document.getElementById("inventoryPanel");
 const inventoryCapacity = document.getElementById("inventoryCapacity");
 const inventorySlots = [...document.querySelectorAll(".inventory-slot")];
+const craftButtons = [...document.querySelectorAll(".craft-button")];
+const craftStatus = document.getElementById("craftStatus");
 const inventoryItems = Array(12).fill(null);
 const quickSlots = [...document.querySelectorAll(".quick-slot")];
 const quickbarItems = Array(9).fill(null);
@@ -112,6 +115,7 @@ const BUILD_TYPES = [
   { type: "workbench", label: "工作台", cost: { wood: 6, stone: 2 } },
   { type: "trap", label: "陷阱", cost: { wood: 2, stone: 1 }, uses: 3 }
 ];
+const craftedCounts = Array(BUILD_TYPES.length).fill(0);
 
 const keys = new Set();
 let state = "title";
@@ -170,6 +174,7 @@ const barricades = [];
 const doors = [];
 const buildings = [];
 const camera = { x: 0, y: 0 };
+const pointerAim = { x: W / 2, y: H / 2, active: false };
 const campfire = { ...CAMP_POSITION };
 
 function hash(index) {
@@ -402,6 +407,7 @@ function startGame() {
   draggedInventorySlot = -1;
   inventoryItems.fill(null);
   quickbarItems.fill(null);
+  craftedCounts.fill(0);
   Object.assign(player, {
     x: PLAYER_START.x,
     y: PLAYER_START.y,
@@ -508,8 +514,6 @@ function updatePlayer(delta) {
   y /= length;
   player.moving = Math.abs(x) + Math.abs(y) > 0;
   if (player.moving) {
-    player.dirX = x;
-    player.dirY = y;
     player.animation += delta * (keys.has("ShiftLeft") || keys.has("ShiftRight") ? 11 : 8);
   }
 
@@ -662,14 +666,76 @@ function collectResource() {
   updateHud();
 }
 
+function craftedQuickSlot(buildIndex) {
+  return quickbarItems.findIndex((item) => (
+    item?.kind === "building" && item.source === "crafted" && item.buildIndex === buildIndex
+  ));
+}
+
+function recipeCostText(cost) {
+  return `木材 ${cost.wood}${cost.stone ? ` · 石头 ${cost.stone}` : ""}`;
+}
+
+function renderCrafting() {
+  craftButtons.forEach((button) => {
+    const buildIndex = Number(button.dataset.recipe);
+    if (!Number.isInteger(buildIndex) || !BUILD_TYPES[buildIndex]) return;
+    const recipe = BUILD_TYPES[buildIndex];
+    const existingSlot = craftedQuickSlot(buildIndex);
+    const hasSpace = existingSlot >= 0 || quickbarItems.some((item) => item === null);
+    const affordable = player.wood >= recipe.cost.wood && player.stone >= recipe.cost.stone;
+    button.disabled = !affordable || !hasSpace;
+    button.classList.toggle("craft-ready", affordable && hasSpace);
+    button.title = !hasSpace
+      ? "快捷栏已满"
+      : affordable ? `制作${recipe.label}：${recipeCostText(recipe.cost)}` : `材料不足：${recipeCostText(recipe.cost)}`;
+    const owned = button.querySelector?.(".craft-owned");
+    if (owned) owned.textContent = String(craftedCounts[buildIndex]);
+  });
+}
+
+function craftBuilding(buildIndex) {
+  if (state !== "game" || !inventoryOpen) return;
+  const recipe = BUILD_TYPES[buildIndex];
+  if (!recipe) return;
+  let slotIndex = craftedQuickSlot(buildIndex);
+  if (slotIndex < 0) slotIndex = quickbarItems.findIndex((item) => item === null);
+  if (slotIndex < 0) {
+    if (craftStatus) craftStatus.textContent = "快捷栏已满，先腾出一个位置";
+    return;
+  }
+  if (player.wood < recipe.cost.wood || player.stone < recipe.cost.stone) {
+    if (craftStatus) craftStatus.textContent = `材料不足：${recipeCostText(recipe.cost)}`;
+    return;
+  }
+  player.wood -= recipe.cost.wood;
+  player.stone -= recipe.cost.stone;
+  craftedCounts[buildIndex] += 1;
+  if (!quickbarItems[slotIndex]) {
+    quickbarItems[slotIndex] = {
+      type: recipe.type,
+      kind: "building",
+      label: recipe.label,
+      buildIndex,
+      source: "crafted"
+    };
+  }
+  if (craftStatus) craftStatus.textContent = `已制作${recipe.label}，放入快捷栏 ${slotIndex + 1}`;
+  updateHud();
+}
+
 // 背包打开时会暂停游戏，就像先把桌面上的玩具按下暂停键再整理盒子。
 function setInventoryOpen(open) {
   inventoryOpen = open && state === "game" && !classSelectionOpen;
+  if (inventoryWorkspace) inventoryWorkspace.classList.toggle("hidden", !inventoryOpen);
   inventoryPanel.classList.toggle("hidden", !inventoryOpen);
   inventoryButton.classList.toggle("active", inventoryOpen);
   inventoryButton.setAttribute("aria-expanded", String(inventoryOpen));
   inventoryButtonLabel.textContent = inventoryOpen ? "关闭" : "背包";
-  if (inventoryOpen) keys.clear();
+  if (inventoryOpen) {
+    keys.clear();
+    if (craftStatus) craftStatus.textContent = "选择配方制作，成品会进入快捷栏";
+  }
   updateHud();
 }
 
@@ -688,13 +754,13 @@ function useBerry() {
   updateHud();
 }
 
-function buildBarricade() {
-  if (player.wood < 3 || player.stone < 1) {
+function buildBarricade(payCost = true) {
+  if (payCost && (player.wood < 3 || player.stone < 1)) {
     showMessage("建造需要木材 ×3、石头 ×1");
-    return;
+    return false;
   }
   const placement = getBuildPlacement();
-  if (!canBuildAt(placement.x, placement.y)) return;
+  if (!canBuildAt(placement.x, placement.y)) return false;
   barricades.push({
     id: barricadeId++,
     x: placement.x,
@@ -704,18 +770,21 @@ function buildBarricade() {
     health: 120,
     maxHealth: 120
   });
-  player.wood -= 3;
-  player.stone -= 1;
+  if (payCost) {
+    player.wood -= 3;
+    player.stone -= 1;
+  }
   showMessage("建造了一段木墙");
+  return true;
 }
 
-function buildDoor() {
-  if (player.wood < 4 || player.stone < 1) {
+function buildDoor(payCost = true) {
+  if (payCost && (player.wood < 4 || player.stone < 1)) {
     showMessage("建造木门需要木材 ×4、石头 ×1");
-    return;
+    return false;
   }
   const placement = getBuildPlacement();
-  if (!canBuildAt(placement.x, placement.y)) return;
+  if (!canBuildAt(placement.x, placement.y)) return false;
   doors.push({
     id: doorId++,
     x: placement.x,
@@ -727,26 +796,32 @@ function buildDoor() {
     health: 90,
     maxHealth: 90
   });
-  player.wood -= 4;
-  player.stone -= 1;
+  if (payCost) {
+    player.wood -= 4;
+    player.stone -= 1;
+  }
   showMessage("建造了一扇木门");
+  return true;
 }
 
-function buildProp(type, cost, label) {
-  if (player.wood < cost.wood || player.stone < cost.stone) {
+function buildProp(type, cost, label, payCost = true) {
+  if (payCost && (player.wood < cost.wood || player.stone < cost.stone)) {
     const stoneText = cost.stone ? `、石头 ×${cost.stone}` : "";
     showMessage(`建造${label}需要木材 ×${cost.wood}${stoneText}`);
-    return;
+    return false;
   }
   const placement = getBuildPlacement();
-  if (!canBuildAt(placement.x, placement.y)) return;
+  if (!canBuildAt(placement.x, placement.y)) return false;
   const building = { id: buildingId++, type, x: placement.x, y: placement.y };
   // 陷阱像一只有三颗牙的夹子，命中三次后就会坏掉。
   if (type === "trap") Object.assign(building, { uses: 3, cooldown: 0 });
   buildings.push(building);
-  player.wood -= cost.wood;
-  player.stone -= cost.stone;
+  if (payCost) {
+    player.wood -= cost.wood;
+    player.stone -= cost.stone;
+  }
   showMessage(`建造了${label}`);
+  return true;
 }
 
 function getBuildDirection() {
@@ -802,12 +877,29 @@ function buildSelected() {
   }
   selectedBuild = heldItem.buildIndex;
   const selected = BUILD_TYPES[selectedBuild];
+  const crafted = heldItem.source === "crafted";
+  if (crafted && craftedCounts[selectedBuild] <= 0) {
+    quickbarItems[selectedQuickSlot] = null;
+    selectedQuickSlot = -1;
+    showMessage("这个建筑已经用完了");
+    updateHud();
+    return;
+  }
+  let placed = false;
   if (selected.type === "wall") {
-    buildBarricade();
+    placed = buildBarricade(!crafted);
   } else if (selected.type === "door") {
-    buildDoor();
+    placed = buildDoor(!crafted);
   } else {
-    buildProp(selected.type, selected.cost, selected.label);
+    placed = buildProp(selected.type, selected.cost, selected.label, !crafted);
+  }
+  if (placed && crafted) {
+    craftedCounts[selectedBuild] -= 1;
+    if (craftedCounts[selectedBuild] <= 0) {
+      quickbarItems[selectedQuickSlot] = null;
+      selectedQuickSlot = -1;
+    }
+    updateHud();
   }
 }
 
@@ -881,20 +973,26 @@ function attack() {
   showMessage(hit ? "击中了怪物" : "攻击落空", 0.7);
 }
 
-// 把鼠标位置换算成游戏世界方向，让攻击和建筑都朝向点击处。
-function aimAtPointer(event) {
-  const rectangle = canvas.getBoundingClientRect();
-  if (rectangle.width <= 0 || rectangle.height <= 0) return;
-  const canvasX = (event.clientX - rectangle.left) * (W / rectangle.width);
-  const canvasY = (event.clientY - rectangle.top) * (H / rectangle.height);
-  const worldX = canvasX + camera.x;
-  const worldY = canvasY + camera.y;
+function updatePointerFacing() {
+  if (!pointerAim.active) return;
+  const worldX = pointerAim.x + camera.x;
+  const worldY = pointerAim.y + camera.y;
   const deltaX = worldX - player.x;
   const deltaY = worldY - player.y;
   const distance = Math.hypot(deltaX, deltaY);
   if (distance < 1) return;
   player.dirX = deltaX / distance;
   player.dirY = deltaY / distance;
+}
+
+// 记录鼠标在画布中的位置；移动、手电筒和建造方向都只使用这一个朝向来源。
+function aimAtPointer(event) {
+  const rectangle = canvas.getBoundingClientRect();
+  if (rectangle.width <= 0 || rectangle.height <= 0) return;
+  pointerAim.x = (event.clientX - rectangle.left) * (W / rectangle.width);
+  pointerAim.y = (event.clientY - rectangle.top) * (H / rectangle.height);
+  pointerAim.active = true;
+  updatePointerFacing();
 }
 
 function spawnMonster() {
@@ -1036,8 +1134,12 @@ function syncResourceQuickbar() {
 }
 
 function quickbarItemAmount(item) {
-  if (!item || item.source !== "inventory") return null;
-  return player[item.type];
+  if (!item) return null;
+  if (item.source === "crafted" && item.kind === "building") {
+    return craftedCounts[item.buildIndex] || 0;
+  }
+  if (item.source === "inventory") return player[item.type];
+  return null;
 }
 
 function updateHud() {
@@ -1067,6 +1169,7 @@ function updateHud() {
   const selected = BUILD_TYPES[selectedBuild];
   renderInventory();
   syncResourceQuickbar();
+  renderCrafting();
   quickSlots.forEach((slot, index) => {
     const item = quickbarItems[index];
     const amount = quickbarItemAmount(item);
@@ -1102,6 +1205,7 @@ function render() {
   const targetY = Math.max(0, Math.min(WORLD.height - H, player.y - H / 2));
   camera.x += (targetX - camera.x) * 0.12;
   camera.y += (targetY - camera.y) * 0.12;
+  updatePointerFacing();
   const shakeStrength = player.hurtTimer > 0 ? Math.min(5, player.hurtTimer * 7) : 0;
   const shakeX = Math.sin(elapsed * 89) * shakeStrength;
   const shakeY = Math.cos(elapsed * 113) * shakeStrength;
@@ -1891,6 +1995,12 @@ inventorySlots.forEach((slot, index) => {
 });
 quickSlots.forEach((slot) => {
   slot.addEventListener("click", () => activateQuickSlot(Number(slot.dataset.quickSlot)));
+});
+craftButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    const buildIndex = Number(button.dataset.recipe);
+    if (Number.isInteger(buildIndex)) craftBuilding(buildIndex);
+  });
 });
 
 classButtons.forEach((button) => {

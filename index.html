@@ -39,13 +39,82 @@
           <span id="healthLabel">生命 100</span>
         </div>
         <div class="hud-row secondary">
-          <span id="resourceLabel">木材 12　石头 4</span>
+          <span id="resourceLabel">木材 12　石头 4　浆果 0</span>
           <span id="flashlightLabel">手电筒 开</span>
         </div>
         <div class="hud-row secondary"><span id="buildingLabel">建筑 1：木墙</span><span>1-6 选择</span></div>
       </div>
+      <button id="inventoryButton" class="inventory-button" aria-expanded="false" aria-controls="inventoryPanel">
+        <span id="inventoryButtonLabel">背包</span> <span>[I]</span>
+      </button>
+      <section id="inventoryPanel" class="inventory-panel hidden" aria-label="玩家物品栏">
+        <div class="inventory-header">
+          <div>
+            <p>物品栏</p>
+            <span>游戏已暂停</span>
+          </div>
+          <span id="inventoryCapacity" class="inventory-capacity">2 / 12 格</span>
+        </div>
+        <div class="inventory-grid">
+          <div class="inventory-slot" title="建造时会自动使用木材">
+            <span class="item-sprite item-wood" aria-hidden="true"></span>
+            <span id="inventoryWoodCount" class="inventory-count">12</span>
+            <span class="inventory-name">木材</span>
+          </div>
+          <div class="inventory-slot" title="建造时会自动使用石头">
+            <span class="item-sprite item-stone" aria-hidden="true"></span>
+            <span id="inventoryStoneCount" class="inventory-count">4</span>
+            <span class="inventory-name">石头</span>
+          </div>
+          <button id="useBerryButton" class="inventory-slot usable-slot" title="点击食用，恢复 12 点生命">
+            <span class="item-sprite item-berry" aria-hidden="true"></span>
+            <span id="inventoryBerryCount" class="inventory-count">0</span>
+            <span class="inventory-name">浆果</span>
+          </button>
+          <div class="inventory-slot empty-slot"></div>
+          <div class="inventory-slot empty-slot"></div>
+          <div class="inventory-slot empty-slot"></div>
+          <div class="inventory-slot empty-slot"></div>
+          <div class="inventory-slot empty-slot"></div>
+          <div class="inventory-slot empty-slot"></div>
+          <div class="inventory-slot empty-slot"></div>
+          <div class="inventory-slot empty-slot"></div>
+          <div class="inventory-slot empty-slot"></div>
+        </div>
+        <p class="inventory-tip">点击浆果即可食用并恢复生命</p>
+      </section>
       <div id="message" class="message" aria-live="polite"></div>
-      <div class="controls">WASD 移动　Shift 奔跑　E 互动/开关门　1-6 选择建筑　B 建造　Space 攻击　F 手电筒</div>
+      <nav id="quickbar" class="quickbar" aria-label="快捷栏">
+        <button class="quick-slot selected" data-quick-slot="0" title="选择木墙">
+          <span class="quick-key">1</span><span class="item-sprite quick-wall"></span><span class="quick-name">木墙</span>
+        </button>
+        <button class="quick-slot" data-quick-slot="1" title="选择木门">
+          <span class="quick-key">2</span><span class="item-sprite quick-door"></span><span class="quick-name">木门</span>
+        </button>
+        <button class="quick-slot" data-quick-slot="2" title="选择木地板">
+          <span class="quick-key">3</span><span class="item-sprite quick-floor"></span><span class="quick-name">地板</span>
+        </button>
+        <button class="quick-slot" data-quick-slot="3" title="选择储物箱">
+          <span class="quick-key">4</span><span class="item-sprite quick-chest"></span><span class="quick-name">箱子</span>
+        </button>
+        <button class="quick-slot" data-quick-slot="4" title="选择工作台">
+          <span class="quick-key">5</span><span class="item-sprite quick-workbench"></span><span class="quick-name">工作台</span>
+        </button>
+        <button class="quick-slot" data-quick-slot="5" title="选择陷阱">
+          <span class="quick-key">6</span><span class="item-sprite quick-trap"></span><span class="quick-name">陷阱</span>
+        </button>
+        <button class="quick-slot" data-quick-slot="6" title="快速食用浆果">
+          <span class="quick-key">7</span><span class="item-sprite item-berry"></span>
+          <span id="quickBerryCount" class="quick-count">0</span><span class="quick-name">浆果</span>
+        </button>
+        <button class="quick-slot quick-empty" data-quick-slot="7" title="空快捷格">
+          <span class="quick-key">8</span><span class="quick-name">空</span>
+        </button>
+        <button class="quick-slot quick-empty" data-quick-slot="8" title="空快捷格">
+          <span class="quick-key">9</span><span class="quick-name">空</span>
+        </button>
+      </nav>
+      <div class="controls">WASD 移动　E 互动　1-6 建筑　7 浆果　B 建造　Space 攻击　F 手电筒　I 背包</div>
       <div id="gameOver" class="game-over hidden">
         <h2>你倒在了森林里</h2>
         <button id="restartButton" class="primary-button">重新开始</button>

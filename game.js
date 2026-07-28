@@ -22,11 +22,22 @@ const healthLabel = document.getElementById("healthLabel");
 const resourceLabel = document.getElementById("resourceLabel");
 const flashlightLabel = document.getElementById("flashlightLabel");
 const buildingLabel = document.getElementById("buildingLabel");
+const inventoryButton = document.getElementById("inventoryButton");
+const inventoryButtonLabel = document.getElementById("inventoryButtonLabel");
+const inventoryPanel = document.getElementById("inventoryPanel");
+const inventoryWoodCount = document.getElementById("inventoryWoodCount");
+const inventoryStoneCount = document.getElementById("inventoryStoneCount");
+const inventoryBerryCount = document.getElementById("inventoryBerryCount");
+const inventoryCapacity = document.getElementById("inventoryCapacity");
+const useBerryButton = document.getElementById("useBerryButton");
+const quickSlots = [...document.querySelectorAll(".quick-slot")];
+const quickBerryCount = document.getElementById("quickBerryCount");
 
 const sprite = new Image();
 sprite.src = "assets/player.png";
 const worldSprite = new Image();
-worldSprite.src = "assets/forest-assets.png";
+// 版本号会提醒浏览器重新读取刚导入的图集，不使用旧缓存（cache）。
+worldSprite.src = "assets/forest-assets.png?v=20260728-1116";
 
 // 建筑素材在 128×96 图集的第 4 行（每格 16×16）。
 const BUILDING_ROW = 3;
@@ -43,9 +54,6 @@ const BUILDING_FRAME = {
 
 const TERRAIN_FRAME = {
   grass: 0,
-  darkGrass: 1,
-  mud: 2,
-  stoneGround: 3,
   sand: 4,
   water: 5
 };
@@ -59,12 +67,12 @@ const PROP_FRAME = {
 };
 
 const BUILD_TYPES = [
-  { type: "wall", label: "木墙", cost: { wood: 3, stone: 1 } },
-  { type: "door", label: "木门", cost: { wood: 4, stone: 1 } },
+  { type: "wall", label: "木墙", cost: { wood: 3, stone: 1 }, health: 120 },
+  { type: "door", label: "木门", cost: { wood: 4, stone: 1 }, health: 90 },
   { type: "floor", label: "木地板", cost: { wood: 2, stone: 0 } },
   { type: "chest", label: "储物箱", cost: { wood: 5, stone: 0 } },
   { type: "workbench", label: "工作台", cost: { wood: 6, stone: 2 } },
-  { type: "trap", label: "陷阱", cost: { wood: 2, stone: 1 } }
+  { type: "trap", label: "陷阱", cost: { wood: 2, stone: 1 }, uses: 3 }
 ];
 
 const keys = new Set();
@@ -80,6 +88,8 @@ let barricadeId = 0;
 let doorId = 0;
 let buildingId = 0;
 let selectedBuild = 0;
+let selectedQuickSlot = 0;
+let inventoryOpen = false;
 
 const player = {
   x: 330,
@@ -89,6 +99,7 @@ const player = {
   health: 100,
   wood: 12,
   stone: 4,
+  berry: 0,
   flashlight: true,
   classRow: 0,
   moving: false,
@@ -137,7 +148,18 @@ function resetWorld() {
     });
   }
   // 先放一扇测试门，后续可由建造系统生成更多门。
-  doors.push({ id: doorId++, x: 790, y: 790, width: 48, height: 18, open: false, animation: 0 });
+  doors.push({
+    id: doorId++,
+    x: 790,
+    y: 790,
+    width: 48,
+    height: 18,
+    vertical: false,
+    open: false,
+    animation: 0,
+    health: 90,
+    maxHealth: 90
+  });
 }
 
 function startGame() {
@@ -149,15 +171,19 @@ function startGame() {
   dayNumber = 1;
   wasNight = false;
   spawnTimer = 4;
-  Object.assign(player, { x: 330, y: 820, health: 100, wood: 12, stone: 4, flashlight: true, attackTimer: 0, attackCooldown: 0 });
+  selectedBuild = 0;
+  selectedQuickSlot = 0;
+  Object.assign(player, { x: 330, y: 820, health: 100, wood: 12, stone: 4, berry: 0, flashlight: true, attackTimer: 0, attackCooldown: 0 });
+  setInventoryOpen(false);
   resetWorld();
-  showMessage("白天开始：1-6 选择建筑，B 建造");
+  showMessage("白天开始：按 I 可以打开物品栏");
   lastTime = performance.now();
   requestAnimationFrame(loop);
 }
 
 function endGame() {
   state = "over";
+  setInventoryOpen(false);
   gameOverPanel.classList.remove("hidden");
 }
 
@@ -188,6 +214,7 @@ function update(delta) {
 
   updatePlayer(delta);
   updateDoors(delta);
+  updateTraps(delta);
   updateMonsters(delta, night);
   spawnTimer -= delta;
   if (night && spawnTimer <= 0) {
@@ -293,9 +320,35 @@ function interact() {
     player.stone += 2;
     showMessage("获得石头 ×2");
   } else {
-    player.health = Math.min(100, player.health + 10);
-    showMessage("吃下浆果，恢复生命");
+    player.berry += 1;
+    showMessage("浆果已放进物品栏");
   }
+}
+
+// 背包打开时会暂停游戏，就像先把桌面上的玩具按下暂停键再整理盒子。
+function setInventoryOpen(open) {
+  inventoryOpen = open && state === "game";
+  inventoryPanel.classList.toggle("hidden", !inventoryOpen);
+  inventoryButton.classList.toggle("active", inventoryOpen);
+  inventoryButton.setAttribute("aria-expanded", String(inventoryOpen));
+  inventoryButtonLabel.textContent = inventoryOpen ? "关闭" : "背包";
+  if (inventoryOpen) keys.clear();
+  updateHud();
+}
+
+function useBerry() {
+  if (state !== "game" || player.berry <= 0) {
+    showMessage("背包里还没有浆果", 1.1);
+    return;
+  }
+  if (player.health >= 100) {
+    showMessage("生命已经满了，先把浆果留着吧", 1.3);
+    return;
+  }
+  player.berry -= 1;
+  player.health = Math.min(100, player.health + 12);
+  showMessage("吃下浆果，恢复 12 点生命", 1.2);
+  updateHud();
 }
 
 function buildBarricade() {
@@ -303,9 +356,18 @@ function buildBarricade() {
     showMessage("建造需要木材 ×3、石头 ×1");
     return;
   }
-  const x = player.x + player.dirX * 42;
-  const y = player.y + player.dirY * 42;
-  barricades.push({ id: barricadeId++, x, y, width: 54, height: 16 });
+  const placement = getBuildPlacement();
+  if (!canBuildAt(placement.x, placement.y)) return;
+  barricades.push({
+    id: barricadeId++,
+    x: placement.x,
+    y: placement.y,
+    width: placement.vertical ? 18 : 54,
+    height: placement.vertical ? 54 : 18,
+    vertical: placement.vertical,
+    health: 120,
+    maxHealth: 120
+  });
   player.wood -= 3;
   player.stone -= 1;
   showMessage("建造了一段木墙");
@@ -316,9 +378,20 @@ function buildDoor() {
     showMessage("建造木门需要木材 ×4、石头 ×1");
     return;
   }
-  const x = Math.round((player.x + player.dirX * 42) / 16) * 16;
-  const y = Math.round((player.y + player.dirY * 42) / 16) * 16;
-  doors.push({ id: doorId++, x, y, width: 48, height: 18, open: false, animation: 0 });
+  const placement = getBuildPlacement();
+  if (!canBuildAt(placement.x, placement.y)) return;
+  doors.push({
+    id: doorId++,
+    x: placement.x,
+    y: placement.y,
+    width: placement.vertical ? 18 : 48,
+    height: placement.vertical ? 48 : 18,
+    vertical: placement.vertical,
+    open: false,
+    animation: 0,
+    health: 90,
+    maxHealth: 90
+  });
   player.wood -= 4;
   player.stone -= 1;
   showMessage("建造了一扇木门");
@@ -330,15 +403,47 @@ function buildProp(type, cost, label) {
     showMessage(`建造${label}需要木材 ×${cost.wood}${stoneText}`);
     return;
   }
-  const x = Math.round((player.x + player.dirX * 42) / 16) * 16;
-  const y = Math.round((player.y + player.dirY * 42) / 16) * 16;
-  buildings.push({ id: buildingId++, type, x, y });
+  const placement = getBuildPlacement();
+  if (!canBuildAt(placement.x, placement.y)) return;
+  const building = { id: buildingId++, type, x: placement.x, y: placement.y };
+  // 陷阱像一只有三颗牙的夹子，命中三次后就会坏掉。
+  if (type === "trap") Object.assign(building, { uses: 3, cooldown: 0 });
+  buildings.push(building);
   player.wood -= cost.wood;
   player.stone -= cost.stone;
   showMessage(`建造了${label}`);
 }
 
+// 建筑会贴在 16 像素网格上；面向左右时，墙和门会竖着放。
+function getBuildPlacement() {
+  return {
+    x: Math.round((player.x + player.dirX * 48) / 16) * 16,
+    y: Math.round((player.y + player.dirY * 48) / 16) * 16,
+    vertical: Math.abs(player.dirX) > Math.abs(player.dirY)
+  };
+}
+
+function canBuildAt(x, y) {
+  if (x < WORLD.margin + 24 || x > WORLD.width - WORLD.margin - 24 || y < WORLD.margin + 24 || y > WORLD.height - WORLD.margin - 24) {
+    showMessage("这里太靠近森林边缘，不能建造");
+    return false;
+  }
+  const occupied = barricades.some((item) => Math.hypot(x - item.x, y - item.y) < 44)
+    || doors.some((item) => Math.hypot(x - item.x, y - item.y) < 44)
+    || buildings.some((item) => Math.hypot(x - item.x, y - item.y) < 38)
+    || resources.some((item) => Math.hypot(x - item.x, y - item.y) < item.radius + 25);
+  if (occupied) {
+    showMessage("这里被挡住了，换个位置试试");
+    return false;
+  }
+  return true;
+}
+
 function buildSelected() {
+  if (selectedQuickSlot >= BUILD_TYPES.length) {
+    showMessage("请先用 1-6 选择一种建筑");
+    return;
+  }
   const selected = BUILD_TYPES[selectedBuild];
   if (selected.type === "wall") {
     buildBarricade();
@@ -352,8 +457,25 @@ function buildSelected() {
 function selectBuild(index) {
   if (index < 0 || index >= BUILD_TYPES.length) return;
   selectedBuild = index;
+  selectedQuickSlot = index;
   const selected = BUILD_TYPES[selectedBuild];
   showMessage(`选择建筑：${selected.label}`, 0.9);
+  updateHud();
+}
+
+// 快捷栏就像桌边最顺手的一排小格子，按数字或点击就能马上选中。
+function activateQuickSlot(index) {
+  if (index < 0 || index >= quickSlots.length) return;
+  selectedQuickSlot = index;
+  if (index < BUILD_TYPES.length) {
+    selectBuild(index);
+    return;
+  }
+  if (index === 6) {
+    useBerry();
+  } else {
+    showMessage(`快捷格 ${index + 1} 还是空的`, 1);
+  }
   updateHud();
 }
 
@@ -367,6 +489,7 @@ function attack() {
     const dy = monster.y - player.y;
     if (Math.hypot(dx, dy) < 58) {
       monster.health -= 35;
+      monster.hurtTimer = 0.18;
       monster.x += (dx / (Math.hypot(dx, dy) || 1)) * 24;
       monster.y += (dy / (Math.hypot(dx, dy) || 1)) * 24;
       hit = true;
@@ -382,9 +505,31 @@ function spawnMonster() {
   monsters.push({ x, y, radius: 13, health: 70 + dayNumber * 7, speed: 37 + dayNumber * 3, attackCooldown: 0, hurtTimer: 0 });
 }
 
+function updateTraps(delta) {
+  for (let i = buildings.length - 1; i >= 0; i -= 1) {
+    const trap = buildings[i];
+    if (trap.type !== "trap") continue;
+    trap.cooldown = Math.max(0, trap.cooldown - delta);
+    if (trap.cooldown > 0) continue;
+    const monster = monsters.find((item) => Math.hypot(item.x - trap.x, item.y - trap.y) < 35);
+    if (!monster) continue;
+    monster.health -= 45;
+    monster.hurtTimer = 0.25;
+    trap.uses -= 1;
+    trap.cooldown = 0.65;
+    if (trap.uses <= 0) {
+      buildings.splice(i, 1);
+      showMessage("陷阱命中了怪物，然后损坏了");
+    } else {
+      showMessage(`陷阱命中！还可使用 ${trap.uses} 次`, 0.9);
+    }
+  }
+}
+
 function updateMonsters(delta, night) {
   for (let i = monsters.length - 1; i >= 0; i -= 1) {
     const monster = monsters[i];
+    monster.attackCooldown = Math.max(0, monster.attackCooldown - delta);
     if (!night) {
       monster.x += (monster.x < WORLD.width / 2 ? -1 : 1) * 20 * delta;
       monster.y += (monster.y < WORLD.height / 2 ? -1 : 1) * 20 * delta;
@@ -395,10 +540,16 @@ function updateMonsters(delta, night) {
     const dy = player.y - monster.y;
     const distance = Math.hypot(dx, dy) || 1;
     if (distance > 27) {
-      monster.x += (dx / distance) * monster.speed * delta;
-      monster.y += (dy / distance) * monster.speed * delta;
+      const nextX = monster.x + (dx / distance) * monster.speed * delta;
+      const nextY = monster.y + (dy / distance) * monster.speed * delta;
+      const defense = findBlockingDefense(nextX, nextY, monster.radius);
+      if (defense) {
+        attackDefense(monster, defense);
+      } else {
+        monster.x = nextX;
+        monster.y = nextY;
+      }
     } else {
-      monster.attackCooldown -= delta;
       if (monster.attackCooldown <= 0 && player.hurtTimer <= 0) {
         player.health = Math.max(0, player.health - 12);
         player.hurtTimer = 0.8;
@@ -415,14 +566,58 @@ function updateMonsters(delta, night) {
   }
 }
 
+// 圆形怪物碰到长方形建筑时，就像小球撞到积木，会停下来。
+function circleHitsRectangle(x, y, radius, rectangle) {
+  const closestX = Math.max(rectangle.x - rectangle.width / 2, Math.min(x, rectangle.x + rectangle.width / 2));
+  const closestY = Math.max(rectangle.y - rectangle.height / 2, Math.min(y, rectangle.y + rectangle.height / 2));
+  return Math.hypot(x - closestX, y - closestY) < radius;
+}
+
+function findBlockingDefense(x, y, radius) {
+  const wall = barricades.find((item) => circleHitsRectangle(x, y, radius, item));
+  if (wall) return { item: wall, list: barricades, label: "木墙" };
+  const door = doors.find((item) => item.animation < 0.82 && circleHitsRectangle(x, y, radius, item));
+  if (door) return { item: door, list: doors, label: "木门" };
+  return null;
+}
+
+function attackDefense(monster, defense) {
+  if (monster.attackCooldown > 0) return;
+  defense.item.health -= 12 + dayNumber * 2;
+  monster.attackCooldown = 0.8;
+  if (defense.item.health > 0) return;
+  const index = defense.list.indexOf(defense.item);
+  if (index >= 0) defense.list.splice(index, 1);
+  showMessage(`${defense.label}被怪物破坏了！`, 1.4);
+}
+
 function updateHud() {
   phaseLabel.textContent = isNight() ? "夜晚" : "白天";
   dayLabel.textContent = `第 ${dayNumber} 天`;
   healthLabel.textContent = `生命 ${Math.max(0, Math.round(player.health))}`;
-  resourceLabel.textContent = `木材 ${player.wood}　石头 ${player.stone}`;
+  resourceLabel.textContent = `木材 ${player.wood}　石头 ${player.stone}　浆果 ${player.berry}`;
   flashlightLabel.textContent = `手电筒 ${player.flashlight ? "开" : "关"}`;
   const selected = BUILD_TYPES[selectedBuild];
-  buildingLabel.textContent = `建筑 ${selectedBuild + 1}：${selected.label}`;
+  inventoryWoodCount.textContent = player.wood;
+  inventoryStoneCount.textContent = player.stone;
+  inventoryBerryCount.textContent = player.berry;
+  const occupiedSlots = [player.wood, player.stone, player.berry].filter((amount) => amount > 0).length;
+  inventoryCapacity.textContent = `${occupiedSlots} / 12 格`;
+  useBerryButton.classList.toggle("unavailable", player.berry <= 0);
+  useBerryButton.setAttribute("aria-disabled", String(player.berry <= 0));
+  quickBerryCount.textContent = player.berry;
+  quickSlots.forEach((slot, index) => {
+    const selectedSlot = index === selectedQuickSlot;
+    slot.classList.toggle("selected", selectedSlot);
+    slot.setAttribute("aria-pressed", String(selectedSlot));
+  });
+  if (selectedQuickSlot < BUILD_TYPES.length) {
+    buildingLabel.textContent = `快捷 ${selectedQuickSlot + 1}：${selected.label}（木${selected.cost.wood} 石${selected.cost.stone}）`;
+  } else if (selectedQuickSlot === 6) {
+    buildingLabel.textContent = `快捷 7：浆果（${player.berry}）`;
+  } else {
+    buildingLabel.textContent = `快捷 ${selectedQuickSlot + 1}：空`;
+  }
 }
 
 function render() {
@@ -453,26 +648,32 @@ function drawForest() {
       drawTerrainTile(terrainAt(x / 48, y / 48), x, y);
     }
   }
-  ctx.fillStyle = "#9a8058";
-  ctx.fillRect(0, 790, WORLD.width, 34);
-  ctx.fillRect(790, 0, 34, WORLD.height);
-  ctx.fillStyle = "#b49a6b";
-  ctx.fillRect(0, 796, WORLD.width, 22);
-  ctx.fillRect(796, 0, 22, WORLD.height);
   ctx.strokeStyle = "#526f4c";
   ctx.lineWidth = 4;
   ctx.strokeRect(WORLD.margin, WORLD.margin, WORLD.width - WORLD.margin * 2, WORLD.height - WORLD.margin * 2);
 }
 
-function terrainAt(tileX, tileY) {
+// 湖泊由固定公式生成，所以每次进入游戏，水域形状都保持一致。
+function isWaterTile(tileX, tileY) {
   const lakeA = ((tileX - 35) / 8) ** 2 + ((tileY - 9) / 5) ** 2 < 1;
   const lakeB = ((tileX - 11) / 5) ** 2 + ((tileY - 27) / 4) ** 2 < 1;
-  if (lakeA || lakeB) return TERRAIN_FRAME.water;
-  const value = Math.sin(tileX * 1.71 + tileY * 0.63) + Math.cos(tileX * 0.48 - tileY * 1.27);
-  if (value > 1.34) return TERRAIN_FRAME.darkGrass;
-  if (value < -1.42) return TERRAIN_FRAME.mud;
-  if (value < -0.72) return TERRAIN_FRAME.stoneGround;
-  if (value > 0.86) return TERRAIN_FRAME.sand;
+  return lakeA || lakeB;
+}
+
+// 只有紧挨着水面的方块才会变成沙滩，不会在草地中间乱生成沙子。
+function isBesideWater(tileX, tileY) {
+  for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
+    for (let offsetY = -1; offsetY <= 1; offsetY += 1) {
+      if (offsetX === 0 && offsetY === 0) continue;
+      if (isWaterTile(tileX + offsetX, tileY + offsetY)) return true;
+    }
+  }
+  return false;
+}
+
+function terrainAt(tileX, tileY) {
+  if (isWaterTile(tileX, tileY)) return TERRAIN_FRAME.water;
+  if (isBesideWater(tileX, tileY)) return TERRAIN_FRAME.sand;
   return TERRAIN_FRAME.grass;
 }
 
@@ -481,8 +682,12 @@ function drawTerrainTile(frame, x, y) {
     ctx.drawImage(worldSprite, frame * 16, 0, 16, 16, x, y, 48, 48);
     return;
   }
-  const fallback = ["#2c513b", "#31583e", "#5a4637", "#626862", "#88794f", "#2d92a0"];
-  ctx.fillStyle = fallback[frame] || fallback[0];
+  const fallback = {
+    [TERRAIN_FRAME.grass]: "#2c513b",
+    [TERRAIN_FRAME.sand]: "#88794f",
+    [TERRAIN_FRAME.water]: "#2d92a0"
+  };
+  ctx.fillStyle = fallback[frame] || fallback[TERRAIN_FRAME.grass];
   ctx.fillRect(x, y, 48, 48);
 }
 
@@ -552,13 +757,18 @@ function drawResources() {
 function drawBarricades() {
   for (const barricade of barricades) {
     if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
-      ctx.drawImage(worldSprite, BUILDING_FRAME.wall * 16, BUILDING_ROW * 16, 16, 16, barricade.x - 24, barricade.y - 24, 48, 48);
-      continue;
+      drawRotatedBuildingFrame(BUILDING_FRAME.wall, barricade);
+    } else {
+      ctx.fillStyle = "#6d452d";
+      ctx.fillRect(barricade.x - barricade.width / 2, barricade.y - barricade.height / 2, barricade.width, barricade.height);
+      ctx.fillStyle = "#a06c3f";
+      if (barricade.vertical) {
+        ctx.fillRect(barricade.x - 2, barricade.y - barricade.height / 2, 4, barricade.height);
+      } else {
+        ctx.fillRect(barricade.x - barricade.width / 2, barricade.y - 2, barricade.width, 4);
+      }
     }
-    ctx.fillStyle = "#6d452d";
-    ctx.fillRect(barricade.x - barricade.width / 2, barricade.y - barricade.height / 2, barricade.width, barricade.height);
-    ctx.fillStyle = "#a06c3f";
-    ctx.fillRect(barricade.x - barricade.width / 2, barricade.y - 2, barricade.width, 4);
+    drawDefenseHealth(barricade);
   }
 }
 
@@ -566,14 +776,37 @@ function drawDoors() {
   for (const door of doors) {
     const frame = door.animation > 0.5 ? (door.open ? BUILDING_FRAME.doorOpen : BUILDING_FRAME.doorClosed) : (door.open ? BUILDING_FRAME.doorClosed : BUILDING_FRAME.doorOpen);
     if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
-      ctx.drawImage(worldSprite, frame * 16, BUILDING_ROW * 16, 16, 16, door.x - 24, door.y - 24, 48, 48);
-      continue;
+      drawRotatedBuildingFrame(frame, door);
+    } else {
+      ctx.fillStyle = door.animation > 0.82 ? "rgba(120,78,46,.35)" : "#75492d";
+      ctx.fillRect(door.x - door.width / 2, door.y - door.height / 2, door.width, door.height);
+      ctx.fillStyle = "#b27a47";
+      if (door.vertical) {
+        ctx.fillRect(door.x - 2, door.y - door.height / 2 + 4, 4, door.height - 8);
+      } else {
+        ctx.fillRect(door.x - door.width / 2 + 4, door.y - 2, door.width - 8, 4);
+      }
     }
-    ctx.fillStyle = door.animation > 0.82 ? "rgba(120,78,46,.35)" : "#75492d";
-    ctx.fillRect(door.x - door.width / 2, door.y - door.height / 2, door.width, door.height);
-    ctx.fillStyle = "#b27a47";
-    ctx.fillRect(door.x - door.width / 2 + 4, door.y - 2, door.width - 8, 4);
+    drawDefenseHealth(door);
   }
+}
+
+function drawRotatedBuildingFrame(frame, item) {
+  ctx.save();
+  ctx.translate(item.x, item.y);
+  if (item.vertical) ctx.rotate(Math.PI / 2);
+  ctx.drawImage(worldSprite, frame * 16, BUILDING_ROW * 16, 16, 16, -24, -24, 48, 48);
+  ctx.restore();
+}
+
+function drawDefenseHealth(defense) {
+  if (defense.health >= defense.maxHealth) return;
+  const width = 42;
+  const ratio = Math.max(0, defense.health / defense.maxHealth);
+  ctx.fillStyle = "rgba(10, 13, 13, .8)";
+  ctx.fillRect(defense.x - width / 2, defense.y - 34, width, 5);
+  ctx.fillStyle = ratio > 0.45 ? "#b6d477" : "#d36b54";
+  ctx.fillRect(defense.x - width / 2 + 1, defense.y - 33, (width - 2) * ratio, 3);
 }
 
 function drawMonsters() {
@@ -633,17 +866,23 @@ function loop(now) {
   if (state !== "game") return;
   const delta = Math.min(0.04, Math.max(0, (now - lastTime) / 1000));
   lastTime = now;
-  update(delta);
+  // 打开物品栏时只画画面，不推进时间、玩家或怪物。
+  if (!inventoryOpen) update(delta);
   render();
   requestAnimationFrame(loop);
 }
 
 window.addEventListener("keydown", (event) => {
-  if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.code)) event.preventDefault();
-  keys.add(event.code);
+  if (["Space", "Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.code)) event.preventDefault();
   if (state !== "game") return;
+  if (event.code === "KeyI" || event.code === "Tab") {
+    if (!event.repeat) setInventoryOpen(!inventoryOpen);
+    return;
+  }
+  if (inventoryOpen) return;
+  keys.add(event.code);
   if (event.code.startsWith("Digit")) {
-    selectBuild(Number(event.code.slice(5)) - 1);
+    activateQuickSlot(Number(event.code.slice(5)) - 1);
     return;
   }
   // E 等一次性操作不能因为按键自动重复而反复开关或重复建造。
@@ -661,6 +900,11 @@ window.addEventListener("keyup", (event) => keys.delete(event.code));
 window.addEventListener("blur", () => keys.clear());
 startButton.addEventListener("click", startGame);
 restartButton.addEventListener("click", startGame);
+inventoryButton.addEventListener("click", () => setInventoryOpen(!inventoryOpen));
+useBerryButton.addEventListener("click", useBerry);
+quickSlots.forEach((slot) => {
+  slot.addEventListener("click", () => activateQuickSlot(Number(slot.dataset.quickSlot)));
+});
 
 classButtons.forEach((button) => {
   button.addEventListener("click", () => {

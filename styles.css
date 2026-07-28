@@ -116,10 +116,201 @@ h1 {
 .hud-row { display: flex; gap: 18px; justify-content: space-between; }
 .hud-row.secondary { margin-top: 7px; color: #adc2ae; font-size: 12px; }
 
-.controls {
+.inventory-button {
+  position: fixed;
+  top: 18px;
+  right: 18px;
+  z-index: 4;
+  min-width: 92px;
+  padding: 9px 12px;
+  border: 1px solid rgba(190, 220, 164, .5);
+  color: #dbe9cf;
+  background: rgba(12, 23, 20, .88);
+  cursor: pointer;
+}
+
+.inventory-button span { color: #8faa87; }
+.inventory-button:hover, .inventory-button.active { border-color: #c6e2ae; background: #263e31; }
+
+.inventory-panel {
+  position: fixed;
+  top: 64px;
+  right: 18px;
+  z-index: 4;
+  width: 296px;
+  padding: 15px;
+  border: 2px solid #708a68;
+  outline: 3px solid rgba(7, 12, 11, .82);
+  color: #e7f0db;
+  background: #15221d;
+  box-shadow: 9px 11px 0 rgba(4, 8, 7, .48);
+}
+
+.inventory-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 13px;
+}
+
+.inventory-header p { margin: 0 0 3px; font-size: 18px; }
+.inventory-header span { color: #91a38e; font-size: 11px; }
+.inventory-capacity { padding: 4px 6px; background: #0e1815; }
+
+.inventory-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.inventory-slot {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  height: 59px;
+  padding: 3px;
+  border: 1px solid #52685a;
+  color: #edf4e5;
+  background: #23342c;
+  box-shadow: inset 2px 2px 0 rgba(255, 255, 255, .04), inset -2px -2px 0 rgba(0, 0, 0, .22);
+}
+
+button.inventory-slot { font: inherit; cursor: pointer; }
+.usable-slot:hover { border-color: #d0e8ad; background: #30493a; }
+.usable-slot.unavailable { opacity: .52; cursor: default; }
+.empty-slot { background: #111d19; }
+
+.item-sprite {
+  width: 32px;
+  height: 32px;
+  background-image: url("assets/forest-assets.png?v=20260728-1116");
+  background-repeat: no-repeat;
+  background-size: 256px 192px;
+  image-rendering: pixelated;
+}
+
+.item-wood { background-position: 0 -32px; }
+.item-stone { background-position: -32px -32px; }
+.item-berry { background-position: -64px -32px; }
+
+.inventory-count {
+  position: absolute;
+  right: 4px;
+  top: 3px;
+  min-width: 17px;
+  padding: 1px 3px;
+  color: #fff5c8;
+  background: rgba(7, 12, 10, .78);
+  text-align: center;
+  font-size: 11px;
+}
+
+.inventory-name {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 2px;
+  color: #c4d2bf;
+  text-align: center;
+  font-size: 10px;
+}
+
+.inventory-tip {
+  margin: 12px 0 0;
+  color: #91a38e;
+  text-align: center;
+  font-size: 11px;
+}
+
+.quickbar {
   position: fixed;
   left: 50%;
   bottom: 15px;
+  z-index: 3;
+  display: flex;
+  gap: 5px;
+  max-width: calc(100vw - 20px);
+  padding: 6px;
+  overflow-x: auto;
+  transform: translateX(-50%);
+  border: 1px solid rgba(127, 153, 128, .65);
+  background: rgba(8, 15, 13, .86);
+  scrollbar-width: none;
+}
+
+.quickbar::-webkit-scrollbar { display: none; }
+
+.quick-slot {
+  position: relative;
+  flex: 0 0 56px;
+  width: 56px;
+  height: 59px;
+  padding: 4px;
+  border: 1px solid #4b6153;
+  color: #dce8d5;
+  background: #1b2a23;
+  cursor: pointer;
+  box-shadow: inset 2px 2px 0 rgba(255, 255, 255, .035), inset -2px -2px 0 rgba(0, 0, 0, .3);
+}
+
+.quick-slot:hover { border-color: #9eb88d; background: #263c30; }
+.quick-slot.selected {
+  border-color: #e4efb4;
+  background: #34513e;
+  box-shadow: 0 0 0 2px #6f8b68, inset 2px 2px 0 rgba(255, 255, 255, .08);
+  transform: translateY(-3px);
+}
+
+.quick-key {
+  position: absolute;
+  left: 4px;
+  top: 3px;
+  z-index: 1;
+  color: #dbe8ba;
+  font-size: 10px;
+}
+
+.quick-slot .item-sprite { margin: 2px auto 0; }
+.quick-wall { background-position: -32px -96px; }
+.quick-door { background-position: -64px -96px; }
+.quick-floor { background-position: -128px -96px; }
+.quick-chest { background-position: -160px -96px; }
+.quick-workbench { background-position: -192px -96px; }
+.quick-trap { background-position: -224px -96px; }
+
+.quick-name {
+  position: absolute;
+  left: 1px;
+  right: 1px;
+  bottom: 2px;
+  overflow: hidden;
+  color: #bccbbc;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 9px;
+}
+
+.quick-count {
+  position: absolute;
+  right: 4px;
+  top: 3px;
+  z-index: 1;
+  min-width: 15px;
+  padding: 1px 2px;
+  color: #fff2bd;
+  background: rgba(6, 11, 9, .78);
+  font-size: 10px;
+  text-align: center;
+}
+
+.quick-empty { background: #101a16; }
+
+.controls {
+  position: fixed;
+  left: 50%;
+  bottom: 91px;
   transform: translateX(-50%);
   width: max-content;
   max-width: calc(100vw - 28px);
@@ -153,3 +344,15 @@ h1 {
 }
 
 .game-over h2 { margin: 0; color: #d7e9c8; font-size: 32px; }
+
+@media (max-width: 560px) {
+  .inventory-panel {
+    top: 62px;
+    right: 10px;
+    width: min(296px, calc(100vw - 20px));
+  }
+
+  .inventory-button { top: 12px; right: 10px; }
+  .controls { display: none; }
+  .quickbar { left: 10px; right: 10px; transform: none; }
+}

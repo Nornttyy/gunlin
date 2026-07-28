@@ -9,6 +9,14 @@ const DAY_LENGTH = 62;
 const NIGHT_LENGTH = 42;
 const CYCLE_LENGTH = DAY_LENGTH + NIGHT_LENGTH;
 const BUILD_GRID_SIZE = 48;
+const DEFENSE_COLLIDER = {
+  wall: { length: 48, thickness: 15, edgeOffset: 16 },
+  door: { length: 48, thickness: 9, edgeOffset: 16 }
+};
+const SOLID_BUILDING_COLLIDER = {
+  chest: { width: 44, height: 42, offsetY: 2 },
+  workbench: { width: 44, height: 42, offsetY: 2 }
+};
 
 const titleScreen = document.getElementById("titleScreen");
 const gameScreen = document.getElementById("gameScreen");
@@ -254,9 +262,8 @@ function resetWorld() {
     id: doorId++,
     x: 790,
     y: 790,
-    width: 48,
-    height: 18,
     vertical: false,
+    rotation: 0,
     open: false,
     animation: 0,
     health: 90,
@@ -368,12 +375,40 @@ function updatePlayer(delta) {
   if (player.health <= 0) endGame();
 }
 
+// 木墙和木门的有效像素靠近图块边缘，碰撞盒也要跟着旋转到同一条边上。
+function getDefenseCollider(item, type) {
+  const shape = DEFENSE_COLLIDER[type];
+  const rotation = item.rotation || 0;
+  const vertical = Math.abs(Math.sin(rotation)) > 0.5;
+  return {
+    x: item.x - Math.sin(rotation) * shape.edgeOffset,
+    y: item.y + Math.cos(rotation) * shape.edgeOffset,
+    width: vertical ? shape.thickness : shape.length,
+    height: vertical ? shape.length : shape.thickness
+  };
+}
+
+function getSolidBuildingCollider(building) {
+  const shape = SOLID_BUILDING_COLLIDER[building.type];
+  if (!shape) return null;
+  return {
+    x: building.x,
+    y: building.y + shape.offsetY,
+    width: shape.width,
+    height: shape.height
+  };
+}
+
 function collides(x, y) {
   for (const door of doors) {
-    if (door.animation < 0.82 && Math.abs(x - door.x) < door.width / 2 + player.radius && Math.abs(y - door.y) < door.height / 2 + player.radius) return true;
+    if (door.animation < 0.82 && circleHitsRectangle(x, y, player.radius, getDefenseCollider(door, "door"))) return true;
   }
   for (const barricade of barricades) {
-    if (Math.abs(x - barricade.x) < barricade.width / 2 + player.radius && Math.abs(y - barricade.y) < barricade.height / 2 + player.radius) return true;
+    if (circleHitsRectangle(x, y, player.radius, getDefenseCollider(barricade, "wall"))) return true;
+  }
+  for (const building of buildings) {
+    const collider = getSolidBuildingCollider(building);
+    if (collider && circleHitsRectangle(x, y, player.radius, collider)) return true;
   }
   for (const resource of resources) {
     if (resource.type === "berry") continue;
@@ -468,9 +503,8 @@ function buildBarricade() {
     id: barricadeId++,
     x: placement.x,
     y: placement.y,
-    width: placement.vertical ? 18 : 54,
-    height: placement.vertical ? 54 : 18,
     vertical: placement.vertical,
+    rotation: placement.rotation,
     health: 120,
     maxHealth: 120
   });
@@ -490,9 +524,8 @@ function buildDoor() {
     id: doorId++,
     x: placement.x,
     y: placement.y,
-    width: placement.vertical ? 18 : 48,
-    height: placement.vertical ? 48 : 18,
     vertical: placement.vertical,
+    rotation: placement.rotation,
     open: false,
     animation: 0,
     health: 90,
@@ -522,9 +555,11 @@ function buildProp(type, cost, label) {
 
 function getBuildDirection() {
   if (Math.abs(player.dirX) > Math.abs(player.dirY)) {
-    return { x: player.dirX < 0 ? -1 : 1, y: 0, vertical: true };
+    const x = player.dirX < 0 ? -1 : 1;
+    return { x, y: 0, vertical: true, rotation: x < 0 ? -Math.PI / 2 : Math.PI / 2 };
   }
-  return { x: 0, y: player.dirY < 0 ? -1 : 1, vertical: false };
+  const y = player.dirY < 0 ? -1 : 1;
+  return { x: 0, y, vertical: false, rotation: y < 0 ? 0 : Math.PI };
 }
 
 // 建筑会贴在 48 像素网格上，鼠标所在方向决定相邻的目标格。
@@ -535,7 +570,8 @@ function getBuildPlacement() {
   return {
     x: playerGridX + direction.x * BUILD_GRID_SIZE,
     y: playerGridY + direction.y * BUILD_GRID_SIZE,
-    vertical: direction.vertical
+    vertical: direction.vertical,
+    rotation: direction.rotation
   };
 }
 
@@ -719,9 +755,9 @@ function circleHitsRectangle(x, y, radius, rectangle) {
 }
 
 function findBlockingDefense(x, y, radius) {
-  const wall = barricades.find((item) => circleHitsRectangle(x, y, radius, item));
+  const wall = barricades.find((item) => circleHitsRectangle(x, y, radius, getDefenseCollider(item, "wall")));
   if (wall) return { item: wall, list: barricades, label: "木墙" };
-  const door = doors.find((item) => item.animation < 0.82 && circleHitsRectangle(x, y, radius, item));
+  const door = doors.find((item) => item.animation < 0.82 && circleHitsRectangle(x, y, radius, getDefenseCollider(item, "door")));
   if (door) return { item: door, list: doors, label: "木门" };
   return null;
 }
@@ -839,7 +875,8 @@ function drawBuildPreview() {
   const preview = {
     x: placement.x,
     y: placement.y,
-    vertical: placement.vertical
+    vertical: placement.vertical,
+    rotation: placement.rotation
   };
 
   ctx.save();
@@ -979,13 +1016,14 @@ function drawBarricades() {
     if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
       drawRotatedBuildingFrame(BUILDING_FRAME.wall, barricade);
     } else {
+      const collider = getDefenseCollider(barricade, "wall");
       ctx.fillStyle = "#6d452d";
-      ctx.fillRect(barricade.x - barricade.width / 2, barricade.y - barricade.height / 2, barricade.width, barricade.height);
+      ctx.fillRect(collider.x - collider.width / 2, collider.y - collider.height / 2, collider.width, collider.height);
       ctx.fillStyle = "#a06c3f";
       if (barricade.vertical) {
-        ctx.fillRect(barricade.x - 2, barricade.y - barricade.height / 2, 4, barricade.height);
+        ctx.fillRect(collider.x - 2, collider.y - collider.height / 2, 4, collider.height);
       } else {
-        ctx.fillRect(barricade.x - barricade.width / 2, barricade.y - 2, barricade.width, 4);
+        ctx.fillRect(collider.x - collider.width / 2, collider.y - 2, collider.width, 4);
       }
     }
     drawDefenseHealth(barricade);
@@ -994,17 +1032,18 @@ function drawBarricades() {
 
 function drawDoors() {
   for (const door of doors) {
-    const frame = door.animation > 0.5 ? (door.open ? BUILDING_FRAME.doorOpen : BUILDING_FRAME.doorClosed) : (door.open ? BUILDING_FRAME.doorClosed : BUILDING_FRAME.doorOpen);
+    const frame = door.animation > 0.5 ? BUILDING_FRAME.doorOpen : BUILDING_FRAME.doorClosed;
     if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
       drawRotatedBuildingFrame(frame, door);
     } else {
+      const collider = getDefenseCollider(door, "door");
       ctx.fillStyle = door.animation > 0.82 ? "rgba(120,78,46,.35)" : "#75492d";
-      ctx.fillRect(door.x - door.width / 2, door.y - door.height / 2, door.width, door.height);
+      ctx.fillRect(collider.x - collider.width / 2, collider.y - collider.height / 2, collider.width, collider.height);
       ctx.fillStyle = "#b27a47";
       if (door.vertical) {
-        ctx.fillRect(door.x - 2, door.y - door.height / 2 + 4, 4, door.height - 8);
+        ctx.fillRect(collider.x - 2, collider.y - collider.height / 2 + 4, 4, collider.height - 8);
       } else {
-        ctx.fillRect(door.x - door.width / 2 + 4, door.y - 2, door.width - 8, 4);
+        ctx.fillRect(collider.x - collider.width / 2 + 4, collider.y - 2, collider.width - 8, 4);
       }
     }
     drawDefenseHealth(door);
@@ -1014,7 +1053,7 @@ function drawDoors() {
 function drawRotatedBuildingFrame(frame, item) {
   ctx.save();
   ctx.translate(item.x, item.y);
-  if (item.vertical) ctx.rotate(Math.PI / 2);
+  ctx.rotate(item.rotation || 0);
   ctx.drawImage(worldSprite, frame * 16, BUILDING_ROW * 16, 16, 16, -24, -24, 48, 48);
   ctx.restore();
 }

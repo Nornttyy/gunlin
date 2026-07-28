@@ -111,11 +111,9 @@ h1 {
 .subtitle { margin: 26px 0 34px; color: #abb8aa; font-size: 17px; letter-spacing: .08em; }
 .title-tip { margin: 28px 0 0; color: #68776f; font-size: 12px; }
 
-.class-picker { margin: -8px 0 26px; }
-.class-picker > p { margin: 0 0 10px; color: #8fa895; font-size: 12px; }
 .class-buttons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
 .class-button {
-  padding: 8px 4px;
+  padding: 11px 6px;
   border: 1px solid rgba(177, 215, 158, .28);
   color: #b6c9b1;
   background: rgba(25, 46, 39, .7);
@@ -240,6 +238,45 @@ h1 {
 
 .game-screen.is-night #gameCanvas {
   filter: saturate(.43) contrast(1.25) brightness(.84);
+}
+
+.class-select-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 6;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: radial-gradient(circle, rgba(20, 35, 29, .5), rgba(1, 4, 5, .94) 68%);
+  backdrop-filter: blur(3px);
+}
+
+.class-select-card {
+  width: min(430px, calc(100vw - 32px));
+  padding: 27px;
+  border: 2px solid #718877;
+  outline: 4px solid rgba(3, 8, 8, .8);
+  color: #e4eddc;
+  background: linear-gradient(155deg, rgba(20, 34, 29, .98), rgba(7, 13, 13, .98));
+  box-shadow: 14px 18px 0 rgba(0, 0, 0, .38), 0 0 55px rgba(100, 135, 102, .12);
+  text-align: center;
+}
+
+.class-select-card h2 {
+  margin: 7px 0 8px;
+  font-size: 30px;
+  letter-spacing: .12em;
+}
+
+.class-select-note {
+  margin: 0 0 19px;
+  color: #91a398;
+  font-size: 12px;
+}
+
+.inventory-button:disabled {
+  opacity: .38;
+  cursor: not-allowed;
 }
 
 .hud {

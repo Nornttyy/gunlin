@@ -42,6 +42,8 @@ const restartButton = document.getElementById("restartButton");
 const gameOverPanel = document.getElementById("gameOver");
 const messageElement = document.getElementById("message");
 const classButtons = [...document.querySelectorAll(".class-button")];
+const classSelectPanel = document.getElementById("classSelectPanel");
+const classLabel = document.getElementById("classLabel");
 const phaseLabel = document.getElementById("phaseLabel");
 const dayLabel = document.getElementById("dayLabel");
 const healthLabel = document.getElementById("healthLabel");
@@ -61,6 +63,7 @@ const RESOURCE_ITEMS = [
   { type: "stone", kind: "material", label: "石头" },
   { type: "berry", kind: "food", label: "浆果" }
 ];
+const CLASS_NAMES = ["枪手", "护士", "伐木工", "守望者", "棒球女", "科学家"];
 
 const ASSET_VERSION = "20260728-assets2";
 const PLAYER_ASSET_VERSION = "20260728-player-redraw1";
@@ -122,6 +125,8 @@ let doorId = 0;
 let buildingId = 0;
 let selectedBuild = 0;
 let selectedQuickSlot = -1;
+let selectedClass = -1;
+let classSelectionOpen = false;
 let inventoryOpen = false;
 let draggedInventorySlot = -1;
 let nightMaskCanvas = null;
@@ -390,6 +395,8 @@ function startGame() {
   spawnTimer = 4;
   selectedBuild = 0;
   selectedQuickSlot = -1;
+  selectedClass = -1;
+  classSelectionOpen = true;
   draggedInventorySlot = -1;
   inventoryItems.fill(null);
   quickbarItems.fill(null);
@@ -401,20 +408,27 @@ function startGame() {
     stone: 0,
     berry: 0,
     flashlight: true,
+    classRow: 0,
     attackTimer: 0,
     attackCooldown: 0
   });
   camera.x = Math.max(0, Math.min(WORLD.width - W, player.x - W / 2));
   camera.y = Math.max(0, Math.min(WORLD.height - H, player.y - H / 2));
   setInventoryOpen(false);
+  inventoryButton.disabled = true;
+  classButtons.forEach((button) => button.classList.remove("selected"));
+  classSelectPanel.classList.remove("hidden");
   resetWorld();
-  showMessage("白天开始：按 I 可以打开物品栏");
+  updateHud();
+  showMessage("请先选择职业");
   lastTime = performance.now();
   requestAnimationFrame(loop);
 }
 
 function endGame() {
   state = "over";
+  classSelectionOpen = false;
+  classSelectPanel.classList.add("hidden");
   setInventoryOpen(false);
   gameOverPanel.classList.remove("hidden");
 }
@@ -648,7 +662,7 @@ function collectResource() {
 
 // 背包打开时会暂停游戏，就像先把桌面上的玩具按下暂停键再整理盒子。
 function setInventoryOpen(open) {
-  inventoryOpen = open && state === "game";
+  inventoryOpen = open && state === "game" && !classSelectionOpen;
   inventoryPanel.classList.toggle("hidden", !inventoryOpen);
   inventoryButton.classList.toggle("active", inventoryOpen);
   inventoryButton.setAttribute("aria-expanded", String(inventoryOpen));
@@ -1035,6 +1049,9 @@ function updateHud() {
   }
   dayLabel.textContent = `第 ${dayNumber} 天`;
   healthLabel.textContent = `生命 ${Math.max(0, Math.round(player.health))}`;
+  if (classLabel) {
+    classLabel.textContent = `职业 ${selectedClass >= 0 ? CLASS_NAMES[selectedClass] : "未选择"}`;
+  }
   healthLabel.classList.toggle("danger", player.health <= 30);
   resourceLabel.textContent = `木材 ${player.wood}　石头 ${player.stone}　浆果 ${player.berry}`;
   flashlightLabel.textContent = `手电筒 ${player.flashlight ? "开" : "关"}`;
@@ -1141,6 +1158,7 @@ function drawForest() {
 
 function isBuildMode() {
   return state === "game"
+    && !classSelectionOpen
     && !inventoryOpen
     && selectedQuickSlot >= 0
     && quickbarItems[selectedQuickSlot]?.kind === "building";
@@ -1766,7 +1784,7 @@ function loop(now) {
   const delta = Math.min(0.04, Math.max(0, (now - lastTime) / 1000));
   lastTime = now;
   // 打开物品栏时只画画面，不推进时间、玩家或怪物。
-  if (!inventoryOpen) update(delta);
+  if (!inventoryOpen && !classSelectionOpen) update(delta);
   render();
   requestAnimationFrame(loop);
 }
@@ -1774,6 +1792,7 @@ function loop(now) {
 window.addEventListener("keydown", (event) => {
   if (["Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.code)) event.preventDefault();
   if (state !== "game") return;
+  if (classSelectionOpen) return;
   if (event.code === "KeyI" || event.code === "Tab") {
     if (!event.repeat) setInventoryOpen(!inventoryOpen);
     return;
@@ -1798,7 +1817,7 @@ window.addEventListener("keydown", (event) => {
 });
 
 canvas.addEventListener("pointerdown", (event) => {
-  if (state !== "game" || inventoryOpen) return;
+  if (state !== "game" || inventoryOpen || classSelectionOpen) return;
   if (event.button !== 0 && event.button !== 2) return;
   event.preventDefault();
   aimAtPointer(event);
@@ -1807,7 +1826,7 @@ canvas.addEventListener("pointerdown", (event) => {
 });
 
 canvas.addEventListener("pointermove", (event) => {
-  if (state !== "game" || inventoryOpen) return;
+  if (state !== "game" || inventoryOpen || classSelectionOpen) return;
   aimAtPointer(event);
 });
 
@@ -1867,8 +1886,17 @@ quickSlots.forEach((slot) => {
 
 classButtons.forEach((button) => {
   button.addEventListener("click", () => {
-    player.classRow = Number(button.dataset.class || 0);
+    if (state !== "game" || !classSelectionOpen) return;
+    selectedClass = Number(button.dataset.class || 0);
+    player.classRow = selectedClass;
     classButtons.forEach((item) => item.classList.toggle("selected", item === button));
+    classSelectionOpen = false;
+    classSelectPanel.classList.add("hidden");
+    inventoryButton.disabled = false;
+    keys.clear();
+    lastTime = performance.now();
+    showMessage(`已选择职业：${CLASS_NAMES[selectedClass]}`, 1.6);
+    updateHud();
   });
 });
 

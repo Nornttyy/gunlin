@@ -9,7 +9,7 @@
   <link rel="preload" href="assets/tree-sprites.png?v=20260728-tree-redraw1" as="image" />
   <link rel="preload" href="assets/forest-assets.png?v=20260728-assets2" as="image" />
   <link rel="preload" href="assets/ark-pixel-12px-zh_cn.woff2?v=20260728-assets2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=20260728-horror3" />
+  <link rel="stylesheet" href="styles.css?v=20260728-classselect1" />
 </head>
 <body>
   <main id="app">
@@ -18,21 +18,10 @@
         <p class="eyebrow">FOREST SURVIVAL HORROR</p>
         <h1>归林</h1>
         <p class="subtitle">白天收集，夜晚活下去。</p>
-        <div class="class-picker" aria-label="选择职业">
-          <p>选择职业</p>
-          <div class="class-buttons">
-            <button class="class-button selected" data-class="0">枪手</button>
-            <button class="class-button" data-class="1">护士</button>
-            <button class="class-button" data-class="2">伐木工</button>
-            <button class="class-button" data-class="3">守望者</button>
-            <button class="class-button" data-class="4">棒球女</button>
-            <button class="class-button" data-class="5">科学家</button>
-          </div>
-        </div>
         <div id="loadingStatus" class="loading-status" aria-live="polite">
           <div class="loading-copy">
             <span id="loadingText">正在准备像素素材…</span>
-            <span id="loadingCount">0 / 3</span>
+            <span id="loadingCount">0 / 4</span>
           </div>
           <div class="loading-track"><span id="loadingProgress"></span></div>
         </div>
@@ -44,11 +33,27 @@
 
     <section id="gameScreen" class="screen game-screen hidden">
       <canvas id="gameCanvas" width="960" height="540" aria-label="归林游戏画面"></canvas>
+      <section id="classSelectPanel" class="class-select-panel hidden" role="dialog" aria-modal="true" aria-labelledby="classSelectTitle">
+        <div class="class-select-card">
+          <p class="eyebrow">CHOOSE YOUR SURVIVOR</p>
+          <h2 id="classSelectTitle">选择职业</h2>
+          <p class="class-select-note">选择后才会开始计时，本局不能更换</p>
+          <div class="class-buttons">
+            <button type="button" class="class-button" data-class="0">枪手</button>
+            <button type="button" class="class-button" data-class="1">护士</button>
+            <button type="button" class="class-button" data-class="2">伐木工</button>
+            <button type="button" class="class-button" data-class="3">守望者</button>
+            <button type="button" class="class-button" data-class="4">棒球女</button>
+            <button type="button" class="class-button" data-class="5">科学家</button>
+          </div>
+        </div>
+      </section>
       <div class="hud">
         <div class="hud-row">
           <span id="phaseLabel">白天</span>
           <span id="dayLabel">第 1 天</span>
           <span id="healthLabel">生命 100</span>
+          <span id="classLabel">职业 未选择</span>
         </div>
         <div class="hud-row secondary">
           <span id="resourceLabel">木材 0　石头 0　浆果 0</span>
@@ -121,6 +126,6 @@
       </div>
     </section>
   </main>
-  <script type="module" src="game.js?v=20260728-treeimport1"></script>
+  <script type="module" src="game.js?v=20260728-classselect1"></script>
 </body>
 </html>

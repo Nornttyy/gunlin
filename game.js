@@ -108,6 +108,8 @@ let selectedBuild = 0;
 let selectedQuickSlot = -1;
 let inventoryOpen = false;
 let draggedInventorySlot = -1;
+let nightMaskCanvas = null;
+let nightMaskContext = null;
 let assetsReady = false;
 let assetsLoading = false;
 
@@ -1346,6 +1348,17 @@ function drawSkyTint(darkness) {
   ctx.fillRect(0, 0, W, H);
 }
 
+function getNightMaskContext() {
+  if (!nightMaskCanvas) {
+    nightMaskCanvas = document.createElement("canvas");
+    nightMaskCanvas.width = W;
+    nightMaskCanvas.height = H;
+    nightMaskContext = nightMaskCanvas.getContext("2d");
+    nightMaskContext.imageSmoothingEnabled = false;
+  }
+  return nightMaskContext;
+}
+
 function drawNightCurtain(darkness) {
   if (darkness <= 0.02) return;
   const px = player.x - camera.x;
@@ -1355,30 +1368,35 @@ function drawNightCurtain(darkness) {
   const angle = Math.atan2(player.dirY, player.dirX);
   const beamRadius = 232;
   const beamHalfAngle = 0.39;
+  const mask = getNightMaskContext();
 
-  ctx.save();
-  ctx.fillStyle = `rgba(0, 1, 3, ${darkness * (player.flashlight ? 0.74 : 0.9)})`;
-  ctx.beginPath();
-  ctx.rect(0, 0, W, H);
+  mask.clearRect(0, 0, W, H);
+  mask.globalCompositeOperation = "source-over";
+  mask.fillStyle = `rgba(0, 1, 3, ${darkness * (player.flashlight ? 0.74 : 0.9)})`;
+  mask.fillRect(0, 0, W, H);
+  mask.globalCompositeOperation = "destination-out";
+  mask.fillStyle = "#000";
 
   if (player.flashlight) {
-    ctx.moveTo(px, py);
-    ctx.arc(px, py, beamRadius, angle - beamHalfAngle, angle + beamHalfAngle);
-    ctx.closePath();
-    ctx.moveTo(px + 48, py);
-    ctx.arc(px, py, 48, 0, Math.PI * 2);
-    ctx.closePath();
+    mask.beginPath();
+    mask.moveTo(px, py);
+    mask.arc(px, py, beamRadius, angle - beamHalfAngle, angle + beamHalfAngle);
+    mask.closePath();
+    mask.fill();
+    mask.beginPath();
+    mask.arc(px, py, 48, 0, Math.PI * 2);
+    mask.fill();
   }
 
   if (fireX > -150 && fireY > -150 && fireX < W + 150 && fireY < H + 150) {
     const safeRadius = 68 + darkness * 32;
-    ctx.moveTo(fireX + safeRadius, fireY);
-    ctx.arc(fireX, fireY, safeRadius, 0, Math.PI * 2);
-    ctx.closePath();
+    mask.beginPath();
+    mask.arc(fireX, fireY, safeRadius, 0, Math.PI * 2);
+    mask.fill();
   }
 
-  ctx.fill("evenodd");
-  ctx.restore();
+  mask.globalCompositeOperation = "source-over";
+  ctx.drawImage(nightMaskCanvas, 0, 0);
 }
 
 function drawCampfireGlow(darkness) {

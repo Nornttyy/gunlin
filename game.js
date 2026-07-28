@@ -63,6 +63,7 @@ const RESOURCE_ITEMS = [
 ];
 
 const ASSET_VERSION = "20260728-assets2";
+const PLAYER_ASSET_VERSION = "20260728-player-redraw1";
 const sprite = new Image();
 const worldSprite = new Image();
 sprite.decoding = "async";
@@ -245,7 +246,8 @@ function updateResourceChunks(force = false) {
 
 function assetUrl(path, retry = 0) {
   const retryText = retry > 0 ? `&retry=${retry}` : "";
-  return `${path}?v=${ASSET_VERSION}${retryText}`;
+  const version = path === "assets/player.png" ? PLAYER_ASSET_VERSION : ASSET_VERSION;
+  return `${path}?v=${version}${retryText}`;
 }
 
 function wait(milliseconds) {

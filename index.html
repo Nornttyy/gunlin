@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#101719" />
   <title>归林｜森林生存恐怖</title>
+  <link rel="preload" href="assets/player.png?v=20260728-assets2" as="image" />
+  <link rel="preload" href="assets/forest-assets.png?v=20260728-assets2" as="image" />
+  <link rel="preload" href="assets/ark-pixel-12px-zh_cn.woff2?v=20260728-assets2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -25,7 +28,15 @@
             <button class="class-button" data-class="5">科学家</button>
           </div>
         </div>
-        <button id="startButton" class="primary-button">进入森林</button>
+        <div id="loadingStatus" class="loading-status" aria-live="polite">
+          <div class="loading-copy">
+            <span id="loadingText">正在准备像素素材…</span>
+            <span id="loadingCount">0 / 3</span>
+          </div>
+          <div class="loading-track"><span id="loadingProgress"></span></div>
+        </div>
+        <button id="startButton" class="primary-button" disabled>素材加载中…</button>
+        <button id="retryAssetsButton" class="retry-assets-button hidden">重新加载素材</button>
         <p class="title-tip">第一版原型 · 由你的像素素材驱动</p>
       </div>
     </section>

@@ -1,7 +1,9 @@
 @font-face {
   font-family: ArkPixel;
-  src: url("assets/ark-pixel-12px-zh_cn.woff2") format("woff2");
+  src: url("assets/ark-pixel-12px-zh_cn.woff2?v=20260728-assets2") format("woff2");
   font-display: swap;
+  font-style: normal;
+  font-weight: 400;
 }
 
 :root {
@@ -77,6 +79,37 @@ h1 {
 }
 .class-button:hover, .class-button.selected { border-color: #b3d99f; color: #142016; background: #b3d99f; }
 
+.loading-status {
+  margin: -6px auto 14px;
+  color: #9fb4a0;
+  font-size: 11px;
+}
+
+.loading-copy {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.loading-track {
+  height: 6px;
+  border: 1px solid #3e5549;
+  background: #0d1814;
+  overflow: hidden;
+}
+
+.loading-track span {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: #a8cc91;
+  transition: width .18s ease;
+}
+
+.loading-status.ready { color: #b9d7aa; }
+.loading-status.failed { color: #e49a7d; }
+.loading-status.failed .loading-track span { background: #c96a55; }
+
 .primary-button {
   min-width: 190px;
   padding: 14px 22px;
@@ -89,6 +122,25 @@ h1 {
 
 .primary-button:hover { transform: translateY(-2px); background: #d1efbb; }
 .primary-button:active { transform: translateY(0); }
+.primary-button:disabled {
+  border-color: #53665a;
+  color: #7f9184;
+  background: #26332c;
+  cursor: wait;
+  transform: none;
+}
+
+.retry-assets-button {
+  display: block;
+  margin: 9px auto 0;
+  padding: 8px 13px;
+  border: 1px solid #bd806a;
+  color: #f0c2ae;
+  background: #3a2924;
+  cursor: pointer;
+}
+
+.retry-assets-button:hover { background: #51352d; }
 
 .game-screen { position: relative; display: grid; place-items: center; background: #0b1111; }
 
@@ -184,7 +236,7 @@ button.inventory-slot { font: inherit; cursor: pointer; }
 .item-sprite {
   width: 32px;
   height: 32px;
-  background-image: url("assets/forest-assets.png?v=20260728-1116");
+  background-image: url("assets/forest-assets.png?v=20260728-assets2");
   background-repeat: no-repeat;
   background-size: 256px 192px;
   image-rendering: pixelated;

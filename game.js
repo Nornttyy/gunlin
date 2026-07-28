@@ -12,6 +12,11 @@ const CYCLE_LENGTH = DAY_LENGTH + NIGHT_LENGTH;
 const titleScreen = document.getElementById("titleScreen");
 const gameScreen = document.getElementById("gameScreen");
 const startButton = document.getElementById("startButton");
+const loadingStatus = document.getElementById("loadingStatus");
+const loadingText = document.getElementById("loadingText");
+const loadingCount = document.getElementById("loadingCount");
+const loadingProgress = document.getElementById("loadingProgress");
+const retryAssetsButton = document.getElementById("retryAssetsButton");
 const restartButton = document.getElementById("restartButton");
 const gameOverPanel = document.getElementById("gameOver");
 const messageElement = document.getElementById("message");
@@ -33,11 +38,11 @@ const useBerryButton = document.getElementById("useBerryButton");
 const quickSlots = [...document.querySelectorAll(".quick-slot")];
 const quickBerryCount = document.getElementById("quickBerryCount");
 
+const ASSET_VERSION = "20260728-assets2";
 const sprite = new Image();
-sprite.src = "assets/player.png";
 const worldSprite = new Image();
-// 版本号会提醒浏览器重新读取刚导入的图集，不使用旧缓存（cache）。
-worldSprite.src = "assets/forest-assets.png?v=20260728-1116";
+sprite.decoding = "async";
+worldSprite.decoding = "async";
 
 // 建筑素材在 128×96 图集的第 4 行（每格 16×16）。
 const BUILDING_ROW = 3;
@@ -90,6 +95,8 @@ let buildingId = 0;
 let selectedBuild = 0;
 let selectedQuickSlot = 0;
 let inventoryOpen = false;
+let assetsReady = false;
+let assetsLoading = false;
 
 const player = {
   x: 330,
@@ -122,6 +129,100 @@ const campfire = { x: 330, y: 710 };
 function hash(index) {
   const value = Math.sin(index * 91.173 + 12.91) * 43758.5453;
   return value - Math.floor(value);
+}
+
+function assetUrl(path, retry = 0) {
+  const retryText = retry > 0 ? `&retry=${retry}` : "";
+  return `${path}?v=${ASSET_VERSION}${retryText}`;
+}
+
+function wait(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+// 图片第一次没拿到时会自动换一个地址再试，最多尝试三次。
+async function loadImageWithRetry(image, path, attempts = 3) {
+  let lastError = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      await new Promise((resolve, reject) => {
+        image.onload = resolve;
+        image.onerror = () => reject(new Error(`${path} 加载失败`));
+        image.src = assetUrl(path, attempt);
+      });
+      if (image.decode) await image.decode().catch(() => {});
+      return image;
+    } catch (error) {
+      lastError = error;
+      if (attempt + 1 < attempts) await wait(350 * (attempt + 1));
+    }
+  }
+  throw lastError;
+}
+
+// 字体也会等待并重试，成功后才让玩家进入游戏。
+async function loadFontWithRetry(attempts = 3) {
+  if (!("FontFace" in window) || !document.fonts) return null;
+  let lastError = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      const url = assetUrl("assets/ark-pixel-12px-zh_cn.woff2", attempt);
+      const font = new FontFace("ArkPixel", `url("${url}") format("woff2")`, { style: "normal", weight: "400" });
+      await font.load();
+      document.fonts.add(font);
+      return font;
+    } catch (error) {
+      lastError = error;
+      if (attempt + 1 < attempts) await wait(350 * (attempt + 1));
+    }
+  }
+  throw lastError;
+}
+
+function showLoadingProgress(loaded, total, label) {
+  loadingText.textContent = label;
+  loadingCount.textContent = `${loaded} / ${total}`;
+  loadingProgress.style.width = `${Math.round((loaded / total) * 100)}%`;
+}
+
+async function loadGameAssets() {
+  if (assetsLoading) return;
+  assetsLoading = true;
+  assetsReady = false;
+  startButton.disabled = true;
+  startButton.textContent = "素材加载中…";
+  retryAssetsButton.classList.add("hidden");
+  loadingStatus.classList.remove("ready", "failed");
+  showLoadingProgress(0, 3, "正在准备像素素材…");
+
+  let loaded = 0;
+  const jobs = [
+    ["玩家图", () => loadImageWithRetry(sprite, "assets/player.png")],
+    ["场景图", () => loadImageWithRetry(worldSprite, "assets/forest-assets.png")],
+    ["像素字体", loadFontWithRetry]
+  ];
+  const results = await Promise.allSettled(jobs.map(async ([label, load]) => {
+    const result = await load();
+    loaded += 1;
+    showLoadingProgress(loaded, jobs.length, `已加载：${label}`);
+    return result;
+  }));
+
+  const failed = results.filter((result) => result.status === "rejected");
+  assetsLoading = false;
+  if (failed.length === 0) {
+    assetsReady = true;
+    loadingStatus.classList.add("ready");
+    showLoadingProgress(jobs.length, jobs.length, "素材准备完成");
+    startButton.disabled = false;
+    startButton.textContent = "进入森林";
+    return;
+  }
+
+  loadingStatus.classList.add("failed");
+  loadingText.textContent = `${failed.length} 个素材加载失败`;
+  startButton.textContent = "素材未准备完成";
+  retryAssetsButton.classList.remove("hidden");
 }
 
 function resetWorld() {
@@ -163,6 +264,10 @@ function resetWorld() {
 }
 
 function startGame() {
+  if (!assetsReady) {
+    loadGameAssets();
+    return;
+  }
   state = "game";
   titleScreen.classList.add("hidden");
   gameScreen.classList.remove("hidden");
@@ -899,6 +1004,7 @@ window.addEventListener("keydown", (event) => {
 window.addEventListener("keyup", (event) => keys.delete(event.code));
 window.addEventListener("blur", () => keys.clear());
 startButton.addEventListener("click", startGame);
+retryAssetsButton.addEventListener("click", loadGameAssets);
 restartButton.addEventListener("click", startGame);
 inventoryButton.addEventListener("click", () => setInventoryOpen(!inventoryOpen));
 useBerryButton.addEventListener("click", useBerry);
@@ -914,3 +1020,4 @@ classButtons.forEach((button) => {
 });
 
 updateHud();
+loadGameAssets();

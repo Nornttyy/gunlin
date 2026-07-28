@@ -8,6 +8,7 @@ const WORLD = { width: 2400, height: 1600, margin: 72 };
 const DAY_LENGTH = 62;
 const NIGHT_LENGTH = 42;
 const CYCLE_LENGTH = DAY_LENGTH + NIGHT_LENGTH;
+const BUILD_GRID_SIZE = 48;
 
 const titleScreen = document.getElementById("titleScreen");
 const gameScreen = document.getElementById("gameScreen");
@@ -93,7 +94,7 @@ let barricadeId = 0;
 let doorId = 0;
 let buildingId = 0;
 let selectedBuild = 0;
-let selectedQuickSlot = 0;
+let selectedQuickSlot = -1;
 let inventoryOpen = false;
 let assetsReady = false;
 let assetsLoading = false;
@@ -277,7 +278,7 @@ function startGame() {
   wasNight = false;
   spawnTimer = 4;
   selectedBuild = 0;
-  selectedQuickSlot = 0;
+  selectedQuickSlot = -1;
   Object.assign(player, { x: 330, y: 820, health: 100, wood: 12, stone: 4, berry: 0, flashlight: true, attackTimer: 0, attackCooldown: 0 });
   setInventoryOpen(false);
   resetWorld();
@@ -519,33 +520,50 @@ function buildProp(type, cost, label) {
   showMessage(`建造了${label}`);
 }
 
-// 建筑会贴在 16 像素网格上；面向左右时，墙和门会竖着放。
+function getBuildDirection() {
+  if (Math.abs(player.dirX) > Math.abs(player.dirY)) {
+    return { x: player.dirX < 0 ? -1 : 1, y: 0, vertical: true };
+  }
+  return { x: 0, y: player.dirY < 0 ? -1 : 1, vertical: false };
+}
+
+// 建筑会贴在 48 像素网格上，鼠标所在方向决定相邻的目标格。
 function getBuildPlacement() {
+  const direction = getBuildDirection();
+  const playerGridX = Math.round(player.x / BUILD_GRID_SIZE) * BUILD_GRID_SIZE;
+  const playerGridY = Math.round(player.y / BUILD_GRID_SIZE) * BUILD_GRID_SIZE;
   return {
-    x: Math.round((player.x + player.dirX * 48) / 16) * 16,
-    y: Math.round((player.y + player.dirY * 48) / 16) * 16,
-    vertical: Math.abs(player.dirX) > Math.abs(player.dirY)
+    x: playerGridX + direction.x * BUILD_GRID_SIZE,
+    y: playerGridY + direction.y * BUILD_GRID_SIZE,
+    vertical: direction.vertical
   };
 }
 
-function canBuildAt(x, y) {
+function getBuildBlockReason(x, y) {
   if (x < WORLD.margin + 24 || x > WORLD.width - WORLD.margin - 24 || y < WORLD.margin + 24 || y > WORLD.height - WORLD.margin - 24) {
-    showMessage("这里太靠近森林边缘，不能建造");
-    return false;
+    return "这里太靠近森林边缘，不能建造";
   }
   const occupied = barricades.some((item) => Math.hypot(x - item.x, y - item.y) < 44)
     || doors.some((item) => Math.hypot(x - item.x, y - item.y) < 44)
     || buildings.some((item) => Math.hypot(x - item.x, y - item.y) < 38)
-    || resources.some((item) => Math.hypot(x - item.x, y - item.y) < item.radius + 25);
-  if (occupied) {
-    showMessage("这里被挡住了，换个位置试试");
+    || resources.some((item) => Math.hypot(x - item.x, y - item.y) < item.radius + 25)
+    || monsters.some((item) => Math.hypot(x - item.x, y - item.y) < item.radius + 25)
+    || Math.hypot(x - campfire.x, y - campfire.y) < 55;
+  if (occupied) return "这里被挡住了，换个位置试试";
+  return "";
+}
+
+function canBuildAt(x, y, silent = false) {
+  const reason = getBuildBlockReason(x, y);
+  if (reason) {
+    if (!silent) showMessage(reason);
     return false;
   }
   return true;
 }
 
 function buildSelected() {
-  if (selectedQuickSlot >= BUILD_TYPES.length) {
+  if (selectedQuickSlot < 0 || selectedQuickSlot >= BUILD_TYPES.length) {
     showMessage("请先用 1-6 选择一种建筑");
     return;
   }
@@ -565,6 +583,12 @@ function selectBuild(index) {
   selectedQuickSlot = index;
   const selected = BUILD_TYPES[selectedBuild];
   showMessage(`选择建筑：${selected.label}`, 0.9);
+  updateHud();
+}
+
+function selectEmptyHand() {
+  selectedQuickSlot = -1;
+  showMessage("已经收起建筑，现在是空手", 1);
   updateHud();
 }
 
@@ -732,10 +756,12 @@ function updateHud() {
     slot.classList.toggle("selected", selectedSlot);
     slot.setAttribute("aria-pressed", String(selectedSlot));
   });
-  if (selectedQuickSlot < BUILD_TYPES.length) {
+  if (selectedQuickSlot >= 0 && selectedQuickSlot < BUILD_TYPES.length) {
     buildingLabel.textContent = `快捷 ${selectedQuickSlot + 1}：${selected.label}（木${selected.cost.wood} 石${selected.cost.stone}）`;
   } else if (selectedQuickSlot === 6) {
     buildingLabel.textContent = `快捷 7：浆果（${player.berry}）`;
+  } else if (selectedQuickSlot < 0) {
+    buildingLabel.textContent = "当前：空手（按 1-6 选择建筑）";
   } else {
     buildingLabel.textContent = `快捷 ${selectedQuickSlot + 1}：空`;
   }
@@ -751,12 +777,14 @@ function render() {
   ctx.save();
   ctx.translate(-Math.floor(camera.x), -Math.floor(camera.y));
   drawForest();
+  drawBuildGrid();
   drawBuildings();
   drawCampfire();
   drawBarricades();
   drawDoors();
   drawResources();
   drawMonsters();
+  drawBuildPreview();
   drawPlayer();
   ctx.restore();
 
@@ -772,6 +800,77 @@ function drawForest() {
   ctx.strokeStyle = "#526f4c";
   ctx.lineWidth = 4;
   ctx.strokeRect(WORLD.margin, WORLD.margin, WORLD.width - WORLD.margin * 2, WORLD.height - WORLD.margin * 2);
+}
+
+function isBuildMode() {
+  return state === "game"
+    && !inventoryOpen
+    && selectedQuickSlot >= 0
+    && selectedQuickSlot < BUILD_TYPES.length;
+}
+
+function drawBuildGrid() {
+  if (!isBuildMode()) return;
+  const startX = Math.floor(camera.x / BUILD_GRID_SIZE) * BUILD_GRID_SIZE;
+  const endX = camera.x + W + BUILD_GRID_SIZE;
+  const startY = Math.floor(camera.y / BUILD_GRID_SIZE) * BUILD_GRID_SIZE;
+  const endY = camera.y + H + BUILD_GRID_SIZE;
+  ctx.save();
+  ctx.strokeStyle = "rgba(210, 236, 188, .2)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = startX; x <= endX; x += BUILD_GRID_SIZE) {
+    ctx.moveTo(x, startY);
+    ctx.lineTo(x, endY);
+  }
+  for (let y = startY; y <= endY; y += BUILD_GRID_SIZE) {
+    ctx.moveTo(startX, y);
+    ctx.lineTo(endX, y);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawBuildPreview() {
+  if (!isBuildMode()) return;
+  const selected = BUILD_TYPES[selectedBuild];
+  const placement = getBuildPlacement();
+  const valid = canBuildAt(placement.x, placement.y, true);
+  const preview = {
+    x: placement.x,
+    y: placement.y,
+    vertical: placement.vertical
+  };
+
+  ctx.save();
+  ctx.globalAlpha = valid ? 0.62 : 0.3;
+  if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
+    if (selected.type === "wall") {
+      drawRotatedBuildingFrame(BUILDING_FRAME.wall, preview);
+    } else if (selected.type === "door") {
+      drawRotatedBuildingFrame(BUILDING_FRAME.doorClosed, preview);
+    } else {
+      const frame = BUILDING_FRAME[selected.type];
+      ctx.drawImage(worldSprite, frame * 16, BUILDING_ROW * 16, 16, 16, placement.x - 24, placement.y - 24, 48, 48);
+    }
+  } else {
+    ctx.fillStyle = valid ? "#a7cf8f" : "#cf6758";
+    ctx.fillRect(placement.x - 22, placement.y - 22, 44, 44);
+  }
+  ctx.restore();
+
+  ctx.save();
+  ctx.strokeStyle = valid ? "#d1f2b7" : "#f07c69";
+  ctx.fillStyle = valid ? "rgba(126, 188, 105, .12)" : "rgba(202, 79, 64, .18)";
+  ctx.lineWidth = 2;
+  ctx.fillRect(placement.x - 23, placement.y - 23, 46, 46);
+  ctx.strokeRect(placement.x - 23, placement.y - 23, 46, 46);
+  ctx.setLineDash([5, 4]);
+  ctx.beginPath();
+  ctx.moveTo(player.x, player.y - 8);
+  ctx.lineTo(placement.x, placement.y);
+  ctx.stroke();
+  ctx.restore();
 }
 
 // 湖泊由固定公式生成，所以每次进入游戏，水域形状都保持一致。
@@ -1006,6 +1105,10 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   if (inventoryOpen) return;
+  if (event.code === "Escape") {
+    selectEmptyHand();
+    return;
+  }
   keys.add(event.code);
   if (event.code.startsWith("Digit")) {
     activateQuickSlot(Number(event.code.slice(5)) - 1);
@@ -1027,6 +1130,11 @@ canvas.addEventListener("pointerdown", (event) => {
   aimAtPointer(event);
   if (event.button === 0) attack();
   if (event.button === 2) buildSelected();
+});
+
+canvas.addEventListener("pointermove", (event) => {
+  if (state !== "game" || inventoryOpen) return;
+  aimAtPointer(event);
 });
 
 // 在游戏画布上按右键时只负责建造，不弹出浏览器菜单。

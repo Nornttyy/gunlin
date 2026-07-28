@@ -235,6 +235,8 @@ button.inventory-slot { font: inherit; cursor: pointer; }
 .empty-slot { background: #111d19; }
 
 .item-sprite {
+  display: block;
+  flex: 0 0 auto;
   width: 32px;
   height: 32px;
   background-image: url("assets/forest-assets.png?v=20260728-assets2");

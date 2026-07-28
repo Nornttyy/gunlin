@@ -53,7 +53,7 @@
           <span id="resourceLabel">木材 12　石头 4　浆果 0</span>
           <span id="flashlightLabel">手电筒 开</span>
         </div>
-        <div class="hud-row secondary"><span id="buildingLabel">建筑 1：木墙</span><span>1-6 选择</span></div>
+        <div class="hud-row secondary"><span id="buildingLabel">当前：空手</span><span>1-6 选择</span></div>
       </div>
       <button id="inventoryButton" class="inventory-button" aria-expanded="false" aria-controls="inventoryPanel">
         <span id="inventoryButtonLabel">背包</span> <span>[I]</span>
@@ -96,7 +96,7 @@
       </section>
       <div id="message" class="message" aria-live="polite"></div>
       <nav id="quickbar" class="quickbar" aria-label="快捷栏">
-        <button class="quick-slot selected" data-quick-slot="0" title="选择木墙">
+        <button class="quick-slot" data-quick-slot="0" title="选择木墙">
           <span class="quick-key">1</span><span class="item-sprite quick-wall"></span><span class="quick-name">木墙</span>
         </button>
         <button class="quick-slot" data-quick-slot="1" title="选择木门">
@@ -125,7 +125,7 @@
           <span class="quick-key">9</span><span class="quick-name">空</span>
         </button>
       </nav>
-      <div class="controls">WASD 移动　左键攻击　右键建造　E 互动　1-6 建筑　7 浆果　F 手电筒　I 背包</div>
+      <div class="controls">WASD 移动　左键攻击　右键建造　E 互动　1-6 建筑　Esc 空手　7 浆果　F 手电筒　I 背包</div>
       <div id="gameOver" class="game-over hidden">
         <h2>你倒在了森林里</h2>
         <button id="restartButton" class="primary-button">重新开始</button>

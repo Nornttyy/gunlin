@@ -41,6 +41,23 @@ const BUILDING_FRAME = {
   trap: 7
 };
 
+const TERRAIN_FRAME = {
+  grass: 0,
+  darkGrass: 1,
+  mud: 2,
+  stoneGround: 3,
+  sand: 4,
+  water: 5
+};
+
+const PROP_FRAME = {
+  bareBush: 0,
+  berryBush: 1,
+  stump: 2,
+  tallGrass: 3,
+  stone: 6
+};
+
 const BUILD_TYPES = [
   { type: "wall", label: "木墙", cost: { wood: 3, stone: 1 } },
   { type: "door", label: "木门", cost: { wood: 4, stone: 1 } },
@@ -431,13 +448,9 @@ function render() {
 }
 
 function drawForest() {
-  ctx.fillStyle = "#294d39";
-  ctx.fillRect(0, 0, WORLD.width, WORLD.height);
   for (let x = 0; x < WORLD.width; x += 48) {
     for (let y = 0; y < WORLD.height; y += 48) {
-      const value = Math.sin(x * 0.037 + y * 0.019) + Math.cos(x * 0.011 - y * 0.047);
-      ctx.fillStyle = value > 0.65 ? "#31583e" : value < -0.7 ? "#244534" : "#2c513b";
-      ctx.fillRect(x, y, 48, 48);
+      drawTerrainTile(terrainAt(x / 48, y / 48), x, y);
     }
   }
   ctx.fillStyle = "#9a8058";
@@ -449,6 +462,28 @@ function drawForest() {
   ctx.strokeStyle = "#526f4c";
   ctx.lineWidth = 4;
   ctx.strokeRect(WORLD.margin, WORLD.margin, WORLD.width - WORLD.margin * 2, WORLD.height - WORLD.margin * 2);
+}
+
+function terrainAt(tileX, tileY) {
+  const lakeA = ((tileX - 35) / 8) ** 2 + ((tileY - 9) / 5) ** 2 < 1;
+  const lakeB = ((tileX - 11) / 5) ** 2 + ((tileY - 27) / 4) ** 2 < 1;
+  if (lakeA || lakeB) return TERRAIN_FRAME.water;
+  const value = Math.sin(tileX * 1.71 + tileY * 0.63) + Math.cos(tileX * 0.48 - tileY * 1.27);
+  if (value > 1.34) return TERRAIN_FRAME.darkGrass;
+  if (value < -1.42) return TERRAIN_FRAME.mud;
+  if (value < -0.72) return TERRAIN_FRAME.stoneGround;
+  if (value > 0.86) return TERRAIN_FRAME.sand;
+  return TERRAIN_FRAME.grass;
+}
+
+function drawTerrainTile(frame, x, y) {
+  if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
+    ctx.drawImage(worldSprite, frame * 16, 0, 16, 16, x, y, 48, 48);
+    return;
+  }
+  const fallback = ["#2c513b", "#31583e", "#5a4637", "#626862", "#88794f", "#2d92a0"];
+  ctx.fillStyle = fallback[frame] || fallback[0];
+  ctx.fillRect(x, y, 48, 48);
 }
 
 function drawBuildings() {
@@ -493,11 +528,19 @@ function drawResources() {
       ctx.fillStyle = "#2e7548";
       ctx.beginPath(); ctx.arc(resource.x, resource.y - 34, 21, 0, Math.PI * 2); ctx.fill();
     } else if (resource.type === "rock") {
+      if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
+        ctx.drawImage(worldSprite, PROP_FRAME.stone * 16, 16, 16, 16, resource.x - 24, resource.y - 24, 48, 48);
+        continue;
+      }
       ctx.fillStyle = "#7d8a7b";
       ctx.beginPath(); ctx.moveTo(resource.x - 16, resource.y + 8); ctx.lineTo(resource.x - 10, resource.y - 10); ctx.lineTo(resource.x + 7, resource.y - 16); ctx.lineTo(resource.x + 17, resource.y + 3); ctx.lineTo(resource.x + 6, resource.y + 13); ctx.closePath(); ctx.fill();
       ctx.fillStyle = "#a3b09b";
       ctx.fillRect(resource.x - 7, resource.y - 7, 8, 5);
     } else {
+      if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
+        ctx.drawImage(worldSprite, PROP_FRAME.berryBush * 16, 16, 16, 16, resource.x - 24, resource.y - 24, 48, 48);
+        continue;
+      }
       ctx.fillStyle = "#245d3d";
       ctx.beginPath(); ctx.arc(resource.x, resource.y, 19, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = "#8b334d";

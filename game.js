@@ -76,7 +76,7 @@ const CLASS_NAMES = ["枪手", "护士", "伐木工", "守望者", "棒球女", 
 
 const ASSET_VERSION = "20260728-assets2";
 const PLAYER_ASSET_VERSION = "20260728-player-redraw1";
-const TREE_ASSET_VERSION = "20260728-tree-redraw1";
+const TREE_ASSET_VERSION = "20260728-tree-visible2";
 const sprite = new Image();
 const worldSprite = new Image();
 const treeSprite = new Image();
@@ -108,7 +108,7 @@ const PROP_FRAME = {
   berryBush: 1,
   stump: 2,
   tallGrass: 3,
-  stone: 6
+  stone: 1
 };
 
 const BUILD_TYPES = [
@@ -383,18 +383,6 @@ function resetWorld() {
   doorId = 0;
   buildingId = 0;
   updateResourceChunks(true);
-  // 先放一扇测试门，后续可由建造系统生成更多门。
-  doors.push({
-    id: doorId++,
-    x: campfire.x + 460,
-    y: campfire.y + 80,
-    vertical: false,
-    rotation: 0,
-    open: false,
-    animation: 0,
-    health: 90,
-    maxHealth: 90
-  });
 }
 
 function startGame() {
@@ -1494,7 +1482,8 @@ function drawResources() {
       ctx.beginPath(); ctx.arc(resource.x, resource.y - 34, 21, 0, Math.PI * 2); ctx.fill();
     } else if (resource.type === "rock") {
       if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
-        ctx.drawImage(worldSprite, PROP_FRAME.stone * 16, 16, 16, 16, resource.x - 24, resource.y - 24, 48, 48);
+        // 石头在物品行（第 3 行）的第 2 格，不是植物行里的透明格。
+        ctx.drawImage(worldSprite, PROP_FRAME.stone * 16, 2 * 16, 16, 16, resource.x - 24, resource.y - 24, 48, 48);
         continue;
       }
       ctx.fillStyle = "#7d8a7b";

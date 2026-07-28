@@ -32,6 +32,7 @@ const MIMIC_TELEPORT_MIN_DISTANCE = 650;
 const MIMIC_TELEPORT_MAX_DISTANCE = 860;
 const MIMIC_FRAME_SIZE = 32;
 const MIMIC_DEATH_DURATION = 0.72;
+const AUDIO_PAN_DISTANCE = 420;
 const BUILD_GRID_SIZE = TILE_SIZE;
 const DEFENSE_COLLIDER = {
   wall: { length: 48, thickness: 15, edgeOffset: 16 },
@@ -53,6 +54,8 @@ const retryAssetsButton = document.getElementById("retryAssetsButton");
 const restartButton = document.getElementById("restartButton");
 const gameOverPanel = document.getElementById("gameOver");
 const mimicJumpscare = document.getElementById("mimicJumpscare");
+const audioButton = document.getElementById("audioButton");
+const audioButtonLabel = document.getElementById("audioButtonLabel");
 const messageElement = document.getElementById("message");
 const classButtons = [...document.querySelectorAll(".class-button")];
 const classSelectPanel = document.getElementById("classSelectPanel");
@@ -155,6 +158,11 @@ let classSelectionOpen = false;
 let inventoryOpen = false;
 let draggedInventorySlot = -1;
 let jumpscareSequence = 0;
+let audioContext = null;
+let masterGain = null;
+let noiseBuffer = null;
+let audioEnabled = true;
+let ambienceTimer = 1.5;
 let nightMaskCanvas = null;
 let nightMaskContext = null;
 let assetsReady = false;
@@ -301,6 +309,206 @@ function wait(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
+function audioPanForWorldX(worldX) {
+  return Math.max(-1, Math.min(1, (worldX - player.x) / AUDIO_PAN_DISTANCE));
+}
+
+function ensureAudio() {
+  if (!audioEnabled) return null;
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return null;
+  if (!audioContext) {
+    try {
+      audioContext = new AudioContextClass();
+      masterGain = audioContext.createGain();
+      masterGain.gain.value = 0.42;
+      masterGain.connect(audioContext.destination);
+    } catch {
+      audioContext = null;
+      masterGain = null;
+      return null;
+    }
+  }
+  if (audioContext.state === "suspended") audioContext.resume().catch(() => {});
+  return audioContext;
+}
+
+function connectAudioOutput(node, worldX = null, panOverride = null) {
+  if (!audioContext || !masterGain) return;
+  const pan = panOverride === null
+    ? (worldX === null ? 0 : audioPanForWorldX(worldX))
+    : Math.max(-1, Math.min(1, panOverride));
+  if (audioContext.createStereoPanner) {
+    const panner = audioContext.createStereoPanner();
+    panner.pan.setValueAtTime(pan, audioContext.currentTime);
+    node.connect(panner);
+    panner.connect(masterGain);
+  } else {
+    node.connect(masterGain);
+  }
+}
+
+function playTone({
+  frequency,
+  endFrequency = frequency,
+  duration = 0.12,
+  volume = 0.05,
+  type = "sine",
+  delay = 0,
+  worldX = null,
+  pan = null
+}) {
+  const context = ensureAudio();
+  if (!context) return;
+  const start = context.currentTime + delay;
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+  oscillator.type = type;
+  oscillator.frequency.setValueAtTime(Math.max(20, frequency), start);
+  oscillator.frequency.exponentialRampToValueAtTime(Math.max(20, endFrequency), start + duration);
+  gain.gain.setValueAtTime(0.0001, start);
+  gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, volume), start + Math.min(0.018, duration * 0.25));
+  gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+  oscillator.connect(gain);
+  connectAudioOutput(gain, worldX, pan);
+  oscillator.start(start);
+  oscillator.stop(start + duration + 0.02);
+}
+
+function getNoiseBuffer() {
+  const context = ensureAudio();
+  if (!context) return null;
+  if (noiseBuffer) return noiseBuffer;
+  noiseBuffer = context.createBuffer(1, context.sampleRate * 2, context.sampleRate);
+  const samples = noiseBuffer.getChannelData(0);
+  for (let index = 0; index < samples.length; index += 1) {
+    samples[index] = Math.random() * 2 - 1;
+  }
+  return noiseBuffer;
+}
+
+function playNoise({
+  duration = 0.16,
+  volume = 0.05,
+  frequency = 700,
+  filterType = "lowpass",
+  delay = 0,
+  worldX = null,
+  pan = null
+} = {}) {
+  const context = ensureAudio();
+  const buffer = getNoiseBuffer();
+  if (!context || !buffer) return;
+  const start = context.currentTime + delay;
+  const source = context.createBufferSource();
+  const filter = context.createBiquadFilter();
+  const gain = context.createGain();
+  source.buffer = buffer;
+  filter.type = filterType;
+  filter.frequency.setValueAtTime(frequency, start);
+  filter.Q.setValueAtTime(0.8, start);
+  gain.gain.setValueAtTime(0.0001, start);
+  gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, volume), start + Math.min(0.025, duration * 0.25));
+  gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+  source.connect(filter);
+  filter.connect(gain);
+  connectAudioOutput(gain, worldX, pan);
+  source.start(start, Math.random() * Math.max(0.01, buffer.duration - duration), duration);
+}
+
+function distanceVolume(worldX, worldY, maximum, range = 700) {
+  const distance = Math.hypot(worldX - player.x, worldY - player.y);
+  return maximum * Math.max(0.08, 1 - distance / range);
+}
+
+function playGatherSound(type, worldX) {
+  if (type === "wood") {
+    playTone({ frequency: 128, endFrequency: 92, type: "square", duration: 0.09, volume: 0.055, worldX });
+    playTone({ frequency: 104, endFrequency: 76, type: "square", duration: 0.08, volume: 0.04, delay: 0.075, worldX });
+  } else if (type === "stone") {
+    playTone({ frequency: 510, endFrequency: 330, type: "triangle", duration: 0.07, volume: 0.045, worldX });
+    playTone({ frequency: 720, endFrequency: 440, type: "triangle", duration: 0.055, volume: 0.035, delay: 0.06, worldX });
+  } else {
+    playTone({ frequency: 570, endFrequency: 820, type: "sine", duration: 0.13, volume: 0.04, worldX });
+  }
+}
+
+function playWeaponSound(worldX) {
+  playNoise({ duration: 0.11, volume: 0.065, frequency: 1250, filterType: "bandpass", worldX });
+  playTone({ frequency: 185, endFrequency: 95, type: "sawtooth", duration: 0.1, volume: 0.035, worldX });
+}
+
+function playBuildSound(worldX) {
+  playTone({ frequency: 118, endFrequency: 72, type: "square", duration: 0.11, volume: 0.05, worldX });
+  playNoise({ duration: 0.075, volume: 0.04, frequency: 480, delay: 0.06, worldX });
+}
+
+function playDoorSound(worldX, open) {
+  playTone({
+    frequency: open ? 155 : 105,
+    endFrequency: open ? 92 : 72,
+    type: "sawtooth",
+    duration: 0.18,
+    volume: 0.035,
+    worldX
+  });
+}
+
+function playMimicDetected(monster) {
+  const volume = distanceVolume(monster.x, monster.y, 0.075, MIMIC_DETECTION_DISTANCE + 120);
+  playNoise({ duration: 0.42, volume, frequency: 390, filterType: "bandpass", worldX: monster.x });
+  playTone({ frequency: 86, endFrequency: 62, type: "sawtooth", duration: 0.34, volume: volume * 0.55, worldX: monster.x });
+}
+
+function playMimicFootstep(monster) {
+  const volume = distanceVolume(monster.x, monster.y, 0.105, MIMIC_LOSE_DISTANCE + 100);
+  playNoise({ duration: 0.12, volume, frequency: 190, worldX: monster.x });
+  playTone({ frequency: 72, endFrequency: 48, type: "sine", duration: 0.1, volume: volume * 0.72, worldX: monster.x });
+}
+
+function playMimicJumpscare(worldX) {
+  playNoise({ duration: 0.48, volume: 0.19, frequency: 1050, filterType: "bandpass", worldX });
+  playTone({ frequency: 62, endFrequency: 310, type: "sawtooth", duration: 0.48, volume: 0.14, worldX });
+}
+
+function playPhaseSound(night) {
+  if (night) {
+    playTone({ frequency: 94, endFrequency: 48, type: "sawtooth", duration: 0.7, volume: 0.065 });
+    playNoise({ duration: 0.8, volume: 0.035, frequency: 330 });
+  } else {
+    playTone({ frequency: 180, endFrequency: 360, type: "sine", duration: 0.45, volume: 0.04 });
+  }
+}
+
+function updateAudioAmbience(delta) {
+  ambienceTimer -= delta;
+  if (ambienceTimer > 0) return;
+  ambienceTimer = 3.5 + Math.random() * 4.5;
+  playNoise({
+    duration: 1.8,
+    volume: isNight() ? 0.026 : 0.014,
+    frequency: isNight() ? 430 : 620,
+    pan: Math.random() * 2 - 1
+  });
+}
+
+function updateAudioButton() {
+  if (!audioButton || !audioButtonLabel) return;
+  audioButtonLabel.textContent = audioEnabled ? "声音 开" : "声音 关";
+  audioButton.classList.toggle("muted", !audioEnabled);
+  audioButton.setAttribute("aria-pressed", String(audioEnabled));
+}
+
+function setAudioEnabled(enabled, announce = true) {
+  audioEnabled = Boolean(enabled);
+  if (audioEnabled) ensureAudio();
+  if (masterGain && audioContext) {
+    masterGain.gain.setTargetAtTime(audioEnabled ? 0.42 : 0.0001, audioContext.currentTime, 0.025);
+  }
+  updateAudioButton();
+  if (announce && state === "game") showMessage(audioEnabled ? "声音已打开" : "声音已关闭", 0.9);
+}
+
 // 图片第一次没拿到时会自动换一个地址再试，最多尝试三次。
 async function loadImageWithRetry(image, path, attempts = 3) {
   let lastError = null;
@@ -410,6 +618,9 @@ function startGame() {
     return;
   }
   state = "game";
+  ensureAudio();
+  ambienceTimer = 0.8;
+  updateAudioButton();
   titleScreen.classList.add("hidden");
   gameScreen.classList.remove("hidden");
   gameOverPanel.classList.add("hidden");
@@ -499,6 +710,7 @@ function update(delta) {
 
   if (night !== wasNight) {
     wasNight = night;
+    playPhaseSound(night);
     showMessage(night ? "夜幕降临：不要相信雾里的眼睛" : "天亮了：怪物正在退回深林");
     if (night) spawnMonster();
   }
@@ -507,6 +719,7 @@ function update(delta) {
   updateDoors(delta);
   updateTraps(delta);
   updateMonsters(delta, night);
+  updateAudioAmbience(delta);
   spawnTimer -= delta;
   if (night && spawnTimer <= 0) {
     spawnMonster();
@@ -607,6 +820,7 @@ function interact() {
   const nearbyDoor = doors.find((door) => Math.hypot(player.x - door.x, player.y - door.y) < 72);
   if (nearbyDoor) {
     nearbyDoor.open = !nearbyDoor.open;
+    playDoorSound(nearbyDoor.x, nearbyDoor.open);
     showMessage(nearbyDoor.open ? "木门打开了" : "木门关上了", 1.1);
     return;
   }
@@ -673,6 +887,7 @@ function collectResource() {
   }
 
   const index = resources.indexOf(target);
+  playGatherSound(target.type === "tree" ? "wood" : target.type === "rock" ? "stone" : "berry", target.x);
   resources.splice(index, 1);
   if (target.spawnKey) harvestedResourceKeys.add(target.spawnKey);
   if (target.type === "tree") {
@@ -772,6 +987,7 @@ function useBerry() {
   }
   player.berry -= 1;
   player.health = Math.min(100, player.health + 12);
+  playTone({ frequency: 420, endFrequency: 690, type: "sine", duration: 0.18, volume: 0.035 });
   showMessage("吃下浆果，恢复 12 点生命", 1.2);
   updateHud();
 }
@@ -792,6 +1008,7 @@ function buildBarricade(payCost = true) {
     health: 120,
     maxHealth: 120
   });
+  playBuildSound(placement.x);
   if (payCost) {
     player.wood -= 3;
     player.stone -= 1;
@@ -818,6 +1035,7 @@ function buildDoor(payCost = true) {
     health: 90,
     maxHealth: 90
   });
+  playBuildSound(placement.x);
   if (payCost) {
     player.wood -= 4;
     player.stone -= 1;
@@ -838,6 +1056,7 @@ function buildProp(type, cost, label, payCost = true) {
   // 陷阱像一只有三颗牙的夹子，命中三次后就会坏掉。
   if (type === "trap") Object.assign(building, { uses: 3, cooldown: 0 });
   buildings.push(building);
+  playBuildSound(placement.x);
   if (payCost) {
     player.wood -= cost.wood;
     player.stone -= cost.stone;
@@ -981,6 +1200,7 @@ function attack() {
   player.attackCooldown = 0.38;
   player.attackTimer = 0.16;
   let hit = false;
+  let soundX = player.x + player.dirX * 52;
   for (const monster of monsters) {
     if (monster.dead) continue;
     const dx = monster.x - player.x;
@@ -991,8 +1211,10 @@ function attack() {
       monster.x += (dx / (Math.hypot(dx, dy) || 1)) * 24;
       monster.y += (dy / (Math.hypot(dx, dy) || 1)) * 24;
       hit = true;
+      soundX = monster.x;
     }
   }
+  playWeaponSound(soundX);
   showMessage(hit ? "击中了怪物" : "攻击落空", 0.7);
 }
 
@@ -1035,14 +1257,16 @@ function spawnMonster() {
     detectionCooldown: 0,
     attackCooldown: 0,
     hurtTimer: 0,
+    footstepTimer: 0,
     animation: Math.random() * 2,
     dead: false,
     deathTimer: 0
   });
 }
 
-function triggerMimicJumpscare() {
+function triggerMimicJumpscare(worldX = player.x) {
   if (!mimicJumpscare) return;
+  playMimicJumpscare(worldX);
   const sequence = ++jumpscareSequence;
   mimicJumpscare.classList.remove("active");
   void mimicJumpscare.offsetWidth;
@@ -1098,6 +1322,7 @@ function updateMonsters(delta, night) {
     const monster = monsters[i];
     monster.attackCooldown = Math.max(0, (monster.attackCooldown || 0) - delta);
     monster.detectionCooldown = Math.max(0, (monster.detectionCooldown || 0) - delta);
+    monster.footstepTimer = Math.max(0, (monster.footstepTimer || 0) - delta);
     monster.hurtTimer = Math.max(0, (monster.hurtTimer || 0) - delta);
 
     if (monster.dead) {
@@ -1133,6 +1358,7 @@ function updateMonsters(delta, night) {
 
     if (!monster.alerted && monster.detectionCooldown <= 0 && distance <= MIMIC_DETECTION_DISTANCE) {
       monster.alerted = true;
+      playMimicDetected(monster);
       showMessage("附近传来模仿你的脚步声", 1.2);
     } else if (monster.alerted && distance > MIMIC_LOSE_DISTANCE) {
       monster.alerted = false;
@@ -1148,6 +1374,10 @@ function updateMonsters(delta, night) {
         } else {
           monster.x = nextX;
           monster.y = nextY;
+          if (monster.footstepTimer <= 0) {
+            playMimicFootstep(monster);
+            monster.footstepTimer = 0.32;
+          }
         }
       } else {
         if (monster.attackCooldown <= 0 && player.hurtTimer <= 0) {
@@ -1156,7 +1386,7 @@ function updateMonsters(delta, night) {
           monster.attackCooldown = 2.2;
           monster.alerted = false;
           monster.detectionCooldown = 1.4;
-          triggerMimicJumpscare();
+          triggerMimicJumpscare(monster.x);
           teleportMimicAway(monster);
           showMessage("模仿者扑到了你脸上！生命 -50", 1.25);
         }
@@ -2065,6 +2295,10 @@ function loop(now) {
 window.addEventListener("keydown", (event) => {
   if (["Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.code)) event.preventDefault();
   if (state !== "game") return;
+  if (event.code === "KeyM") {
+    if (!event.repeat) setAudioEnabled(!audioEnabled);
+    return;
+  }
   if (classSelectionOpen) return;
   if (event.code === "KeyI" || event.code === "Tab") {
     if (!event.repeat) setInventoryOpen(!inventoryOpen);
@@ -2085,6 +2319,13 @@ window.addEventListener("keydown", (event) => {
   if (event.code === "KeyE") interact();
   if (event.code === "KeyF") {
     player.flashlight = !player.flashlight;
+    playTone({
+      frequency: player.flashlight ? 520 : 310,
+      endFrequency: player.flashlight ? 680 : 220,
+      type: "square",
+      duration: 0.055,
+      volume: 0.025
+    });
     showMessage(player.flashlight ? "打开手电筒" : "关闭手电筒", 1);
   }
 });
@@ -2111,6 +2352,7 @@ startButton.addEventListener("click", startGame);
 retryAssetsButton.addEventListener("click", loadGameAssets);
 restartButton.addEventListener("click", startGame);
 inventoryButton.addEventListener("click", () => setInventoryOpen(!inventoryOpen));
+audioButton?.addEventListener("click", () => setAudioEnabled(!audioEnabled));
 inventorySlots.forEach((slot, index) => {
   slot.addEventListener("dragstart", (event) => {
     if (!inventoryItems[index]) {
@@ -2180,4 +2422,5 @@ classButtons.forEach((button) => {
 });
 
 updateHud();
+updateAudioButton();
 loadGameAssets();

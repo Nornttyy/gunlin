@@ -10,7 +10,7 @@
   <link rel="preload" href="assets/mimic.png?v=20260728-mimic-drawn1" as="image" />
   <link rel="preload" href="assets/forest-assets.png?v=20260728-assets2" as="image" />
   <link rel="preload" href="assets/ark-pixel-12px-zh_cn.woff2?v=20260728-assets2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=20260728-mimic-drawn1" />
+  <link rel="stylesheet" href="styles.css?v=20260728-spatial-audio1" />
 </head>
 <body>
   <main id="app">
@@ -81,6 +81,9 @@
       <span id="resourceLabel" class="hidden" aria-hidden="true">木材 0　石头 0　浆果 0</span>
       <button id="inventoryButton" class="inventory-button" aria-expanded="false" aria-controls="inventoryWorkspace">
         <span id="inventoryButtonLabel">背包</span> <span>[I]</span>
+      </button>
+      <button id="audioButton" class="audio-button" aria-pressed="true">
+        <span id="audioButtonLabel">声音 开</span> <b>[M]</b>
       </button>
       <div id="inventoryWorkspace" class="inventory-workspace hidden">
         <section id="craftPanel" class="craft-panel" aria-label="合成栏">
@@ -157,7 +160,7 @@
           <span class="quick-key">9</span><span class="item-sprite"></span><span class="quick-name">空</span>
         </button>
       </nav>
-      <div class="controls">WASD 移动　/　左键 攻击或采集　/　右键 建造　/　E 互动　/　F 手电筒　/　I 背包</div>
+      <div class="controls">WASD 移动　/　左键 攻击或采集　/　右键 建造　/　E 互动　/　F 手电筒　/　I 背包　/　M 声音</div>
       <div id="mimicJumpscare" class="mimic-jumpscare" aria-hidden="true">
         <div class="mimic-jumpscare-face" aria-hidden="true"></div>
         <span>信号中断 // 模仿者</span>
@@ -169,6 +172,6 @@
       </div>
     </section>
   </main>
-  <script type="module" src="game.js?v=20260728-mimic-drawn1"></script>
+  <script type="module" src="game.js?v=20260728-spatial-audio1"></script>
 </body>
 </html>

@@ -2172,6 +2172,57 @@ h1 {
   100% { transform: scale(1.72) translateY(7%); }
 }
 
+.audio-button {
+  position: fixed;
+  z-index: 5;
+  top: 16px;
+  right: 140px;
+  min-width: 112px;
+  padding: 10px 12px;
+  border: 1px solid #46554b;
+  border-left: 3px solid #65776a;
+  color: #aebdaf;
+  background:
+    linear-gradient(90deg, rgba(108, 133, 113, .12), transparent 45%),
+    rgba(4, 9, 8, .94);
+  box-shadow: 6px 8px 0 rgba(0, 0, 0, .27);
+  clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+}
+
+.audio-button b {
+  margin-left: 5px;
+  color: #64776a;
+  font-size: 8px;
+  font-weight: 400;
+}
+
+.audio-button:hover {
+  border-left-color: #8fa58f;
+  color: #d5dfd1;
+  background: #17221c;
+}
+
+.audio-button.muted {
+  border-left-color: #713333;
+  color: #7d6d68;
+  background: rgba(14, 9, 9, .94);
+}
+
+.audio-button.muted b {
+  color: #7d3b39;
+}
+
+@media (max-width: 560px) {
+  .audio-button {
+    top: 58px;
+    right: 10px;
+    min-width: 104px;
+  }
+}
+
 @media (max-width: 560px) {
   .hud {
     width: min(350px, calc(100vw - 132px));

@@ -314,6 +314,21 @@ function currentPhaseProgress() {
   return isNight() ? (cycle - DAY_LENGTH) / NIGHT_LENGTH : cycle / DAY_LENGTH;
 }
 
+// 黄昏和黎明会慢慢变暗、变亮，避免画面突然跳黑。
+function nightIntensity() {
+  const cycle = elapsed % CYCLE_LENGTH;
+  const transition = 8;
+  if (cycle < DAY_LENGTH - transition) return 0;
+  if (cycle < DAY_LENGTH) {
+    const progress = (cycle - DAY_LENGTH + transition) / transition;
+    return progress * progress * (3 - 2 * progress);
+  }
+  if (cycle < CYCLE_LENGTH - transition) return 1;
+  const progress = (cycle - CYCLE_LENGTH + transition) / transition;
+  const smooth = progress * progress * (3 - 2 * progress);
+  return 1 - smooth;
+}
+
 function update(delta) {
   elapsed += delta;
   dayNumber = Math.floor(elapsed / CYCLE_LENGTH) + 1;
@@ -773,9 +788,17 @@ function attackDefense(monster, defense) {
 }
 
 function updateHud() {
-  phaseLabel.textContent = isNight() ? "夜晚" : "白天";
+  const cycle = elapsed % CYCLE_LENGTH;
+  if (!isNight() && cycle > DAY_LENGTH - 8) {
+    phaseLabel.textContent = "黄昏";
+  } else if (isNight() && cycle > CYCLE_LENGTH - 8) {
+    phaseLabel.textContent = "黎明";
+  } else {
+    phaseLabel.textContent = isNight() ? "夜晚" : "白天";
+  }
   dayLabel.textContent = `第 ${dayNumber} 天`;
   healthLabel.textContent = `生命 ${Math.max(0, Math.round(player.health))}`;
+  healthLabel.classList.toggle("danger", player.health <= 30);
   resourceLabel.textContent = `木材 ${player.wood}　石头 ${player.stone}　浆果 ${player.berry}`;
   flashlightLabel.textContent = `手电筒 ${player.flashlight ? "开" : "关"}`;
   const selected = BUILD_TYPES[selectedBuild];
@@ -808,10 +831,13 @@ function render() {
   const targetY = Math.max(0, Math.min(WORLD.height - H, player.y - H / 2));
   camera.x += (targetX - camera.x) * 0.12;
   camera.y += (targetY - camera.y) * 0.12;
+  const shakeStrength = player.hurtTimer > 0 ? Math.min(5, player.hurtTimer * 7) : 0;
+  const shakeX = Math.sin(elapsed * 89) * shakeStrength;
+  const shakeY = Math.cos(elapsed * 113) * shakeStrength;
 
   ctx.clearRect(0, 0, W, H);
   ctx.save();
-  ctx.translate(-Math.floor(camera.x), -Math.floor(camera.y));
+  ctx.translate(-Math.floor(camera.x) + shakeX, -Math.floor(camera.y) + shakeY);
   drawForest();
   drawBuildGrid();
   drawBuildings();
@@ -824,7 +850,7 @@ function render() {
   drawPlayer();
   ctx.restore();
 
-  if (isNight()) drawNightOverlay();
+  drawAtmosphere();
 }
 
 function drawForest() {
@@ -963,19 +989,28 @@ function drawBuildings() {
 function drawCampfire() {
   if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
     ctx.drawImage(worldSprite, BUILDING_FRAME.campfire * 16, BUILDING_ROW * 16, 16, 16, campfire.x - 24, campfire.y - 42, 48, 48);
-    return;
+  } else {
+    ctx.fillStyle = "#593b2a";
+    ctx.fillRect(campfire.x - 22, campfire.y - 5, 44, 10);
+    ctx.fillRect(campfire.x - 5, campfire.y - 22, 10, 44);
+    ctx.fillStyle = "#f2b94b";
+    ctx.beginPath();
+    ctx.arc(campfire.x, campfire.y - 15, 15 + Math.sin(elapsed * 8) * 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#f4e09c";
+    ctx.beginPath();
+    ctx.arc(campfire.x, campfire.y - 18, 7, 0, Math.PI * 2);
+    ctx.fill();
   }
-  ctx.fillStyle = "#593b2a";
-  ctx.fillRect(campfire.x - 22, campfire.y - 5, 44, 10);
-  ctx.fillRect(campfire.x - 5, campfire.y - 22, 10, 44);
-  ctx.fillStyle = "#f2b94b";
-  ctx.beginPath();
-  ctx.arc(campfire.x, campfire.y - 15, 15 + Math.sin(elapsed * 8) * 3, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = "#f4e09c";
-  ctx.beginPath();
-  ctx.arc(campfire.x, campfire.y - 18, 7, 0, Math.PI * 2);
-  ctx.fill();
+
+  // 小火星让静态像素素材也有呼吸感。
+  for (let index = 0; index < 3; index += 1) {
+    const life = (elapsed * (0.8 + index * 0.14) + index * 0.31) % 1;
+    const sparkX = campfire.x + Math.sin(elapsed * 4 + index * 2.1) * (3 + life * 7);
+    const sparkY = campfire.y - 22 - life * 28;
+    ctx.fillStyle = `rgba(255, ${180 + index * 18}, 92, ${1 - life})`;
+    ctx.fillRect(Math.round(sparkX), Math.round(sparkY), 2, 2);
+  }
 }
 
 function drawResources() {
@@ -1070,12 +1105,32 @@ function drawDefenseHealth(defense) {
 
 function drawMonsters() {
   for (const monster of monsters) {
+    const bob = Math.sin(elapsed * 4.6 + monster.x * 0.025) * 2;
     ctx.save();
     ctx.globalAlpha = monster.hurtTimer > 0 ? .5 : 1;
-    ctx.fillStyle = "#14191b";
-    ctx.beginPath(); ctx.arc(monster.x, monster.y, 16, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#d05a4e";
-    ctx.fillRect(monster.x - 8, monster.y - 3, 5, 4); ctx.fillRect(monster.x + 3, monster.y - 3, 5, 4);
+    ctx.fillStyle = "rgba(3, 7, 9, .45)";
+    ctx.beginPath();
+    ctx.ellipse(monster.x, monster.y + 15, 20, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.translate(monster.x, monster.y + bob);
+    ctx.fillStyle = "#0a0e12";
+    ctx.beginPath();
+    ctx.moveTo(-13, 12);
+    ctx.quadraticCurveTo(-20, -6, -10, -17);
+    ctx.quadraticCurveTo(0, -25, 11, -16);
+    ctx.quadraticCurveTo(21, -5, 14, 13);
+    ctx.quadraticCurveTo(8, 9, 4, 16);
+    ctx.quadraticCurveTo(-1, 9, -6, 16);
+    ctx.quadraticCurveTo(-9, 10, -13, 12);
+    ctx.fill();
+
+    ctx.shadowColor = "#a82f32";
+    ctx.shadowBlur = 9;
+    ctx.fillStyle = "#d85150";
+    ctx.fillRect(-9, -5, 5, 3);
+    ctx.fillRect(4, -5, 5, 3);
+    ctx.shadowBlur = 0;
     ctx.restore();
   }
 }
@@ -1114,15 +1169,117 @@ function drawPlayer() {
   }
 }
 
-function drawNightOverlay() {
+function drawAtmosphere() {
+  const darkness = nightIntensity();
+  drawSkyTint(darkness);
+  drawCampfireGlow(darkness);
+  drawFlashlightGlow(darkness);
+  drawDriftingFog(darkness);
+  drawVignette(darkness);
+  drawDamageFlash();
+}
+
+function drawSkyTint(darkness) {
+  const tint = ctx.createLinearGradient(0, 0, 0, H);
+  tint.addColorStop(0, `rgba(5, 11, 19, ${0.08 + darkness * 0.64})`);
+  tint.addColorStop(0.62, `rgba(8, 14, 18, ${0.04 + darkness * 0.52})`);
+  tint.addColorStop(1, `rgba(2, 6, 9, ${0.12 + darkness * 0.66})`);
+  ctx.fillStyle = tint;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function drawCampfireGlow(darkness) {
+  const fireX = campfire.x - camera.x;
+  const fireY = campfire.y - camera.y - 18;
+  if (fireX < -180 || fireY < -180 || fireX > W + 180 || fireY > H + 180) return;
+  const flicker = 1 + Math.sin(elapsed * 11.3) * 0.045 + Math.sin(elapsed * 17.7) * 0.025;
+  const radius = (105 + darkness * 95) * flicker;
+  const glow = ctx.createRadialGradient(fireX, fireY, 8, fireX, fireY, radius);
+  glow.addColorStop(0, `rgba(255, 222, 135, ${0.22 + darkness * 0.2})`);
+  glow.addColorStop(0.28, `rgba(246, 139, 59, ${0.12 + darkness * 0.14})`);
+  glow.addColorStop(1, "rgba(107, 45, 26, 0)");
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  ctx.fillStyle = glow;
+  ctx.fillRect(fireX - radius, fireY - radius, radius * 2, radius * 2);
+  ctx.restore();
+}
+
+function drawFlashlightGlow(darkness) {
+  if (!player.flashlight) return;
   const px = player.x - camera.x;
   const py = player.y - camera.y - 12;
-  const dark = player.flashlight ? 0.72 : 0.9;
-  const gradient = ctx.createRadialGradient(px, py, 30, px, py, player.flashlight ? 220 : 80);
-  gradient.addColorStop(0, "rgba(0,0,0,0)");
-  gradient.addColorStop(0.55, `rgba(4,8,10,${dark * .35})`);
-  gradient.addColorStop(1, `rgba(3,6,8,${dark})`);
-  ctx.fillStyle = gradient;
+  const angle = Math.atan2(player.dirY, player.dirX);
+  const radius = 285;
+  const flicker = 0.96 + Math.sin(elapsed * 21) * 0.025;
+
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  ctx.translate(px, py);
+  ctx.rotate(angle);
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.arc(0, 0, radius, -0.5, 0.5);
+  ctx.closePath();
+  ctx.clip();
+  const beam = ctx.createRadialGradient(0, 0, 14, 0, 0, radius);
+  beam.addColorStop(0, `rgba(229, 240, 195, ${(0.16 + darkness * 0.18) * flicker})`);
+  beam.addColorStop(0.5, `rgba(189, 213, 172, ${(0.09 + darkness * 0.11) * flicker})`);
+  beam.addColorStop(1, "rgba(150, 183, 150, 0)");
+  ctx.fillStyle = beam;
+  ctx.fillRect(0, -radius, radius, radius * 2);
+  ctx.restore();
+
+  const local = ctx.createRadialGradient(px, py, 10, px, py, 74);
+  local.addColorStop(0, `rgba(223, 236, 192, ${0.08 + darkness * 0.13})`);
+  local.addColorStop(1, "rgba(170, 201, 160, 0)");
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  ctx.fillStyle = local;
+  ctx.fillRect(px - 74, py - 74, 148, 148);
+  ctx.restore();
+}
+
+function drawDriftingFog(darkness) {
+  for (let index = 0; index < 9; index += 1) {
+    const width = 160 + hash(index + 70) * 260;
+    const height = 22 + hash(index + 90) * 40;
+    const speed = 5 + hash(index + 110) * 9;
+    const loopWidth = W + width * 2;
+    const x = ((hash(index + 130) * loopWidth + elapsed * speed - camera.x * 0.025) % loopWidth) - width;
+    const y = hash(index + 150) * H + Math.sin(elapsed * 0.16 + index) * 18;
+    const alpha = (0.026 + darkness * 0.035) * (0.55 + hash(index + 170));
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(width * 0.5, height * 0.5);
+    const fog = ctx.createRadialGradient(0, 0, 0.08, 0, 0, 1);
+    fog.addColorStop(0, `rgba(185, 199, 191, ${alpha})`);
+    fog.addColorStop(0.56, `rgba(154, 174, 165, ${alpha * 0.56})`);
+    fog.addColorStop(1, "rgba(125, 149, 140, 0)");
+    ctx.fillStyle = fog;
+    ctx.beginPath();
+    ctx.arc(0, 0, 1, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawVignette(darkness) {
+  const vignette = ctx.createRadialGradient(W / 2, H / 2, H * 0.16, W / 2, H / 2, W * 0.67);
+  vignette.addColorStop(0, "rgba(1, 4, 6, 0)");
+  vignette.addColorStop(0.63, `rgba(1, 4, 6, ${0.03 + darkness * 0.08})`);
+  vignette.addColorStop(1, `rgba(0, 2, 4, ${0.38 + darkness * 0.34})`);
+  ctx.fillStyle = vignette;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function drawDamageFlash() {
+  if (player.hurtTimer <= 0) return;
+  const strength = Math.min(1, player.hurtTimer / 0.8);
+  const damage = ctx.createRadialGradient(W / 2, H / 2, H * 0.2, W / 2, H / 2, W * 0.7);
+  damage.addColorStop(0, "rgba(130, 17, 20, 0)");
+  damage.addColorStop(1, `rgba(142, 17, 22, ${strength * 0.42})`);
+  ctx.fillStyle = damage;
   ctx.fillRect(0, 0, W, H);
 }
 

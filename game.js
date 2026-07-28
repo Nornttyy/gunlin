@@ -336,7 +336,7 @@ function update(delta) {
 
   if (night !== wasNight) {
     wasNight = night;
-    showMessage(night ? "夜幕降临：森林里的东西醒了" : "天亮了：怪物正在退回深林");
+    showMessage(night ? "夜幕降临：不要相信雾里的眼睛" : "天亮了：怪物正在退回深林");
     if (night) spawnMonster();
   }
 
@@ -1171,10 +1171,14 @@ function drawPlayer() {
 
 function drawAtmosphere() {
   const darkness = nightIntensity();
+  gameScreen.classList.toggle("is-night", darkness > 0.68);
   drawSkyTint(darkness);
+  drawNightCurtain(darkness);
   drawCampfireGlow(darkness);
   drawFlashlightGlow(darkness);
   drawDriftingFog(darkness);
+  drawWatchingEyes(darkness);
+  drawEdgeShadows(darkness);
   drawVignette(darkness);
   drawDamageFlash();
 }
@@ -1186,6 +1190,40 @@ function drawSkyTint(darkness) {
   tint.addColorStop(1, `rgba(2, 6, 9, ${0.12 + darkness * 0.66})`);
   ctx.fillStyle = tint;
   ctx.fillRect(0, 0, W, H);
+}
+
+function drawNightCurtain(darkness) {
+  if (darkness <= 0.02) return;
+  const px = player.x - camera.x;
+  const py = player.y - camera.y - 12;
+  const fireX = campfire.x - camera.x;
+  const fireY = campfire.y - camera.y - 18;
+  const angle = Math.atan2(player.dirY, player.dirX);
+  const beamRadius = 305;
+
+  ctx.save();
+  ctx.fillStyle = `rgba(0, 2, 6, ${darkness * (player.flashlight ? 0.47 : 0.64)})`;
+  ctx.beginPath();
+  ctx.rect(0, 0, W, H);
+
+  if (player.flashlight) {
+    ctx.moveTo(px, py);
+    ctx.arc(px, py, beamRadius, angle - 0.55, angle + 0.55);
+    ctx.closePath();
+    ctx.moveTo(px + 70, py);
+    ctx.arc(px, py, 70, 0, Math.PI * 2);
+    ctx.closePath();
+  }
+
+  if (fireX > -150 && fireY > -150 && fireX < W + 150 && fireY < H + 150) {
+    const safeRadius = 78 + darkness * 46;
+    ctx.moveTo(fireX + safeRadius, fireY);
+    ctx.arc(fireX, fireY, safeRadius, 0, Math.PI * 2);
+    ctx.closePath();
+  }
+
+  ctx.fill("evenodd");
+  ctx.restore();
 }
 
 function drawCampfireGlow(darkness) {
@@ -1211,7 +1249,7 @@ function drawFlashlightGlow(darkness) {
   const py = player.y - camera.y - 12;
   const angle = Math.atan2(player.dirY, player.dirX);
   const radius = 285;
-  const flicker = 0.96 + Math.sin(elapsed * 21) * 0.025;
+  const flicker = 0.91 + Math.sin(elapsed * 21) * 0.04 + Math.sin(elapsed * 7.7) * 0.025;
 
   ctx.save();
   ctx.globalCompositeOperation = "screen";
@@ -1241,14 +1279,14 @@ function drawFlashlightGlow(darkness) {
 }
 
 function drawDriftingFog(darkness) {
-  for (let index = 0; index < 9; index += 1) {
+  for (let index = 0; index < 12; index += 1) {
     const width = 160 + hash(index + 70) * 260;
     const height = 22 + hash(index + 90) * 40;
     const speed = 5 + hash(index + 110) * 9;
     const loopWidth = W + width * 2;
     const x = ((hash(index + 130) * loopWidth + elapsed * speed - camera.x * 0.025) % loopWidth) - width;
     const y = hash(index + 150) * H + Math.sin(elapsed * 0.16 + index) * 18;
-    const alpha = (0.026 + darkness * 0.035) * (0.55 + hash(index + 170));
+    const alpha = (0.025 + darkness * 0.075) * (0.55 + hash(index + 170));
     ctx.save();
     ctx.translate(x, y);
     ctx.scale(width * 0.5, height * 0.5);
@@ -1264,11 +1302,88 @@ function drawDriftingFog(darkness) {
   }
 }
 
+function drawWatchingEyes(darkness) {
+  if (darkness < 0.62) return;
+  const px = player.x - camera.x;
+  const py = player.y - camera.y - 12;
+  const flashlightAngle = Math.atan2(player.dirY, player.dirX);
+  const positions = [
+    { x: 0.08, y: 0.28, seed: 241 },
+    { x: 0.91, y: 0.38, seed: 257 },
+    { x: 0.14, y: 0.76, seed: 269 },
+    { x: 0.84, y: 0.78, seed: 283 }
+  ];
+
+  for (let index = 0; index < positions.length; index += 1) {
+    const position = positions[index];
+    const driftX = Math.sin(elapsed * 0.13 + position.seed) * 16;
+    const driftY = Math.cos(elapsed * 0.09 + position.seed) * 10;
+    const x = W * position.x + driftX;
+    const y = H * position.y + driftY;
+    const dx = x - px;
+    const dy = y - py;
+    const distance = Math.hypot(dx, dy);
+    const pulse = Math.max(0, Math.sin(elapsed * 0.58 + index * 1.91));
+    let alpha = darkness * (0.07 + Math.pow(pulse, 5) * 0.43);
+
+    if (player.flashlight && distance < 330) {
+      const eyeAngle = Math.atan2(dy, dx);
+      const angleDifference = Math.abs(Math.atan2(Math.sin(eyeAngle - flashlightAngle), Math.cos(eyeAngle - flashlightAngle)));
+      if (angleDifference < 0.57) alpha *= 0.08;
+    }
+    if (distance < 105) alpha = 0;
+
+    const eyeGap = 7 + Math.round(hash(position.seed) * 3);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.shadowColor = "#c62e35";
+    ctx.shadowBlur = 8;
+    ctx.fillStyle = "#d94a4d";
+    ctx.fillRect(Math.round(x - eyeGap), Math.round(y), 4, 2);
+    ctx.fillRect(Math.round(x + eyeGap - 4), Math.round(y), 4, 2);
+    ctx.restore();
+  }
+}
+
+function drawEdgeShadows(darkness) {
+  if (darkness < 0.35) return;
+  const sway = Math.sin(elapsed * 0.42) * 10;
+  ctx.save();
+  ctx.globalAlpha = darkness * 0.64;
+  ctx.strokeStyle = "#010405";
+  ctx.fillStyle = "#010405";
+  ctx.lineCap = "round";
+
+  ctx.lineWidth = 17;
+  ctx.beginPath();
+  ctx.moveTo(-18, H * 0.18);
+  ctx.quadraticCurveTo(W * 0.08 + sway, H * 0.22, W * 0.16, H * 0.34);
+  ctx.moveTo(W + 18, H * 0.1);
+  ctx.quadraticCurveTo(W * 0.89 - sway, H * 0.19, W * 0.84, H * 0.3);
+  ctx.moveTo(W + 14, H * 0.7);
+  ctx.quadraticCurveTo(W * 0.9 + sway * 0.5, H * 0.67, W * 0.86, H * 0.59);
+  ctx.stroke();
+
+  ctx.lineWidth = 7;
+  ctx.beginPath();
+  ctx.moveTo(W * 0.09, H * 0.25);
+  ctx.lineTo(W * 0.12 + sway * 0.3, H * 0.13);
+  ctx.moveTo(W * 0.09, H * 0.25);
+  ctx.lineTo(W * 0.2, H * 0.2);
+  ctx.moveTo(W * 0.91, H * 0.2);
+  ctx.lineTo(W * 0.82 - sway * 0.25, H * 0.11);
+  ctx.moveTo(W * 0.91, H * 0.2);
+  ctx.lineTo(W * 0.78, H * 0.25);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawVignette(darkness) {
+  const breathing = darkness * (0.02 + (Math.sin(elapsed * 0.72) + 1) * 0.018);
   const vignette = ctx.createRadialGradient(W / 2, H / 2, H * 0.16, W / 2, H / 2, W * 0.67);
   vignette.addColorStop(0, "rgba(1, 4, 6, 0)");
   vignette.addColorStop(0.63, `rgba(1, 4, 6, ${0.03 + darkness * 0.08})`);
-  vignette.addColorStop(1, `rgba(0, 2, 4, ${0.38 + darkness * 0.34})`);
+  vignette.addColorStop(1, `rgba(0, 2, 4, ${0.38 + darkness * 0.34 + breathing})`);
   ctx.fillStyle = vignette;
   ctx.fillRect(0, 0, W, H);
 }

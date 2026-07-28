@@ -50,10 +50,10 @@
           <span id="healthLabel">生命 100</span>
         </div>
         <div class="hud-row secondary">
-          <span id="resourceLabel">木材 12　石头 4　浆果 0</span>
+          <span id="resourceLabel">木材 0　石头 0　浆果 0</span>
           <span id="flashlightLabel">手电筒 开</span>
         </div>
-        <div class="hud-row secondary"><span id="buildingLabel">当前：空手</span><span>1-6 选择</span></div>
+        <div class="hud-row secondary"><span id="buildingLabel">当前：空手</span><span>1-9 快捷栏</span></div>
       </div>
       <button id="inventoryButton" class="inventory-button" aria-expanded="false" aria-controls="inventoryPanel">
         <span id="inventoryButtonLabel">背包</span> <span>[I]</span>
@@ -64,20 +64,20 @@
             <p>物品栏</p>
             <span>游戏已暂停</span>
           </div>
-          <span id="inventoryCapacity" class="inventory-capacity">2 / 12 格</span>
+          <span id="inventoryCapacity" class="inventory-capacity">0 / 12 格</span>
         </div>
         <div class="inventory-grid">
-          <div class="inventory-slot" title="建造时会自动使用木材">
+          <div id="inventoryWoodSlot" class="inventory-slot item-empty" title="木材">
             <span class="item-sprite item-wood" aria-hidden="true"></span>
-            <span id="inventoryWoodCount" class="inventory-count">12</span>
+            <span id="inventoryWoodCount" class="inventory-count">0</span>
             <span class="inventory-name">木材</span>
           </div>
-          <div class="inventory-slot" title="建造时会自动使用石头">
+          <div id="inventoryStoneSlot" class="inventory-slot item-empty" title="石头">
             <span class="item-sprite item-stone" aria-hidden="true"></span>
-            <span id="inventoryStoneCount" class="inventory-count">4</span>
+            <span id="inventoryStoneCount" class="inventory-count">0</span>
             <span class="inventory-name">石头</span>
           </div>
-          <button id="useBerryButton" class="inventory-slot usable-slot" title="点击食用，恢复 12 点生命">
+          <button id="useBerryButton" class="inventory-slot usable-slot item-empty" title="点击食用，恢复 12 点生命">
             <span class="item-sprite item-berry" aria-hidden="true"></span>
             <span id="inventoryBerryCount" class="inventory-count">0</span>
             <span class="inventory-name">浆果</span>
@@ -96,42 +96,42 @@
       </section>
       <div id="message" class="message" aria-live="polite"></div>
       <nav id="quickbar" class="quickbar" aria-label="快捷栏">
-        <button class="quick-slot" data-quick-slot="0" data-item-kind="building" title="选择木墙">
+        <button class="quick-slot quick-empty slot-empty" data-quick-slot="0" data-item-kind="empty" title="空快捷格">
           <span class="quick-key">1</span><span class="item-sprite quick-wall"></span><span class="quick-name">木墙</span>
         </button>
-        <button class="quick-slot" data-quick-slot="1" data-item-kind="building" title="选择木门">
+        <button class="quick-slot quick-empty slot-empty" data-quick-slot="1" data-item-kind="empty" title="空快捷格">
           <span class="quick-key">2</span><span class="item-sprite quick-door"></span><span class="quick-name">木门</span>
         </button>
-        <button class="quick-slot" data-quick-slot="2" data-item-kind="building" title="选择木地板">
+        <button class="quick-slot quick-empty slot-empty" data-quick-slot="2" data-item-kind="empty" title="空快捷格">
           <span class="quick-key">3</span><span class="item-sprite quick-floor"></span><span class="quick-name">地板</span>
         </button>
-        <button class="quick-slot" data-quick-slot="3" data-item-kind="building" title="选择储物箱">
+        <button class="quick-slot quick-empty slot-empty" data-quick-slot="3" data-item-kind="empty" title="空快捷格">
           <span class="quick-key">4</span><span class="item-sprite quick-chest"></span><span class="quick-name">箱子</span>
         </button>
-        <button class="quick-slot" data-quick-slot="4" data-item-kind="building" title="选择工作台">
+        <button class="quick-slot quick-empty slot-empty" data-quick-slot="4" data-item-kind="empty" title="空快捷格">
           <span class="quick-key">5</span><span class="item-sprite quick-workbench"></span><span class="quick-name">工作台</span>
         </button>
-        <button class="quick-slot" data-quick-slot="5" data-item-kind="building" title="选择陷阱">
+        <button class="quick-slot quick-empty slot-empty" data-quick-slot="5" data-item-kind="empty" title="空快捷格">
           <span class="quick-key">6</span><span class="item-sprite quick-trap"></span><span class="quick-name">陷阱</span>
         </button>
-        <button class="quick-slot" data-quick-slot="6" data-item-kind="food" title="快速食用浆果">
+        <button class="quick-slot quick-empty slot-empty" data-quick-slot="6" data-item-kind="empty" title="空快捷格">
           <span class="quick-key">7</span><span class="item-sprite item-berry"></span>
           <span id="quickBerryCount" class="quick-count">0</span><span class="quick-name">浆果</span>
         </button>
-        <button class="quick-slot quick-empty" data-quick-slot="7" data-item-kind="empty" title="空快捷格">
+        <button class="quick-slot quick-empty slot-empty" data-quick-slot="7" data-item-kind="empty" title="空快捷格">
           <span class="quick-key">8</span><span class="quick-name">空</span>
         </button>
-        <button class="quick-slot quick-empty" data-quick-slot="8" data-item-kind="empty" title="空快捷格">
+        <button class="quick-slot quick-empty slot-empty" data-quick-slot="8" data-item-kind="empty" title="空快捷格">
           <span class="quick-key">9</span><span class="quick-name">空</span>
         </button>
       </nav>
-      <div class="controls">WASD 移动　左键 武器攻击/非武器采集　右键建造　E 开门/篝火　1-6 建筑　7 浆果　Esc 空手　F 手电筒　I 背包</div>
+      <div class="controls">WASD 移动　左键 武器攻击/非武器采集　右键建造　E 开门/篝火　1-9 快捷栏　Esc 空手　F 手电筒　I 背包</div>
       <div id="gameOver" class="game-over hidden">
         <h2>你倒在了森林里</h2>
         <button id="restartButton" class="primary-button">重新开始</button>
       </div>
     </section>
   </main>
-  <script type="module" src="game.js?v=20260728-primary1"></script>
+  <script type="module" src="game.js?v=20260728-empty-start1"></script>
 </body>
 </html>

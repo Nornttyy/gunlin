@@ -39,6 +39,8 @@ const buildingLabel = document.getElementById("buildingLabel");
 const inventoryButton = document.getElementById("inventoryButton");
 const inventoryButtonLabel = document.getElementById("inventoryButtonLabel");
 const inventoryPanel = document.getElementById("inventoryPanel");
+const inventoryWoodSlot = document.getElementById("inventoryWoodSlot");
+const inventoryStoneSlot = document.getElementById("inventoryStoneSlot");
 const inventoryWoodCount = document.getElementById("inventoryWoodCount");
 const inventoryStoneCount = document.getElementById("inventoryStoneCount");
 const inventoryBerryCount = document.getElementById("inventoryBerryCount");
@@ -46,6 +48,7 @@ const inventoryCapacity = document.getElementById("inventoryCapacity");
 const useBerryButton = document.getElementById("useBerryButton");
 const quickSlots = [...document.querySelectorAll(".quick-slot")];
 const quickBerryCount = document.getElementById("quickBerryCount");
+const quickbarItems = Array(9).fill(null);
 
 const ASSET_VERSION = "20260728-assets2";
 const sprite = new Image();
@@ -113,8 +116,8 @@ const player = {
   radius: 10,
   speed: 132,
   health: 100,
-  wood: 12,
-  stone: 4,
+  wood: 0,
+  stone: 0,
   berry: 0,
   flashlight: true,
   classRow: 0,
@@ -291,7 +294,8 @@ function startGame() {
   spawnTimer = 4;
   selectedBuild = 0;
   selectedQuickSlot = -1;
-  Object.assign(player, { x: 330, y: 820, health: 100, wood: 12, stone: 4, berry: 0, flashlight: true, attackTimer: 0, attackCooldown: 0 });
+  quickbarItems.fill(null);
+  Object.assign(player, { x: 330, y: 820, health: 100, wood: 0, stone: 0, berry: 0, flashlight: true, attackTimer: 0, attackCooldown: 0 });
   setInventoryOpen(false);
   resetWorld();
   showMessage("白天开始：按 I 可以打开物品栏");
@@ -645,10 +649,10 @@ function buildSelected() {
   }
 }
 
-function selectBuild(index) {
+function selectBuild(index, quickSlotIndex = index) {
   if (index < 0 || index >= BUILD_TYPES.length) return;
   selectedBuild = index;
-  selectedQuickSlot = index;
+  selectedQuickSlot = quickSlotIndex;
   const selected = BUILD_TYPES[selectedBuild];
   showMessage(`选择建筑：${selected.label}`, 0.9);
   updateHud();
@@ -663,22 +667,29 @@ function selectEmptyHand() {
 // 快捷栏就像桌边最顺手的一排小格子，按数字或点击就能马上选中。
 function activateQuickSlot(index) {
   if (index < 0 || index >= quickSlots.length) return;
-  selectedQuickSlot = index;
-  if (index < BUILD_TYPES.length) {
-    selectBuild(index);
+  const item = quickbarItems[index];
+  if (!item) {
+    selectedQuickSlot = -1;
+    showMessage(`快捷格 ${index + 1} 是空的`, 1);
+    updateHud();
     return;
   }
-  if (index === 6) {
+  selectedQuickSlot = index;
+  if (item.kind === "building") {
+    selectBuild(item.buildIndex, index);
+    return;
+  }
+  if (item.kind === "food" && item.type === "berry") {
     useBerry();
   } else {
-    showMessage(`快捷格 ${index + 1} 还是空的`, 1);
+    showMessage(`拿起了${item.label || "物品"}`, 1);
   }
   updateHud();
 }
 
 function isWeaponEquipped() {
   if (selectedQuickSlot < 0 || selectedQuickSlot >= quickSlots.length) return false;
-  return quickSlots[selectedQuickSlot].dataset.itemKind === "weapon";
+  return quickbarItems[selectedQuickSlot]?.kind === "weapon";
 }
 
 function usePrimaryAction() {
@@ -835,24 +846,33 @@ function updateHud() {
   inventoryWoodCount.textContent = player.wood;
   inventoryStoneCount.textContent = player.stone;
   inventoryBerryCount.textContent = player.berry;
+  inventoryWoodSlot.classList.toggle("item-empty", player.wood <= 0);
+  inventoryStoneSlot.classList.toggle("item-empty", player.stone <= 0);
+  useBerryButton.classList.toggle("item-empty", player.berry <= 0);
   const occupiedSlots = [player.wood, player.stone, player.berry].filter((amount) => amount > 0).length;
   inventoryCapacity.textContent = `${occupiedSlots} / 12 格`;
   useBerryButton.classList.toggle("unavailable", player.berry <= 0);
   useBerryButton.setAttribute("aria-disabled", String(player.berry <= 0));
   quickBerryCount.textContent = player.berry;
   quickSlots.forEach((slot, index) => {
-    const selectedSlot = index === selectedQuickSlot;
+    const item = quickbarItems[index];
+    const selectedSlot = Boolean(item) && index === selectedQuickSlot;
     slot.classList.toggle("selected", selectedSlot);
+    slot.classList.toggle("slot-empty", !item);
+    slot.classList.toggle("quick-empty", !item);
+    slot.dataset.itemKind = item?.kind || "empty";
+    if (!item) slot.title = "空快捷格";
     slot.setAttribute("aria-pressed", String(selectedSlot));
   });
-  if (selectedQuickSlot >= 0 && selectedQuickSlot < BUILD_TYPES.length) {
+  const selectedItem = quickbarItems[selectedQuickSlot];
+  if (selectedItem?.kind === "building") {
     buildingLabel.textContent = `快捷 ${selectedQuickSlot + 1}：${selected.label}（木${selected.cost.wood} 石${selected.cost.stone}）`;
-  } else if (selectedQuickSlot === 6) {
+  } else if (selectedItem?.kind === "food" && selectedItem.type === "berry") {
     buildingLabel.textContent = `快捷 7：浆果（${player.berry}）`;
-  } else if (selectedQuickSlot < 0) {
-    buildingLabel.textContent = "当前：空手（按 1-6 选择建筑）";
+  } else if (selectedItem?.kind === "weapon") {
+    buildingLabel.textContent = `当前武器：${selectedItem.label || "武器"}`;
   } else {
-    buildingLabel.textContent = `快捷 ${selectedQuickSlot + 1}：空`;
+    buildingLabel.textContent = "当前：空手";
   }
 }
 
@@ -898,7 +918,7 @@ function isBuildMode() {
   return state === "game"
     && !inventoryOpen
     && selectedQuickSlot >= 0
-    && selectedQuickSlot < BUILD_TYPES.length;
+    && quickbarItems[selectedQuickSlot]?.kind === "building";
 }
 
 function drawBuildGrid() {

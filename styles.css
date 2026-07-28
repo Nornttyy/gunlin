@@ -315,6 +315,10 @@ button.inventory-slot { font: inherit; cursor: pointer; }
 .usable-slot:hover { border-color: #d0e8ad; background: #30493a; }
 .usable-slot.unavailable { opacity: .52; cursor: default; }
 .empty-slot { background: #111d19; }
+.inventory-slot.item-empty { background: #111d19; }
+.inventory-slot.item-empty > .item-sprite,
+.inventory-slot.item-empty > .inventory-count,
+.inventory-slot.item-empty > .inventory-name { display: none; }
 
 .item-sprite {
   display: block;
@@ -444,6 +448,31 @@ button.inventory-slot { font: inherit; cursor: pointer; }
 }
 
 .quick-empty { background: #101a16; }
+
+.quick-slot.slot-empty {
+  background: #101a16;
+  cursor: default;
+}
+
+.quick-slot.slot-empty:hover {
+  border-color: #4b6153;
+  background: #101a16;
+}
+
+.quick-slot.slot-empty .item-sprite,
+.quick-slot.slot-empty .quick-count,
+.quick-slot.slot-empty .quick-name { display: none; }
+
+.quick-slot.slot-empty::after {
+  content: "空";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 3px;
+  color: #65756b;
+  text-align: center;
+  font-size: 9px;
+}
 
 .controls {
   position: fixed;

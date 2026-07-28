@@ -1329,7 +1329,6 @@ function drawAtmosphere() {
   drawNightCurtain(darkness);
   drawCampfireGlow(darkness);
   drawFlashlightGlow(darkness);
-  drawDistantFigures(darkness);
   drawDriftingFog(darkness);
   drawWatchingEyes(darkness);
   drawAirborneSpecks(darkness);
@@ -1449,69 +1448,6 @@ function drawFlashlightGlow(darkness) {
   ctx.fillStyle = local;
   ctx.fillRect(px - 74, py - 74, 148, 148);
   ctx.restore();
-}
-
-function drawDistantFigures(darkness) {
-  const px = player.x - camera.x;
-  const py = player.y - camera.y - 12;
-  const flashlightAngle = Math.atan2(player.dirY, player.dirX);
-  const positions = [
-    { x: 0.045, y: 0.21, seed: 401 },
-    { x: 0.955, y: 0.3, seed: 419 },
-    { x: 0.08, y: 0.68, seed: 433 },
-    { x: 0.92, y: 0.73, seed: 449 },
-    { x: 0.28, y: 0.055, seed: 461 },
-    { x: 0.72, y: 0.94, seed: 479 }
-  ];
-
-  for (let index = 0; index < positions.length; index += 1) {
-    const position = positions[index];
-    const x = W * position.x + Math.sin(elapsed * 0.085 + position.seed) * 14;
-    const y = H * position.y + Math.cos(elapsed * 0.07 + position.seed) * 9;
-    const dx = x - px;
-    const dy = y - py;
-    const distance = Math.hypot(dx, dy);
-    const reveal = Math.max(0, Math.sin(elapsed * 0.23 + position.seed));
-    let alpha = (0.1 + darkness * 0.54) * (0.18 + Math.pow(reveal, 3) * 0.62);
-
-    if (player.flashlight && distance < 300) {
-      const figureAngle = Math.atan2(dy, dx);
-      const angleDifference = Math.abs(Math.atan2(
-        Math.sin(figureAngle - flashlightAngle),
-        Math.cos(figureAngle - flashlightAngle)
-      ));
-      if (angleDifference < 0.47) alpha *= 0.035;
-    }
-    if (distance < 115) alpha *= 0.12;
-
-    const scale = 0.76 + hash(position.seed) * 0.52;
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.scale(scale, scale);
-    ctx.globalAlpha = alpha;
-    ctx.shadowColor = darkness > 0.45 ? "#263a35" : "#000304";
-    ctx.shadowBlur = 19;
-    ctx.fillStyle = darkness > 0.45 ? "#07100f" : "#000304";
-    ctx.beginPath();
-    ctx.ellipse(0, -27, 7, 9, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(-7, -19);
-    ctx.quadraticCurveTo(-14, 6, -18, 32);
-    ctx.lineTo(17, 32);
-    ctx.quadraticCurveTo(13, 5, 7, -19);
-    ctx.closePath();
-    ctx.fill();
-    if (darkness > 0.58 && reveal > 0.52) {
-      ctx.globalAlpha = alpha * 0.42;
-      ctx.shadowColor = "#879b8f";
-      ctx.shadowBlur = 5;
-      ctx.fillStyle = "#a4b2a8";
-      ctx.fillRect(-4, -29, 2, 1);
-      ctx.fillRect(2, -29, 2, 1);
-    }
-    ctx.restore();
-  }
 }
 
 function drawDriftingFog(darkness) {

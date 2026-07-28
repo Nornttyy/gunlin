@@ -603,6 +603,22 @@ function attack() {
   showMessage(hit ? "击中了怪物" : "攻击落空", 0.7);
 }
 
+// 把鼠标位置换算成游戏世界方向，让攻击和建筑都朝向点击处。
+function aimAtPointer(event) {
+  const rectangle = canvas.getBoundingClientRect();
+  if (rectangle.width <= 0 || rectangle.height <= 0) return;
+  const canvasX = (event.clientX - rectangle.left) * (W / rectangle.width);
+  const canvasY = (event.clientY - rectangle.top) * (H / rectangle.height);
+  const worldX = canvasX + camera.x;
+  const worldY = canvasY + camera.y;
+  const deltaX = worldX - player.x;
+  const deltaY = worldY - player.y;
+  const distance = Math.hypot(deltaX, deltaY);
+  if (distance < 1) return;
+  player.dirX = deltaX / distance;
+  player.dirY = deltaY / distance;
+}
+
 function spawnMonster() {
   const side = Math.floor(Math.random() * 4);
   const x = side === 0 ? 100 : side === 1 ? WORLD.width - 100 : 160 + Math.random() * (WORLD.width - 320);
@@ -947,11 +963,16 @@ function drawPlayer() {
     ctx.fillRect(player.x - 10, player.y - 24, 20, 24);
   }
   if (player.attackTimer > 0) {
+    const attackAngle = Math.atan2(player.dirY, player.dirX);
+    ctx.save();
+    ctx.translate(player.x, player.y);
+    ctx.rotate(attackAngle);
     ctx.strokeStyle = "#f2d596";
     ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.arc(player.x + player.dirX * 20, player.y + player.dirY * 20, 23, -0.8, 0.8);
+    ctx.arc(20, 0, 23, -0.8, 0.8);
     ctx.stroke();
+    ctx.restore();
   }
 }
 
@@ -978,7 +999,7 @@ function loop(now) {
 }
 
 window.addEventListener("keydown", (event) => {
-  if (["Space", "Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.code)) event.preventDefault();
+  if (["Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.code)) event.preventDefault();
   if (state !== "game") return;
   if (event.code === "KeyI" || event.code === "Tab") {
     if (!event.repeat) setInventoryOpen(!inventoryOpen);
@@ -990,17 +1011,26 @@ window.addEventListener("keydown", (event) => {
     activateQuickSlot(Number(event.code.slice(5)) - 1);
     return;
   }
-  // E 等一次性操作不能因为按键自动重复而反复开关或重复建造。
-  if (event.repeat && ["KeyE", "KeyB", "Space", "KeyF"].includes(event.code)) return;
+  // E 等一次性操作不能因为按键自动重复而反复触发。
+  if (event.repeat && ["KeyE", "KeyF"].includes(event.code)) return;
   if (event.code === "KeyE") interact();
-  if (event.code === "KeyB") buildSelected();
-  if (event.code === "Space") attack();
   if (event.code === "KeyF") {
     player.flashlight = !player.flashlight;
     showMessage(player.flashlight ? "打开手电筒" : "关闭手电筒", 1);
   }
 });
 
+canvas.addEventListener("pointerdown", (event) => {
+  if (state !== "game" || inventoryOpen) return;
+  if (event.button !== 0 && event.button !== 2) return;
+  event.preventDefault();
+  aimAtPointer(event);
+  if (event.button === 0) attack();
+  if (event.button === 2) buildSelected();
+});
+
+// 在游戏画布上按右键时只负责建造，不弹出浏览器菜单。
+canvas.addEventListener("contextmenu", (event) => event.preventDefault());
 window.addEventListener("keyup", (event) => keys.delete(event.code));
 window.addEventListener("blur", () => keys.clear());
 startButton.addEventListener("click", startGame);

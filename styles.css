@@ -150,6 +150,7 @@ h1 {
   image-rendering: pixelated;
   image-rendering: crisp-edges;
   background: #284535;
+  cursor: crosshair;
 }
 
 .hud {

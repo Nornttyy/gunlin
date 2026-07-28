@@ -9,25 +9,25 @@
   <link rel="preload" href="assets/tree-sprites.png?v=20260728-tree-redraw1" as="image" />
   <link rel="preload" href="assets/forest-assets.png?v=20260728-assets2" as="image" />
   <link rel="preload" href="assets/ark-pixel-12px-zh_cn.woff2?v=20260728-assets2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=20260728-classselect1" />
+  <link rel="stylesheet" href="styles.css?v=20260728-horrorui1" />
 </head>
 <body>
   <main id="app">
     <section id="titleScreen" class="screen title-screen">
       <div class="title-card">
-        <p class="eyebrow">FOREST SURVIVAL HORROR</p>
+        <p class="eyebrow">FOREST RECORD // 07</p>
         <h1>归林</h1>
-        <p class="subtitle">白天收集，夜晚活下去。</p>
+        <p class="subtitle">白天收集。夜晚，别让它们看见你。</p>
         <div id="loadingStatus" class="loading-status" aria-live="polite">
           <div class="loading-copy">
-            <span id="loadingText">正在准备像素素材…</span>
+            <span id="loadingText">正在接收森林信号…</span>
             <span id="loadingCount">0 / 4</span>
           </div>
           <div class="loading-track"><span id="loadingProgress"></span></div>
         </div>
         <button id="startButton" class="primary-button" disabled>素材加载中…</button>
         <button id="retryAssetsButton" class="retry-assets-button hidden">重新加载素材</button>
-        <p class="title-tip">雾会记住每一个迷路的人</p>
+        <p class="title-tip">警告：不要回应雾里的声音</p>
       </div>
     </section>
 
@@ -35,9 +35,9 @@
       <canvas id="gameCanvas" width="960" height="540" aria-label="归林游戏画面"></canvas>
       <section id="classSelectPanel" class="class-select-panel hidden" role="dialog" aria-modal="true" aria-labelledby="classSelectTitle">
         <div class="class-select-card">
-          <p class="eyebrow">CHOOSE YOUR SURVIVOR</p>
+          <p class="eyebrow">IDENTITY REQUIRED</p>
           <h2 id="classSelectTitle">选择职业</h2>
-          <p class="class-select-note">选择后才会开始计时，本局不能更换</p>
+          <p class="class-select-note">森林会记住你的选择 · 本局无法更换</p>
           <div class="class-buttons">
             <button type="button" class="class-button" data-class="0">枪手</button>
             <button type="button" class="class-button" data-class="1">护士</button>
@@ -67,8 +67,8 @@
       <section id="inventoryPanel" class="inventory-panel hidden" aria-label="玩家物品栏">
         <div class="inventory-header">
           <div>
-            <p>物品栏</p>
-            <span>游戏已暂停</span>
+            <p>随身物品</p>
+            <span>时间已暂停</span>
           </div>
           <span id="inventoryCapacity" class="inventory-capacity">0 / 12 格</span>
         </div>
@@ -119,9 +119,10 @@
           <span class="quick-key">9</span><span class="item-sprite"></span><span class="quick-name">空</span>
         </button>
       </nav>
-      <div class="controls">WASD 移动　左键 武器攻击/非武器采集　右键建造　E 开门/篝火　1-9 快捷栏　Esc 空手　F 手电筒　I 背包</div>
+      <div class="controls">WASD 移动　/　左键 攻击或采集　/　右键 建造　/　E 互动　/　F 手电筒　/　I 背包</div>
       <div id="gameOver" class="game-over hidden">
         <h2>你倒在了森林里</h2>
+        <p>雾正在覆盖你留下的脚印</p>
         <button id="restartButton" class="primary-button">重新开始</button>
       </div>
     </section>

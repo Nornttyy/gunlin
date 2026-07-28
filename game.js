@@ -1209,9 +1209,9 @@ function drawAtmosphere() {
 
 function drawSkyTint(darkness) {
   const tint = ctx.createLinearGradient(0, 0, 0, H);
-  tint.addColorStop(0, `rgba(5, 11, 19, ${0.08 + darkness * 0.64})`);
-  tint.addColorStop(0.62, `rgba(8, 14, 18, ${0.04 + darkness * 0.52})`);
-  tint.addColorStop(1, `rgba(2, 6, 9, ${0.12 + darkness * 0.66})`);
+  tint.addColorStop(0, `rgba(2, 6, 12, ${0.08 + darkness * 0.7})`);
+  tint.addColorStop(0.62, `rgba(3, 7, 10, ${0.04 + darkness * 0.64})`);
+  tint.addColorStop(1, `rgba(0, 3, 6, ${0.12 + darkness * 0.72})`);
   ctx.fillStyle = tint;
   ctx.fillRect(0, 0, W, H);
 }
@@ -1223,24 +1223,24 @@ function drawNightCurtain(darkness) {
   const fireX = campfire.x - camera.x;
   const fireY = campfire.y - camera.y - 18;
   const angle = Math.atan2(player.dirY, player.dirX);
-  const beamRadius = 305;
+  const beamRadius = 285;
 
   ctx.save();
-  ctx.fillStyle = `rgba(0, 2, 6, ${darkness * (player.flashlight ? 0.47 : 0.64)})`;
+  ctx.fillStyle = `rgba(0, 1, 3, ${darkness * (player.flashlight ? 0.66 : 0.82)})`;
   ctx.beginPath();
   ctx.rect(0, 0, W, H);
 
   if (player.flashlight) {
     ctx.moveTo(px, py);
-    ctx.arc(px, py, beamRadius, angle - 0.55, angle + 0.55);
+    ctx.arc(px, py, beamRadius, angle - 0.5, angle + 0.5);
     ctx.closePath();
-    ctx.moveTo(px + 70, py);
-    ctx.arc(px, py, 70, 0, Math.PI * 2);
+    ctx.moveTo(px + 58, py);
+    ctx.arc(px, py, 58, 0, Math.PI * 2);
     ctx.closePath();
   }
 
   if (fireX > -150 && fireY > -150 && fireX < W + 150 && fireY < H + 150) {
-    const safeRadius = 78 + darkness * 46;
+    const safeRadius = 68 + darkness * 32;
     ctx.moveTo(fireX + safeRadius, fireY);
     ctx.arc(fireX, fireY, safeRadius, 0, Math.PI * 2);
     ctx.closePath();
@@ -1285,15 +1285,15 @@ function drawFlashlightGlow(darkness) {
   ctx.closePath();
   ctx.clip();
   const beam = ctx.createRadialGradient(0, 0, 14, 0, 0, radius);
-  beam.addColorStop(0, `rgba(229, 240, 195, ${(0.16 + darkness * 0.18) * flicker})`);
-  beam.addColorStop(0.5, `rgba(189, 213, 172, ${(0.09 + darkness * 0.11) * flicker})`);
+  beam.addColorStop(0, `rgba(229, 240, 195, ${(0.14 + darkness * 0.14) * flicker})`);
+  beam.addColorStop(0.5, `rgba(189, 213, 172, ${(0.08 + darkness * 0.08) * flicker})`);
   beam.addColorStop(1, "rgba(150, 183, 150, 0)");
   ctx.fillStyle = beam;
   ctx.fillRect(0, -radius, radius, radius * 2);
   ctx.restore();
 
   const local = ctx.createRadialGradient(px, py, 10, px, py, 74);
-  local.addColorStop(0, `rgba(223, 236, 192, ${0.08 + darkness * 0.13})`);
+  local.addColorStop(0, `rgba(223, 236, 192, ${0.07 + darkness * 0.1})`);
   local.addColorStop(1, "rgba(170, 201, 160, 0)");
   ctx.save();
   ctx.globalCompositeOperation = "screen";

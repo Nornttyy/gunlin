@@ -453,37 +453,49 @@ function interact() {
     showMessage(nearbyDoor.open ? "木门打开了" : "木门关上了", 1.1);
     return;
   }
-  let closest = null;
-  let distance = 48;
+  if (Math.hypot(player.x - campfire.x, player.y - campfire.y) < 72) {
+    player.health = Math.min(100, player.health + 8);
+    showMessage("篝火让你平静了一点");
+  } else {
+    showMessage("附近没有可以互动的东西", 1.2);
+  }
+}
+
+function collectResource() {
+  let target = null;
+  let bestScore = Infinity;
+  const gatherDistance = 68;
   for (const resource of resources) {
-    const current = Math.hypot(player.x - resource.x, player.y - resource.y);
-    if (current < distance) {
-      distance = current;
-      closest = resource;
+    const dx = resource.x - player.x;
+    const dy = resource.y - player.y;
+    const distance = Math.hypot(dx, dy);
+    if (distance > gatherDistance) continue;
+    const facing = (dx * player.dirX + dy * player.dirY) / (distance || 1);
+    if (distance > 24 && facing < 0.18) continue;
+    const score = distance + (1 - facing) * 28;
+    if (score < bestScore) {
+      bestScore = score;
+      target = resource;
     }
   }
-  if (!closest) {
-    if (Math.hypot(player.x - campfire.x, player.y - campfire.y) < 72) {
-      player.health = Math.min(100, player.health + 8);
-      showMessage("篝火让你平静了一点");
-    } else {
-      showMessage("附近没有可以互动的东西", 1.2);
-    }
+  if (!target) {
+    showMessage("这个方向没有可以采集的资源", 1);
     return;
   }
 
-  const index = resources.indexOf(closest);
+  const index = resources.indexOf(target);
   resources.splice(index, 1);
-  if (closest.type === "tree") {
+  if (target.type === "tree") {
     player.wood += 3;
     showMessage("获得木材 ×3");
-  } else if (closest.type === "rock") {
+  } else if (target.type === "rock") {
     player.stone += 2;
     showMessage("获得石头 ×2");
   } else {
     player.berry += 1;
     showMessage("浆果已放进物品栏");
   }
+  updateHud();
 }
 
 // 背包打开时会暂停游戏，就像先把桌面上的玩具按下暂停键再整理盒子。
@@ -662,6 +674,19 @@ function activateQuickSlot(index) {
     showMessage(`快捷格 ${index + 1} 还是空的`, 1);
   }
   updateHud();
+}
+
+function isWeaponEquipped() {
+  if (selectedQuickSlot < 0 || selectedQuickSlot >= quickSlots.length) return false;
+  return quickSlots[selectedQuickSlot].dataset.itemKind === "weapon";
+}
+
+function usePrimaryAction() {
+  if (isWeaponEquipped()) {
+    attack();
+  } else {
+    collectResource();
+  }
 }
 
 function attack() {
@@ -1463,7 +1488,7 @@ canvas.addEventListener("pointerdown", (event) => {
   if (event.button !== 0 && event.button !== 2) return;
   event.preventDefault();
   aimAtPointer(event);
-  if (event.button === 0) attack();
+  if (event.button === 0) usePrimaryAction();
   if (event.button === 2) buildSelected();
 });
 

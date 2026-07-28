@@ -96,42 +96,42 @@
       </section>
       <div id="message" class="message" aria-live="polite"></div>
       <nav id="quickbar" class="quickbar" aria-label="快捷栏">
-        <button class="quick-slot" data-quick-slot="0" title="选择木墙">
+        <button class="quick-slot" data-quick-slot="0" data-item-kind="building" title="选择木墙">
           <span class="quick-key">1</span><span class="item-sprite quick-wall"></span><span class="quick-name">木墙</span>
         </button>
-        <button class="quick-slot" data-quick-slot="1" title="选择木门">
+        <button class="quick-slot" data-quick-slot="1" data-item-kind="building" title="选择木门">
           <span class="quick-key">2</span><span class="item-sprite quick-door"></span><span class="quick-name">木门</span>
         </button>
-        <button class="quick-slot" data-quick-slot="2" title="选择木地板">
+        <button class="quick-slot" data-quick-slot="2" data-item-kind="building" title="选择木地板">
           <span class="quick-key">3</span><span class="item-sprite quick-floor"></span><span class="quick-name">地板</span>
         </button>
-        <button class="quick-slot" data-quick-slot="3" title="选择储物箱">
+        <button class="quick-slot" data-quick-slot="3" data-item-kind="building" title="选择储物箱">
           <span class="quick-key">4</span><span class="item-sprite quick-chest"></span><span class="quick-name">箱子</span>
         </button>
-        <button class="quick-slot" data-quick-slot="4" title="选择工作台">
+        <button class="quick-slot" data-quick-slot="4" data-item-kind="building" title="选择工作台">
           <span class="quick-key">5</span><span class="item-sprite quick-workbench"></span><span class="quick-name">工作台</span>
         </button>
-        <button class="quick-slot" data-quick-slot="5" title="选择陷阱">
+        <button class="quick-slot" data-quick-slot="5" data-item-kind="building" title="选择陷阱">
           <span class="quick-key">6</span><span class="item-sprite quick-trap"></span><span class="quick-name">陷阱</span>
         </button>
-        <button class="quick-slot" data-quick-slot="6" title="快速食用浆果">
+        <button class="quick-slot" data-quick-slot="6" data-item-kind="food" title="快速食用浆果">
           <span class="quick-key">7</span><span class="item-sprite item-berry"></span>
           <span id="quickBerryCount" class="quick-count">0</span><span class="quick-name">浆果</span>
         </button>
-        <button class="quick-slot quick-empty" data-quick-slot="7" title="空快捷格">
+        <button class="quick-slot quick-empty" data-quick-slot="7" data-item-kind="empty" title="空快捷格">
           <span class="quick-key">8</span><span class="quick-name">空</span>
         </button>
-        <button class="quick-slot quick-empty" data-quick-slot="8" title="空快捷格">
+        <button class="quick-slot quick-empty" data-quick-slot="8" data-item-kind="empty" title="空快捷格">
           <span class="quick-key">9</span><span class="quick-name">空</span>
         </button>
       </nav>
-      <div class="controls">WASD 移动　左键攻击　右键建造　E 互动　1-6 建筑　Esc 空手　7 浆果　F 手电筒　I 背包</div>
+      <div class="controls">WASD 移动　左键 武器攻击/非武器采集　右键建造　E 开门/篝火　1-6 建筑　7 浆果　Esc 空手　F 手电筒　I 背包</div>
       <div id="gameOver" class="game-over hidden">
         <h2>你倒在了森林里</h2>
         <button id="restartButton" class="primary-button">重新开始</button>
       </div>
     </section>
   </main>
-  <script type="module" src="game.js?v=20260728-nightdark1"></script>
+  <script type="module" src="game.js?v=20260728-primary1"></script>
 </body>
 </html>

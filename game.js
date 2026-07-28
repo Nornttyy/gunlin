@@ -44,6 +44,8 @@ const messageElement = document.getElementById("message");
 const classButtons = [...document.querySelectorAll(".class-button")];
 const classSelectPanel = document.getElementById("classSelectPanel");
 const classLabel = document.getElementById("classLabel");
+const phaseProgress = document.getElementById("phaseProgress");
+const healthBar = document.getElementById("healthBar");
 const phaseLabel = document.getElementById("phaseLabel");
 const dayLabel = document.getElementById("dayLabel");
 const healthLabel = document.getElementById("healthLabel");
@@ -1049,8 +1051,15 @@ function updateHud() {
   }
   dayLabel.textContent = `第 ${dayNumber} 天`;
   healthLabel.textContent = `生命 ${Math.max(0, Math.round(player.health))}`;
+  if (phaseProgress) {
+    phaseProgress.style.width = `${Math.round(currentPhaseProgress() * 100)}%`;
+  }
+  if (healthBar) {
+    healthBar.style.width = `${Math.max(0, Math.min(100, player.health))}%`;
+    healthBar.classList.toggle("danger", player.health <= 30);
+  }
   if (classLabel) {
-    classLabel.textContent = `职业 ${selectedClass >= 0 ? CLASS_NAMES[selectedClass] : "未选择"}`;
+    classLabel.textContent = selectedClass >= 0 ? CLASS_NAMES[selectedClass] : "未选择";
   }
   healthLabel.classList.toggle("danger", player.health <= 30);
   resourceLabel.textContent = `木材 ${player.wood}　石头 ${player.stone}　浆果 ${player.berry}`;

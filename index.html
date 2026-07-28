@@ -9,7 +9,7 @@
   <link rel="preload" href="assets/tree-sprites.png?v=20260728-tree-redraw1" as="image" />
   <link rel="preload" href="assets/forest-assets.png?v=20260728-assets2" as="image" />
   <link rel="preload" href="assets/ark-pixel-12px-zh_cn.woff2?v=20260728-assets2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=20260728-horrorui1" />
+  <link rel="stylesheet" href="styles.css?v=20260728-horrorui2" />
 </head>
 <body>
   <main id="app">
@@ -39,23 +39,28 @@
           <h2 id="classSelectTitle">选择职业</h2>
           <p class="class-select-note">森林会记住你的选择 · 本局无法更换</p>
           <div class="class-buttons">
-            <button type="button" class="class-button" data-class="0">枪手</button>
-            <button type="button" class="class-button" data-class="1">护士</button>
-            <button type="button" class="class-button" data-class="2">伐木工</button>
-            <button type="button" class="class-button" data-class="3">守望者</button>
-            <button type="button" class="class-button" data-class="4">棒球女</button>
-            <button type="button" class="class-button" data-class="5">科学家</button>
+            <button type="button" class="class-button" data-class="0"><span class="class-portrait" aria-hidden="true"></span><span>枪手</span></button>
+            <button type="button" class="class-button" data-class="1"><span class="class-portrait" aria-hidden="true"></span><span>护士</span></button>
+            <button type="button" class="class-button" data-class="2"><span class="class-portrait" aria-hidden="true"></span><span>伐木工</span></button>
+            <button type="button" class="class-button" data-class="3"><span class="class-portrait" aria-hidden="true"></span><span>守望者</span></button>
+            <button type="button" class="class-button" data-class="4"><span class="class-portrait" aria-hidden="true"></span><span>棒球女</span></button>
+            <button type="button" class="class-button" data-class="5"><span class="class-portrait" aria-hidden="true"></span><span>科学家</span></button>
           </div>
         </div>
       </section>
       <div class="hud">
-        <div class="hud-row">
-          <span id="phaseLabel">白天</span>
-          <span id="dayLabel">第 1 天</span>
-          <span id="healthLabel">生命 100</span>
-          <span id="classLabel">职业 未选择</span>
+        <div class="hud-stamp">REC // FOREST SIGNAL</div>
+        <div class="hud-primary">
+          <div class="hud-cell"><small>时段</small><span id="phaseLabel">白天</span></div>
+          <div class="hud-cell"><small>记录</small><span id="dayLabel">第 1 天</span></div>
+          <div class="hud-cell role-cell"><small>身份</small><span id="classLabel">未选择</span></div>
         </div>
-        <div class="hud-row secondary">
+        <div class="phase-track" aria-hidden="true"><span id="phaseProgress"></span></div>
+        <div class="vital-row">
+          <span id="healthLabel">生命 100</span>
+          <span class="vital-track" aria-hidden="true"><span id="healthBar"></span></span>
+        </div>
+        <div class="held-row">
           <span id="buildingLabel">当前：空手</span>
           <span id="flashlightLabel">手电筒 开</span>
         </div>
@@ -127,6 +132,6 @@
       </div>
     </section>
   </main>
-  <script type="module" src="game.js?v=20260728-classselect1"></script>
+  <script type="module" src="game.js?v=20260728-horrorui2"></script>
 </body>
 </html>

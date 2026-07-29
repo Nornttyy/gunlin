@@ -46,6 +46,8 @@ const SOLID_BUILDING_COLLIDER = {
 const titleScreen = document.getElementById("titleScreen");
 const gameScreen = document.getElementById("gameScreen");
 const startButton = document.getElementById("startButton");
+const continueButton = document.getElementById("continueButton");
+const titleSettingsButton = document.getElementById("titleSettingsButton");
 const loadingStatus = document.getElementById("loadingStatus");
 const loadingText = document.getElementById("loadingText");
 const loadingCount = document.getElementById("loadingCount");
@@ -56,7 +58,6 @@ const gameOverPanel = document.getElementById("gameOver");
 const mimicJumpscare = document.getElementById("mimicJumpscare");
 const audioButton = document.getElementById("audioButton");
 const audioButtonLabel = document.getElementById("audioButtonLabel");
-const settingsButton = document.getElementById("settingsButton");
 const settingsPanel = document.getElementById("settingsPanel");
 const settingsCloseButton = document.getElementById("settingsCloseButton");
 const volumeSetting = document.getElementById("volumeSetting");
@@ -69,6 +70,12 @@ const screenShakeSetting = document.getElementById("screenShakeSetting");
 const jumpscareSetting = document.getElementById("jumpscareSetting");
 const fullscreenButton = document.getElementById("fullscreenButton");
 const resetSettingsButton = document.getElementById("resetSettingsButton");
+const pausePanel = document.getElementById("pausePanel");
+const resumeButton = document.getElementById("resumeButton");
+const saveButton = document.getElementById("saveButton");
+const pauseSettingsButton = document.getElementById("pauseSettingsButton");
+const exitToTitleButton = document.getElementById("exitToTitleButton");
+const saveStatus = document.getElementById("saveStatus");
 const messageElement = document.getElementById("message");
 const classButtons = [...document.querySelectorAll(".class-button")];
 const classSelectPanel = document.getElementById("classSelectPanel");
@@ -184,6 +191,9 @@ let selectedClass = -1;
 let classSelectionOpen = false;
 let inventoryOpen = false;
 let settingsOpen = false;
+let pauseOpen = false;
+let settingsReturnTarget = "title";
+let autosaveTimer = 20;
 let draggedInventorySlot = -1;
 let jumpscareSequence = 0;
 let audioContext = null;
@@ -404,6 +414,95 @@ async function toggleFullscreen() {
   } catch {
     showMessage("浏览器没有允许全屏", 1.1);
   }
+}
+
+function readSavedGame() {
+  try {
+    const raw = window.localStorage?.getItem("guilin-save-v1");
+    if (!raw) return null;
+    const saved = JSON.parse(raw);
+    if (saved?.version !== 1 || !saved.player || !Number.isFinite(saved.elapsed)) return null;
+    return saved;
+  } catch {
+    return null;
+  }
+}
+
+function updateContinueButton() {
+  if (!continueButton) return;
+  const saved = readSavedGame();
+  continueButton.disabled = !assetsReady || !saved;
+  continueButton.textContent = saved
+    ? `继续游戏 · 第 ${Math.max(1, saved.dayNumber || 1)} 天`
+    : "继续游戏 · 暂无存档";
+}
+
+function saveGame(announce = true) {
+  if (state !== "game" || selectedClass < 0 || classSelectionOpen) return false;
+  const saveData = {
+    version: 1,
+    savedAt: Date.now(),
+    elapsed,
+    dayNumber,
+    wasNight,
+    spawnTimer,
+    selectedBuild,
+    selectedQuickSlot,
+    selectedClass,
+    player: {
+      x: player.x,
+      y: player.y,
+      health: player.health,
+      wood: player.wood,
+      stone: player.stone,
+      berry: player.berry,
+      flashlight: player.flashlight,
+      classRow: player.classRow,
+      dirX: player.dirX,
+      dirY: player.dirY
+    },
+    inventoryItems,
+    quickbarItems,
+    craftedCounts,
+    harvestedResourceKeys: [...harvestedResourceKeys],
+    monsters,
+    barricades,
+    doors,
+    buildings
+  };
+  try {
+    window.localStorage?.setItem("guilin-save-v1", JSON.stringify(saveData));
+    autosaveTimer = 20;
+    updateContinueButton();
+    if (announce) {
+      if (saveStatus) saveStatus.textContent = "存档完成";
+      showMessage("游戏已保存", 1);
+    }
+    return true;
+  } catch {
+    if (announce) {
+      if (saveStatus) saveStatus.textContent = "浏览器无法保存存档";
+      showMessage("存档失败", 1);
+    }
+    return false;
+  }
+}
+
+function restoreList(target, savedList) {
+  target.length = 0;
+  if (Array.isArray(savedList)) target.push(...savedList);
+}
+
+function restoreFixedList(target, savedList) {
+  target.fill(null);
+  if (!Array.isArray(savedList)) return;
+  for (let index = 0; index < target.length && index < savedList.length; index += 1) {
+    target[index] = savedList[index];
+  }
+}
+
+function nextEntityId(list) {
+  return list.reduce((highest, item) => Math.max(highest, Number(item?.id) || 0), -1) + 1;
 }
 
 function audioPanForWorldX(worldX) {
@@ -657,6 +756,7 @@ async function loadGameAssets() {
   assetsReady = false;
   startButton.disabled = true;
   startButton.textContent = "素材加载中…";
+  if (continueButton) continueButton.disabled = true;
   retryAssetsButton.classList.add("hidden");
   loadingStatus.classList.remove("ready", "failed");
   showLoadingProgress(0, 5, "正在准备像素素材…");
@@ -683,7 +783,8 @@ async function loadGameAssets() {
     loadingStatus.classList.add("ready");
     showLoadingProgress(jobs.length, jobs.length, "素材准备完成");
     startButton.disabled = false;
-    startButton.textContent = "进入森林";
+    startButton.textContent = "新游戏";
+    updateContinueButton();
     return;
   }
 
@@ -691,6 +792,7 @@ async function loadGameAssets() {
   loadingText.textContent = `${failed.length} 个素材加载失败`;
   startButton.textContent = "素材未准备完成";
   retryAssetsButton.classList.remove("hidden");
+  updateContinueButton();
 }
 
 function resetWorld() {
@@ -725,6 +827,7 @@ function startGame() {
   dayNumber = 1;
   wasNight = false;
   spawnTimer = 4;
+  autosaveTimer = 20;
   selectedBuild = 0;
   selectedQuickSlot = -1;
   selectedClass = -1;
@@ -753,10 +856,10 @@ function startGame() {
   });
   camera.x = Math.max(0, Math.min(WORLD.width - W, player.x - W / 2));
   camera.y = Math.max(0, Math.min(WORLD.height - H, player.y - H / 2));
+  setPauseOpen(false);
   setSettingsOpen(false);
   setInventoryOpen(false);
   inventoryButton.disabled = true;
-  if (settingsButton) settingsButton.disabled = true;
   classButtons.forEach((button) => button.classList.remove("selected"));
   classSelectPanel.classList.remove("hidden");
   resetWorld();
@@ -766,10 +869,134 @@ function startGame() {
   requestAnimationFrame(loop);
 }
 
+function continueGame() {
+  if (!assetsReady) {
+    loadGameAssets();
+    return;
+  }
+  const saved = readSavedGame();
+  if (!saved) {
+    updateContinueButton();
+    return;
+  }
+
+  state = "game";
+  ensureAudio();
+  updateAudioButton();
+  titleScreen.classList.add("hidden");
+  gameScreen.classList.remove("hidden");
+  gameOverPanel.classList.add("hidden");
+  classSelectPanel.classList.add("hidden");
+  classSelectionOpen = false;
+  inventoryOpen = false;
+  settingsOpen = false;
+  pauseOpen = false;
+  inventoryWorkspace?.classList.add("hidden");
+  inventoryPanel.classList.add("hidden");
+  settingsPanel?.classList.add("hidden");
+  pausePanel?.classList.add("hidden");
+  inventoryButton.disabled = false;
+  inventoryButton.classList.remove("active");
+  inventoryButton.setAttribute("aria-expanded", "false");
+  inventoryButtonLabel.textContent = "背包";
+
+  elapsed = Math.max(0, Number(saved.elapsed) || 0);
+  dayNumber = Math.floor(elapsed / CYCLE_LENGTH) + 1;
+  wasNight = Boolean(saved.wasNight);
+  spawnTimer = Number.isFinite(saved.spawnTimer) ? saved.spawnTimer : 4;
+  autosaveTimer = 20;
+  selectedBuild = Math.max(0, Math.min(
+    BUILD_TYPES.length - 1,
+    Number.isInteger(saved.selectedBuild) ? saved.selectedBuild : 0
+  ));
+  selectedQuickSlot = Math.max(-1, Math.min(
+    quickbarItems.length - 1,
+    Number.isInteger(saved.selectedQuickSlot) ? saved.selectedQuickSlot : -1
+  ));
+  selectedClass = Math.max(0, Math.min(CLASS_NAMES.length - 1, Number(saved.selectedClass) || 0));
+
+  Object.assign(player, {
+    x: Number.isFinite(saved.player.x) ? saved.player.x : PLAYER_START.x,
+    y: Number.isFinite(saved.player.y) ? saved.player.y : PLAYER_START.y,
+    health: Math.max(1, Number(saved.player.health) || 100),
+    wood: Math.max(0, Number(saved.player.wood) || 0),
+    stone: Math.max(0, Number(saved.player.stone) || 0),
+    berry: Math.max(0, Number(saved.player.berry) || 0),
+    flashlight: saved.player.flashlight !== false,
+    classRow: selectedClass,
+    moving: false,
+    dirX: Number.isFinite(saved.player.dirX) ? saved.player.dirX : 0,
+    dirY: Number.isFinite(saved.player.dirY) ? saved.player.dirY : -1,
+    animation: 0,
+    attackTimer: 0,
+    attackCooldown: 0,
+    gatherCooldown: 0,
+    hurtTimer: 0
+  });
+
+  restoreFixedList(inventoryItems, saved.inventoryItems);
+  restoreFixedList(quickbarItems, saved.quickbarItems);
+  craftedCounts.fill(0);
+  if (Array.isArray(saved.craftedCounts)) {
+    saved.craftedCounts.slice(0, craftedCounts.length).forEach((count, index) => {
+      craftedCounts[index] = Math.max(0, Number(count) || 0);
+    });
+  }
+
+  resources.length = 0;
+  loadedResourceChunks.clear();
+  activeResourceChunk = "";
+  harvestedResourceKeys.clear();
+  if (Array.isArray(saved.harvestedResourceKeys)) {
+    saved.harvestedResourceKeys.forEach((key) => harvestedResourceKeys.add(String(key)));
+  }
+  restoreList(monsters, saved.monsters);
+  restoreList(barricades, saved.barricades);
+  restoreList(doors, saved.doors);
+  restoreList(buildings, saved.buildings);
+  resourceId = 0;
+  barricadeId = nextEntityId(barricades);
+  doorId = nextEntityId(doors);
+  buildingId = nextEntityId(buildings);
+  updateResourceChunks(true);
+
+  camera.x = Math.max(0, Math.min(WORLD.width - W, player.x - W / 2));
+  camera.y = Math.max(0, Math.min(WORLD.height - H, player.y - H / 2));
+  classButtons.forEach((button, index) => button.classList.toggle("selected", index === selectedClass));
+  if (mimicJumpscare) {
+    jumpscareSequence += 1;
+    mimicJumpscare.classList.remove("active");
+    mimicJumpscare.setAttribute("aria-hidden", "true");
+  }
+  updateHud();
+  showMessage(`已读取第 ${dayNumber} 天的存档`, 1.4);
+  lastTime = performance.now();
+  requestAnimationFrame(loop);
+}
+
+function returnToTitle() {
+  state = "title";
+  keys.clear();
+  inventoryOpen = false;
+  settingsOpen = false;
+  pauseOpen = false;
+  classSelectionOpen = false;
+  inventoryWorkspace?.classList.add("hidden");
+  inventoryPanel.classList.add("hidden");
+  settingsPanel?.classList.add("hidden");
+  pausePanel?.classList.add("hidden");
+  classSelectPanel.classList.add("hidden");
+  gameOverPanel.classList.add("hidden");
+  gameScreen.classList.add("hidden");
+  titleScreen.classList.remove("hidden");
+  updateContinueButton();
+}
+
 function endGame() {
   state = "over";
   classSelectionOpen = false;
   classSelectPanel.classList.add("hidden");
+  setPauseOpen(false);
   setSettingsOpen(false);
   setInventoryOpen(false);
   gameOverPanel.classList.remove("hidden");
@@ -807,6 +1034,8 @@ function nightIntensity() {
 function update(delta) {
   elapsed += delta;
   dayNumber = Math.floor(elapsed / CYCLE_LENGTH) + 1;
+  autosaveTimer -= delta;
+  if (autosaveTimer <= 0) saveGame(false);
   const night = isNight();
 
   if (night !== wasNight) {
@@ -1149,18 +1378,34 @@ function setInventoryOpen(open) {
   updateHud();
 }
 
-function setSettingsOpen(open) {
-  const shouldOpen = Boolean(open) && state === "game" && !classSelectionOpen;
-  if (shouldOpen && inventoryOpen) setInventoryOpen(false);
-  settingsOpen = shouldOpen;
-  if (settingsPanel) settingsPanel.classList.toggle("hidden", !settingsOpen);
-  if (settingsButton) {
-    settingsButton.classList.toggle("active", settingsOpen);
-    settingsButton.setAttribute("aria-expanded", String(settingsOpen));
-  }
-  if (settingsOpen) {
+function setSettingsOpen(open, returnTarget = null) {
+  if (open) {
+    settingsReturnTarget = returnTarget || (state === "game" && pauseOpen ? "pause" : "title");
+    settingsOpen = true;
+    if (settingsReturnTarget === "pause") pausePanel?.classList.add("hidden");
+    settingsPanel?.classList.remove("hidden");
     keys.clear();
     renderSettings();
+    return;
+  }
+  settingsOpen = false;
+  settingsPanel?.classList.add("hidden");
+  if (settingsReturnTarget === "pause" && pauseOpen && state === "game") {
+    pausePanel?.classList.remove("hidden");
+  }
+}
+
+function setPauseOpen(open) {
+  const shouldOpen = Boolean(open) && state === "game" && !classSelectionOpen;
+  if (shouldOpen && inventoryOpen) setInventoryOpen(false);
+  pauseOpen = shouldOpen;
+  pausePanel?.classList.toggle("hidden", !pauseOpen);
+  if (pauseOpen) {
+    keys.clear();
+    const saved = saveGame(false);
+    if (saveStatus) saveStatus.textContent = saved ? "已自动保存" : "游戏已暂停";
+  } else {
+    lastTime = performance.now();
   }
 }
 
@@ -1828,6 +2073,7 @@ function isBuildMode() {
     && !classSelectionOpen
     && !inventoryOpen
     && !settingsOpen
+    && !pauseOpen
     && selectedQuickSlot >= 0
     && quickbarItems[selectedQuickSlot]?.kind === "building";
 }
@@ -2502,26 +2748,29 @@ function loop(now) {
   if (state !== "game") return;
   const delta = Math.min(0.04, Math.max(0, (now - lastTime) / 1000));
   lastTime = now;
-  // 打开物品栏时只画画面，不推进时间、玩家或怪物。
-  if (!inventoryOpen && !settingsOpen && !classSelectionOpen) update(delta);
+  // 打开物品栏、设置或暂停菜单时只画画面，不推进时间、玩家或怪物。
+  if (!inventoryOpen && !settingsOpen && !pauseOpen && !classSelectionOpen) update(delta);
   render();
   requestAnimationFrame(loop);
 }
 
 window.addEventListener("keydown", (event) => {
   if (["Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.code)) event.preventDefault();
+  if (settingsOpen) {
+    if (event.code === "Escape" && !event.repeat) setSettingsOpen(false);
+    return;
+  }
   if (state !== "game") return;
+  if (classSelectionOpen) return;
+  if (event.code === "Escape") {
+    if (event.repeat) return;
+    if (inventoryOpen) setInventoryOpen(false);
+    else setPauseOpen(!pauseOpen);
+    return;
+  }
+  if (pauseOpen) return;
   if (event.code === "KeyM") {
     if (!event.repeat) setAudioEnabled(!audioEnabled);
-    return;
-  }
-  if (classSelectionOpen) return;
-  if (event.code === "KeyO") {
-    if (!event.repeat) setSettingsOpen(!settingsOpen);
-    return;
-  }
-  if (settingsOpen) {
-    if (event.code === "Escape") setSettingsOpen(false);
     return;
   }
   if (event.code === "KeyI" || event.code === "Tab") {
@@ -2529,10 +2778,6 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   if (inventoryOpen) return;
-  if (event.code === "Escape") {
-    selectEmptyHand();
-    return;
-  }
   keys.add(event.code);
   if (event.code.startsWith("Digit")) {
     activateQuickSlot(Number(event.code.slice(5)) - 1);
@@ -2555,7 +2800,7 @@ window.addEventListener("keydown", (event) => {
 });
 
 canvas.addEventListener("pointerdown", (event) => {
-  if (state !== "game" || inventoryOpen || settingsOpen || classSelectionOpen) return;
+  if (state !== "game" || inventoryOpen || settingsOpen || pauseOpen || classSelectionOpen) return;
   if (event.button !== 0 && event.button !== 2) return;
   event.preventDefault();
   aimAtPointer(event);
@@ -2564,7 +2809,7 @@ canvas.addEventListener("pointerdown", (event) => {
 });
 
 canvas.addEventListener("pointermove", (event) => {
-  if (state !== "game" || inventoryOpen || settingsOpen || classSelectionOpen) return;
+  if (state !== "game" || inventoryOpen || settingsOpen || pauseOpen || classSelectionOpen) return;
   aimAtPointer(event);
 });
 
@@ -2573,11 +2818,21 @@ canvas.addEventListener("contextmenu", (event) => event.preventDefault());
 window.addEventListener("keyup", (event) => keys.delete(event.code));
 window.addEventListener("blur", () => keys.clear());
 startButton.addEventListener("click", startGame);
+continueButton?.addEventListener("click", continueGame);
+titleSettingsButton?.addEventListener("click", () => setSettingsOpen(true, "title"));
 retryAssetsButton.addEventListener("click", loadGameAssets);
 restartButton.addEventListener("click", startGame);
-inventoryButton.addEventListener("click", () => setInventoryOpen(!inventoryOpen));
+inventoryButton.addEventListener("click", () => {
+  if (!pauseOpen && !settingsOpen) setInventoryOpen(!inventoryOpen);
+});
 audioButton?.addEventListener("click", () => setAudioEnabled(!audioEnabled));
-settingsButton?.addEventListener("click", () => setSettingsOpen(!settingsOpen));
+resumeButton?.addEventListener("click", () => setPauseOpen(false));
+saveButton?.addEventListener("click", () => saveGame(true));
+pauseSettingsButton?.addEventListener("click", () => setSettingsOpen(true, "pause"));
+exitToTitleButton?.addEventListener("click", () => {
+  saveGame(false);
+  returnToTitle();
+});
 settingsCloseButton?.addEventListener("click", () => setSettingsOpen(false));
 volumeSetting?.addEventListener("input", () => updateGameSetting("volume", clampPercent(volumeSetting.value, 70)));
 brightnessSetting?.addEventListener("input", () => (
@@ -2636,7 +2891,9 @@ inventorySlots.forEach((slot, index) => {
   });
 });
 quickSlots.forEach((slot) => {
-  slot.addEventListener("click", () => activateQuickSlot(Number(slot.dataset.quickSlot)));
+  slot.addEventListener("click", () => {
+    if (!pauseOpen && !settingsOpen) activateQuickSlot(Number(slot.dataset.quickSlot));
+  });
 });
 craftButtons.forEach((button) => {
   button.addEventListener("click", () => {
@@ -2660,15 +2917,17 @@ classButtons.forEach((button) => {
     classSelectionOpen = false;
     classSelectPanel.classList.add("hidden");
     inventoryButton.disabled = false;
-    if (settingsButton) settingsButton.disabled = false;
     keys.clear();
     lastTime = performance.now();
     showMessage(`已选择职业：${CLASS_NAMES[selectedClass]}`, 1.6);
     updateHud();
+    saveGame(false);
   });
 });
 
+window.addEventListener("beforeunload", () => saveGame(false));
 updateHud();
 updateAudioButton();
 renderSettings();
+updateContinueButton();
 loadGameAssets();

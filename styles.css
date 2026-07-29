@@ -2328,6 +2328,114 @@ h1 {
   }
 }
 
+.title-menu {
+  display: grid;
+  gap: 7px;
+  width: min(280px, 100%);
+  margin: 0 auto;
+}
+
+.title-menu .primary-button,
+.title-menu-button {
+  width: 100%;
+  min-height: 42px;
+  margin: 0;
+}
+
+.title-menu-button {
+  border: 1px solid #46584e;
+  border-left: 3px solid #6d3736;
+  color: #aeb9ae;
+  background:
+    linear-gradient(90deg, rgba(106, 128, 109, .08), transparent 48%),
+    rgba(8, 14, 13, .92);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: .08em;
+}
+
+.title-menu-button:hover:not(:disabled) {
+  border-color: #788b7c;
+  border-left-color: #a44844;
+  color: #e0dccb;
+  background: #17221d;
+  transform: translateX(2px);
+}
+
+.title-menu-button:disabled {
+  opacity: .38;
+  cursor: not-allowed;
+}
+
+.pause-panel {
+  position: fixed;
+  z-index: 7;
+  left: 50%;
+  top: 50%;
+  width: min(360px, calc(100vw - 28px));
+  padding: 24px 22px 18px;
+  border: 1px solid #526258;
+  border-top: 3px solid #843a3a;
+  color: #d8d7c8;
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, .012) 0 1px, transparent 1px 7px),
+    linear-gradient(155deg, #111a17, #050909);
+  box-shadow:
+    0 0 0 100vmax rgba(1, 3, 4, .76),
+    15px 18px 0 rgba(0, 0, 0, .38),
+    0 30px 90px rgba(0, 0, 0, .62);
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.pause-panel > small {
+  color: #7c4a47;
+  font-size: 8px;
+  letter-spacing: .18em;
+}
+
+.pause-panel h2 {
+  margin: 8px 0 17px;
+  color: #ddd9c7;
+  font-size: 28px;
+  font-weight: 400;
+  letter-spacing: .12em;
+  text-shadow: 3px 3px 0 #000;
+}
+
+.pause-actions {
+  display: grid;
+  gap: 7px;
+}
+
+.pause-actions button {
+  min-height: 39px;
+  border: 1px solid #425248;
+  border-left: 3px solid #623332;
+  color: #acb7ab;
+  background: #0b1310;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: .07em;
+}
+
+.pause-actions button:hover {
+  border-color: #728378;
+  border-left-color: #a54843;
+  color: #e4dfd0;
+  background: #1d231c;
+  transform: translateX(2px);
+}
+
+.save-status {
+  min-height: 14px;
+  margin: 13px 0 0;
+  color: #718078;
+  font-size: 8px;
+}
+
 .mimic-jumpscare {
   position: fixed;
   inset: 0;

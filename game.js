@@ -120,22 +120,32 @@ const RESOURCE_ITEMS = [
   { type: "stone", kind: "material", label: "石头" },
   { type: "berry", kind: "food", label: "浆果" }
 ];
+const PORTABLE_ITEMS = [
+  { type: "ammo_box", kind: "ammo", label: "弹药箱" },
+  { type: "medkit", kind: "consumable", label: "医疗包" },
+  { type: "healing_potion", kind: "consumable", label: "治疗药水" },
+  { type: "strength_potion", kind: "consumable", label: "力量药水" }
+];
+const PISTOL_MAGAZINE_SIZE = 7;
 const CLASS_NAMES = ["枪手", "护士", "伐木工", "守望者", "棒球女", "科学家"];
 const CLASS_SKILLS = [
   { name: "精准射击", description: "武器伤害 +25%，攻击速度 +15%" },
-  { name: "急救护理", description: "浆果恢复的生命翻倍" },
+  { name: "急救护理", description: "浆果治疗翻倍，医疗包恢复 50 点生命" },
   { name: "熟练采伐", description: "少砍树 1 次，并获得更多木材" },
   { name: "远光观察", description: "手电筒照得更远、更宽" },
   { name: "强力挥击", description: "击退更远，木棒额外造成 20 伤害" },
   { name: "陷阱改良", description: "陷阱范围、伤害和使用次数提升" }
 ];
 const CLASS_STARTING_LOADOUTS = [
-  { label: "石斧", items: [{ type: "axe", count: 1 }] },
-  { label: "浆果 ×3", items: [{ type: "berry", count: 3 }] },
+  { label: "手枪、弹药箱 ×2", items: [{ type: "pistol", count: 1, loadedAmmo: 7 }, { type: "ammo_box", count: 2 }] },
+  { label: "医疗包 ×3", items: [{ type: "medkit", count: 3 }] },
   { label: "石斧", items: [{ type: "axe", count: 1 }] },
   { label: "浆果 ×2、陷阱 ×1", items: [{ type: "berry", count: 2 }, { type: "trap", count: 1 }] },
   { label: "木棒", items: [{ type: "club", count: 1 }] },
-  { label: "陷阱 ×2", items: [{ type: "trap", count: 2 }] }
+  {
+    label: "治疗药水、力量药水",
+    items: [{ type: "healing_potion", count: 1 }, { type: "strength_potion", count: 1 }]
+  }
 ];
 
 function hasClassSkill(classIndex) {
@@ -169,6 +179,7 @@ function weaponDamage(weapon) {
   let damage = weapon?.damage || 35;
   if (hasClassSkill(0)) damage = Math.round(damage * 1.25);
   if (hasClassSkill(4) && weapon?.type === "club") damage += 20;
+  if (player.strengthTimer > 0) damage = Math.round(damage * 1.5);
   return damage;
 }
 
@@ -240,7 +251,17 @@ const BUILD_TYPES = [
 ];
 const WEAPON_TYPES = [
   { type: "club", kind: "weapon", label: "木棒", cost: { wood: 4, stone: 0 }, damage: 25, range: 54, cooldown: 0.48 },
-  { type: "axe", kind: "weapon", label: "石斧", cost: { wood: 4, stone: 3 }, damage: 45, range: 62, cooldown: 0.62 }
+  { type: "axe", kind: "weapon", label: "石斧", cost: { wood: 4, stone: 3 }, damage: 45, range: 62, cooldown: 0.62 },
+  {
+    type: "pistol",
+    kind: "weapon",
+    label: "手枪",
+    cost: { wood: 0, stone: 0 },
+    damage: 32,
+    range: 310,
+    cooldown: 0.42,
+    magazineSize: PISTOL_MAGAZINE_SIZE
+  }
 ];
 const RESOURCE_HARVEST_HITS = { tree: 4, rock: 3, berry: 2 };
 const craftedCounts = Array(BUILD_TYPES.length).fill(0);
@@ -307,7 +328,8 @@ const player = {
   attackTimer: 0,
   attackCooldown: 0,
   gatherCooldown: 0,
-  hurtTimer: 0
+  hurtTimer: 0,
+  strengthTimer: 0
 };
 
 const resources = [];
@@ -614,6 +636,7 @@ function saveGame(announce = true) {
       stone: player.stone,
       berry: player.berry,
       flashlight: player.flashlight,
+      strengthTimer: player.strengthTimer,
       classRow: player.classRow,
       dirX: player.dirX,
       dirY: player.dirY
@@ -790,6 +813,11 @@ function playGatherSound(type, worldX) {
 function playWeaponSound(worldX) {
   playNoise({ duration: 0.11, volume: 0.065, frequency: 1250, filterType: "bandpass", worldX });
   playTone({ frequency: 185, endFrequency: 95, type: "sawtooth", duration: 0.1, volume: 0.035, worldX });
+}
+
+function playPistolSound(worldX) {
+  playNoise({ duration: 0.13, volume: 0.12, frequency: 1900, filterType: "highpass", worldX });
+  playTone({ frequency: 220, endFrequency: 82, type: "square", duration: 0.12, volume: 0.055, worldX });
 }
 
 function playBuildSound(worldX) {
@@ -1016,7 +1044,8 @@ function startGame() {
     classRow: 0,
     attackTimer: 0,
     attackCooldown: 0,
-    gatherCooldown: 0
+    gatherCooldown: 0,
+    strengthTimer: 0
   });
   camera.x = Math.max(0, Math.min(WORLD.width - W, player.x - W / 2));
   camera.y = Math.max(0, Math.min(WORLD.height - H, player.y - H / 2));
@@ -1093,6 +1122,7 @@ function continueGame() {
     stone: Math.max(0, Number(saved.player.stone) || 0),
     berry: Math.max(0, Number(saved.player.berry) || 0),
     flashlight: saved.player.flashlight !== false,
+    strengthTimer: Math.max(0, Number(saved.player.strengthTimer) || 0),
     classRow: selectedClass,
     moving: false,
     dirX: Number.isFinite(saved.player.dirX) ? saved.player.dirX : 0,
@@ -1306,6 +1336,7 @@ function update(delta) {
   player.attackCooldown = Math.max(0, player.attackCooldown - delta);
   player.gatherCooldown = Math.max(0, player.gatherCooldown - delta);
   player.hurtTimer = Math.max(0, player.hurtTimer - delta);
+  player.strengthTimer = Math.max(0, player.strengthTimer - delta);
   updateHud();
 }
 
@@ -1435,6 +1466,10 @@ function resourceItemDefinition(type) {
   return RESOURCE_ITEMS.find((item) => item.type === type);
 }
 
+function portableItemDefinition(type) {
+  return PORTABLE_ITEMS.find((item) => item.type === type);
+}
+
 const CHEST_SLOT_COUNT = 12;
 
 function normalizePortableItem(item, fallbackCount = 1) {
@@ -1442,6 +1477,14 @@ function normalizePortableItem(item, fallbackCount = 1) {
   const count = Math.max(1, Math.floor(Number(item.count) || fallbackCount || 1));
   const resource = resourceItemDefinition(item.type);
   if (resource) return { ...resource, count, source: item.source || "inventory" };
+  const portable = portableItemDefinition(item.type);
+  if (portable) {
+    return {
+      ...portable,
+      count,
+      source: item.source || "inventory"
+    };
+  }
   const buildIndex = Number.isInteger(item.buildIndex)
     ? item.buildIndex
     : BUILD_TYPES.findIndex((recipe) => recipe.type === item.type);
@@ -1458,12 +1501,19 @@ function normalizePortableItem(item, fallbackCount = 1) {
   }
   const weapon = WEAPON_TYPES.find((recipe) => recipe.type === item.type);
   if (weapon) {
-    return {
+    const normalized = {
       ...weapon,
       cost: { ...weapon.cost },
       count: 1,
       source: "workbench"
     };
+    if (weapon.type === "pistol") {
+      normalized.loadedAmmo = Math.max(0, Math.min(
+        PISTOL_MAGAZINE_SIZE,
+        Number.isFinite(item.loadedAmmo) ? Math.floor(item.loadedAmmo) : PISTOL_MAGAZINE_SIZE
+      ));
+    }
+    return normalized;
   }
   return null;
 }
@@ -1480,6 +1530,7 @@ function giveClassStartingItems(classIndex) {
     const item = normalizePortableItem(definition, amount);
     if (!item) continue;
     item.count = amount;
+    if (item.type === "pistol") item.loadedAmmo = PISTOL_MAGAZINE_SIZE;
     if (item.kind === "building") craftedCounts[item.buildIndex] += amount;
     const quickIndex = quickbarItems.findIndex((slot) => slot === null);
     const inventoryIndex = inventoryItems.findIndex((slot) => slot === null);
@@ -1831,6 +1882,79 @@ function setPauseOpen(open) {
   }
 }
 
+function portableItemCount(type) {
+  return [...inventoryItems, ...quickbarItems].reduce((total, item) => (
+    item?.type === type ? total + Math.max(0, Math.floor(Number(item.count) || 0)) : total
+  ), 0);
+}
+
+function spendPortableItem(type, amount = 1) {
+  if (portableItemCount(type) < amount) return false;
+  let remaining = amount;
+  for (const collection of [quickbarItems, inventoryItems]) {
+    for (let index = 0; index < collection.length && remaining > 0; index += 1) {
+      const item = collection[index];
+      if (item?.type !== type) continue;
+      const available = Math.max(0, Math.floor(Number(item.count) || 0));
+      const used = Math.min(available, remaining);
+      item.count = available - used;
+      remaining -= used;
+      if (item.count <= 0) {
+        collection[index] = null;
+        if (collection === quickbarItems && selectedQuickSlot === index) selectedQuickSlot = -1;
+      }
+    }
+  }
+  return remaining === 0;
+}
+
+function useConsumable(type) {
+  const item = portableItemDefinition(type);
+  if (!item || item.kind !== "consumable" || portableItemCount(type) <= 0) return false;
+  if (type === "strength_potion") {
+    spendPortableItem(type, 1);
+    player.strengthTimer = Math.min(120, player.strengthTimer + 60);
+    playTone({ frequency: 180, endFrequency: 520, type: "sawtooth", duration: 0.3, volume: 0.045 });
+    showMessage("喝下力量药水：60 秒内武器伤害 +50%", 1.8);
+    updateHud();
+    return true;
+  }
+  if (player.health >= 100) {
+    showMessage("生命已经满了，先留着治疗物品", 1.3);
+    return false;
+  }
+  const baseHealing = type === "medkit" ? 35 : 50;
+  const healing = type === "medkit" && hasClassSkill(1) ? 50 : baseHealing;
+  spendPortableItem(type, 1);
+  player.health = Math.min(100, player.health + healing);
+  playTone({ frequency: 390, endFrequency: 760, type: "sine", duration: 0.22, volume: 0.04 });
+  showMessage(`使用${item.label}，恢复 ${healing} 点生命`, 1.4);
+  updateHud();
+  return true;
+}
+
+function reloadPistol() {
+  const pistol = quickbarItems[selectedQuickSlot];
+  if (pistol?.type !== "pistol") {
+    showMessage("先把手枪拿在手上才能换弹", 1.1);
+    return false;
+  }
+  if (pistol.loadedAmmo >= PISTOL_MAGAZINE_SIZE) {
+    showMessage("手枪弹夹已经装满", 1);
+    return false;
+  }
+  if (!spendPortableItem("ammo_box", 1)) {
+    showMessage("没有弹药箱了", 1.1);
+    return false;
+  }
+  pistol.loadedAmmo = PISTOL_MAGAZINE_SIZE;
+  player.attackCooldown = Math.max(player.attackCooldown, 0.7);
+  playTone({ frequency: 155, endFrequency: 245, type: "square", duration: 0.12, volume: 0.035 });
+  showMessage(`换上新弹夹：${PISTOL_MAGAZINE_SIZE}/${PISTOL_MAGAZINE_SIZE}，剩余弹药箱 ${portableItemCount("ammo_box")}`, 1.5);
+  updateHud();
+  return true;
+}
+
 function useBerry() {
   if (state !== "game" || player.berry <= 0) {
     showMessage("背包里还没有浆果", 1.1);
@@ -2038,6 +2162,8 @@ function activateQuickSlot(index) {
   }
   if (item.kind === "food" && item.type === "berry") {
     useBerry();
+  } else if (item.kind === "consumable") {
+    useConsumable(item.type);
   } else {
     showMessage(`拿起了${item.label || "物品"}`, 1);
   }
@@ -2057,9 +2183,63 @@ function usePrimaryAction() {
   }
 }
 
+function findPistolTarget(range) {
+  let target = null;
+  let nearestProjection = Infinity;
+  for (const monster of monsters) {
+    if (monster.dead) continue;
+    const dx = monster.x - player.x;
+    const dy = monster.y - player.y;
+    const projection = dx * player.dirX + dy * player.dirY;
+    if (projection <= 0 || projection >= range) continue;
+    const sidewaysDistance = Math.abs(dx * player.dirY - dy * player.dirX);
+    if (sidewaysDistance > (monster.radius || 13) + 10) continue;
+    if (projection < nearestProjection) {
+      target = monster;
+      nearestProjection = projection;
+    }
+  }
+  return target;
+}
+
+function firePistol(weapon) {
+  const loadedAmmo = Math.max(0, Math.floor(Number(weapon.loadedAmmo) || 0));
+  if (loadedAmmo <= 0) {
+    player.attackCooldown = 0.18;
+    playTone({ frequency: 105, endFrequency: 78, type: "square", duration: 0.05, volume: 0.025 });
+    showMessage(`弹夹空了，按 R 换弹 · 弹药箱 ${portableItemCount("ammo_box")}`, 1.2);
+    return;
+  }
+
+  weapon.loadedAmmo = loadedAmmo - 1;
+  player.attackCooldown = weaponAttackCooldown(weapon);
+  player.attackTimer = 0.12;
+  const target = findPistolTarget(weapon.range || 310);
+  const soundX = target?.x ?? player.x + player.dirX * 140;
+  if (target) {
+    target.health -= weaponDamage(weapon);
+    target.hurtTimer = 0.2;
+    target.x += player.dirX * 12;
+    target.y += player.dirY * 12;
+  }
+  playPistolSound(soundX);
+  const ammoText = `${weapon.loadedAmmo}/${PISTOL_MAGAZINE_SIZE}`;
+  showMessage(
+    target
+      ? `手枪命中 · 弹夹 ${ammoText}`
+      : `子弹射入雾中 · 弹夹 ${ammoText}`,
+    0.9
+  );
+  updateHud();
+}
+
 function attack() {
   if (player.attackCooldown > 0) return;
   const weapon = quickbarItems[selectedQuickSlot];
+  if (weapon?.type === "pistol") {
+    firePistol(weapon);
+    return;
+  }
   const damage = weaponDamage(weapon);
   const range = weapon?.range || 58;
   const knockback = weaponKnockback();
@@ -2343,8 +2523,14 @@ function renderInventory() {
     slot.dataset.label = item?.label || "";
     slot.dataset.count = item ? String(amount) : "";
     slot.draggable = Boolean(item);
+    const useTip = item?.type === "berry"
+      ? "，点击食用"
+      : item?.kind === "consumable" ? "，点击使用" : "";
+    const pistolTip = item?.type === "pistol"
+      ? `，弹夹 ${item.loadedAmmo}/${PISTOL_MAGAZINE_SIZE}`
+      : "";
     slot.title = item
-      ? `${item.label} ×${amount}${item.type === "berry" ? "，点击食用" : ""}；拖动可整理，右键拆分`
+      ? `${item.label} ×${amount}${pistolTip}${useTip}；拖动可整理，右键拆分`
       : "空格，可以把物品拖到这里";
     slot.setAttribute("aria-label", slot.title);
   });
@@ -2560,8 +2746,10 @@ function syncResourceQuickbar() {
 
 function quickbarItemAmount(item) {
   if (!item) return null;
+  if (item.type === "pistol") return Math.max(0, Number(item.loadedAmmo) || 0);
   if (item.kind === "building") return Math.max(0, Number(item.count) || 0);
   if (resourceItemDefinition(item.type)) return player[item.type];
+  if (portableItemDefinition(item.type)) return Math.max(0, Number(item.count) || 0);
   return null;
 }
 
@@ -2646,7 +2834,9 @@ function updateHud() {
     slot.dataset.count = amount === null ? "" : String(amount);
     slot.draggable = Boolean(item);
     slot.title = item
-      ? `${item.label}${amount === null ? "" : ` ×${amount}`}`
+      ? item.type === "pistol"
+        ? `${item.label} · 弹夹 ${amount}/${PISTOL_MAGAZINE_SIZE} · R 换弹`
+        : `${item.label}${amount === null ? "" : ` ×${amount}`}`
       : "空快捷格";
     slot.setAttribute("aria-pressed", String(selectedSlot));
   });
@@ -2655,12 +2845,19 @@ function updateHud() {
     buildingLabel.textContent = `快捷 ${selectedQuickSlot + 1}：${selected.label}（木${selected.cost.wood} 石${selected.cost.stone}）`;
   } else if (selectedItem?.kind === "food" && selectedItem.type === "berry") {
     buildingLabel.textContent = `快捷 ${selectedQuickSlot + 1}：浆果（${player.berry}）`;
+  } else if (selectedItem?.type === "pistol") {
+    buildingLabel.textContent = `当前武器：手枪 · 弹夹 ${selectedItem.loadedAmmo}/${PISTOL_MAGAZINE_SIZE} · 弹药箱 ${portableItemCount("ammo_box")} · R 换弹`;
   } else if (selectedItem?.kind === "weapon") {
     buildingLabel.textContent = `当前武器：${selectedItem.label || "武器"}`;
   } else if (selectedItem?.kind === "material") {
     buildingLabel.textContent = `当前物品：${selectedItem.label}`;
+  } else if (selectedItem) {
+    buildingLabel.textContent = `当前物品：${selectedItem.label}`;
   } else {
     buildingLabel.textContent = "当前：空手";
+  }
+  if (player.strengthTimer > 0) {
+    buildingLabel.textContent += ` · 力量增强 ${Math.ceil(player.strengthTimer)}秒`;
   }
 }
 
@@ -3493,8 +3690,9 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   // E 等一次性操作不能因为按键自动重复而反复触发。
-  if (event.repeat && ["KeyE", "KeyF"].includes(event.code)) return;
+  if (event.repeat && ["KeyE", "KeyF", "KeyR"].includes(event.code)) return;
   if (event.code === "KeyE") interact();
+  if (event.code === "KeyR") reloadPistol();
   if (event.code === "KeyF") {
     player.flashlight = !player.flashlight;
     playTone({
@@ -3615,7 +3813,9 @@ inventorySlots.forEach((slot, index) => {
   });
   slot.addEventListener("dragend", clearStorageDragState);
   slot.addEventListener("click", () => {
-    if (inventoryItems[index]?.type === "berry") useBerry();
+    const item = inventoryItems[index];
+    if (item?.type === "berry") useBerry();
+    else if (item?.kind === "consumable") useConsumable(item.type);
   });
   slot.addEventListener("contextmenu", (event) => {
     event.preventDefault();

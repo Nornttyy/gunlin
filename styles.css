@@ -2762,6 +2762,54 @@ h1 {
 .inventory-slot[data-item-type="trap"] .item-sprite { background-position: -224px -96px; }
 .inventory-slot[data-item-type="club"] .item-sprite { background-position: 0 -128px; }
 .inventory-slot[data-item-type="axe"] .item-sprite { background-position: -32px -128px; }
+.inventory-slot[data-item-type="pistol"] .item-sprite,
+.quick-slot[data-item-type="pistol"] .item-sprite { background-position: -96px -128px; }
+.inventory-slot[data-item-type="ammo_box"] .item-sprite,
+.quick-slot[data-item-type="ammo_box"] .item-sprite { background-position: -128px -64px; }
+.inventory-slot[data-item-type="medkit"] .item-sprite,
+.quick-slot[data-item-type="medkit"] .item-sprite { background-position: -192px -64px; }
+
+.inventory-slot[data-item-type="healing_potion"] .item-sprite,
+.quick-slot[data-item-type="healing_potion"] .item-sprite,
+.inventory-slot[data-item-type="strength_potion"] .item-sprite,
+.quick-slot[data-item-type="strength_potion"] .item-sprite {
+  position: relative;
+  background-image: none;
+}
+
+.inventory-slot[data-item-type="healing_potion"] .item-sprite::before,
+.quick-slot[data-item-type="healing_potion"] .item-sprite::before,
+.inventory-slot[data-item-type="strength_potion"] .item-sprite::before,
+.quick-slot[data-item-type="strength_potion"] .item-sprite::before {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 8px;
+  width: 18px;
+  height: 20px;
+  clip-path: polygon(33% 0, 67% 0, 67% 20%, 83% 35%, 83% 90%, 72% 100%, 28% 100%, 17% 90%, 17% 35%, 33% 20%);
+  background: linear-gradient(90deg, #70262d 0 22%, #d34b51 22% 68%, #f29a89 68% 82%, #70262d 82%);
+  box-shadow: 0 2px 0 #1a0c0e;
+}
+
+.inventory-slot[data-item-type="strength_potion"] .item-sprite::before,
+.quick-slot[data-item-type="strength_potion"] .item-sprite::before {
+  background: linear-gradient(90deg, #50316d 0 22%, #9162c1 22% 68%, #e4b1e9 68% 82%, #50316d 82%);
+}
+
+.inventory-slot[data-item-type="healing_potion"] .item-sprite::after,
+.quick-slot[data-item-type="healing_potion"] .item-sprite::after,
+.inventory-slot[data-item-type="strength_potion"] .item-sprite::after,
+.quick-slot[data-item-type="strength_potion"] .item-sprite::after {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 4px;
+  width: 8px;
+  height: 6px;
+  background: #c9b891;
+  box-shadow: inset 0 -2px 0 #74654d, 0 1px 0 #17100c;
+}
 
 .victory-panel {
   background:

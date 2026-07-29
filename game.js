@@ -203,6 +203,7 @@ const PLAYER_ASSET_VERSION = "20260728-player-redraw1";
 const TREE_ASSET_VERSION = "20260728-tree-visible2";
 const MIMIC_ASSET_VERSION = "20260728-mimic-drawn1";
 const ESCAPE_GATE_ASSET_VERSION = "20260729-gate-drawn1";
+const HELD_WEAPON_FRAME = { club: 0, axe: 1, pistol: 3 };
 const sprite = new Image();
 const worldSprite = new Image();
 const treeSprite = new Image();
@@ -347,6 +348,14 @@ const doors = [];
 const buildings = [];
 const camera = { x: 0, y: 0 };
 const pointerAim = { x: W / 2, y: H / 2, active: false };
+const pistolShot = {
+  timer: 0,
+  startX: 0,
+  startY: 0,
+  endX: 0,
+  endY: 0,
+  hit: false
+};
 const campfire = { ...CAMP_POSITION };
 const escapeGate = { x: 0, y: 0, discovered: false };
 
@@ -1021,6 +1030,7 @@ function startGame() {
   selectedQuickSlot = -1;
   selectedClass = -1;
   classSelectionOpen = true;
+  pistolShot.timer = 0;
   jumpscareSequence += 1;
   if (mimicJumpscare) {
     mimicJumpscare.classList.remove("active");
@@ -1082,6 +1092,7 @@ function continueGame() {
   victoryPanel?.classList.add("hidden");
   classSelectPanel.classList.add("hidden");
   classSelectionOpen = false;
+  pistolShot.timer = 0;
   inventoryOpen = false;
   settingsOpen = false;
   pauseOpen = false;
@@ -1337,6 +1348,7 @@ function update(delta) {
   player.gatherCooldown = Math.max(0, player.gatherCooldown - delta);
   player.hurtTimer = Math.max(0, player.hurtTimer - delta);
   player.strengthTimer = Math.max(0, player.strengthTimer - delta);
+  pistolShot.timer = Math.max(0, pistolShot.timer - delta);
   updateHud();
 }
 
@@ -2193,7 +2205,7 @@ function findPistolTarget(range) {
     const projection = dx * player.dirX + dy * player.dirY;
     if (projection <= 0 || projection >= range) continue;
     const sidewaysDistance = Math.abs(dx * player.dirY - dy * player.dirX);
-    if (sidewaysDistance > (monster.radius || 13) + 10) continue;
+    if (sidewaysDistance > (monster.radius || 13) + 18) continue;
     if (projection < nearestProjection) {
       target = monster;
       nearestProjection = projection;
@@ -2214,8 +2226,19 @@ function firePistol(weapon) {
   weapon.loadedAmmo = loadedAmmo - 1;
   player.attackCooldown = weaponAttackCooldown(weapon);
   player.attackTimer = 0.12;
-  const target = findPistolTarget(weapon.range || 310);
+  const range = weapon.range || 310;
+  const target = findPistolTarget(range);
   const soundX = target?.x ?? player.x + player.dirX * 140;
+  const startX = player.x + player.dirX * 19;
+  const startY = player.y - 15 + player.dirY * 5;
+  Object.assign(pistolShot, {
+    timer: 0.12,
+    startX,
+    startY,
+    endX: target?.x ?? startX + player.dirX * range,
+    endY: target ? target.y - 7 : startY + player.dirY * range,
+    hit: Boolean(target)
+  });
   if (target) {
     target.health -= weaponDamage(weapon);
     target.hurtTimer = 0.2;
@@ -2890,6 +2913,10 @@ function render() {
   ctx.restore();
 
   drawAtmosphere();
+  ctx.save();
+  ctx.translate(-Math.floor(camera.x) + shakeX, -Math.floor(camera.y) + shakeY);
+  drawPistolShot();
+  ctx.restore();
 }
 
 function drawForest() {
@@ -3348,9 +3375,66 @@ function getMimicFrame(monster) {
   return Math.floor(monster.animation || 0) % 2;
 }
 
+function drawPistolShot() {
+  if (pistolShot.timer <= 0) return;
+  const strength = Math.min(1, pistolShot.timer / 0.12);
+  ctx.save();
+  ctx.globalAlpha = strength;
+  ctx.strokeStyle = "rgba(255, 243, 188, .96)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(pistolShot.startX, pistolShot.startY);
+  ctx.lineTo(pistolShot.endX, pistolShot.endY);
+  ctx.stroke();
+  ctx.strokeStyle = "rgba(232, 132, 62, .58)";
+  ctx.lineWidth = 5;
+  ctx.globalAlpha = strength * 0.35;
+  ctx.beginPath();
+  ctx.moveTo(pistolShot.startX, pistolShot.startY);
+  ctx.lineTo(pistolShot.endX, pistolShot.endY);
+  ctx.stroke();
+  if (pistolShot.hit) {
+    ctx.globalAlpha = strength;
+    ctx.fillStyle = "#fff0b0";
+    ctx.fillRect(pistolShot.endX - 2, pistolShot.endY - 2, 4, 4);
+  }
+  ctx.restore();
+}
+
+function drawHeldWeapon(weapon) {
+  const frame = HELD_WEAPON_FRAME[weapon?.type];
+  if (!Number.isInteger(frame)) return;
+  const angle = Math.atan2(player.dirY, player.dirX);
+  const firing = weapon.type === "pistol" && pistolShot.timer > 0;
+  const recoil = firing ? -3 * Math.min(1, pistolShot.timer / 0.12) : 0;
+  ctx.save();
+  ctx.translate(
+    player.x + player.dirX * 5,
+    player.y - 15 + player.dirY * 3
+  );
+  ctx.rotate(angle);
+  if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
+    ctx.drawImage(worldSprite, frame * 16, 64, 16, 16, -3 + recoil, -16, 32, 32);
+  } else {
+    ctx.fillStyle = weapon.type === "pistol" ? "#5a5144" : "#76523b";
+    ctx.fillRect(recoil, -3, weapon.type === "pistol" ? 24 : 27, 6);
+  }
+  if (firing) {
+    ctx.fillStyle = "#fff0a4";
+    ctx.fillRect(27 + recoil, -4, 8, 8);
+    ctx.fillStyle = "#ef8a3f";
+    ctx.fillRect(31 + recoil, -2, 8, 4);
+  }
+  ctx.restore();
+}
+
 function drawPlayer() {
+  const heldWeapon = quickbarItems[selectedQuickSlot]?.kind === "weapon"
+    ? quickbarItems[selectedQuickSlot]
+    : null;
   const drawX = player.x - 24;
   const drawY = player.y - 37;
+  if (heldWeapon && player.dirY < -0.28) drawHeldWeapon(heldWeapon);
   if (sprite.complete && sprite.naturalWidth >= 128 && sprite.naturalHeight >= 96) {
     ctx.save();
     const frameRow = player.classRow * 16;
@@ -3368,7 +3452,8 @@ function drawPlayer() {
     ctx.fillStyle = player.hurtTimer > 0 ? "#f08f7b" : "#c6e7b8";
     ctx.fillRect(player.x - 10, player.y - 24, 20, 24);
   }
-  if (player.attackTimer > 0) {
+  if (heldWeapon && player.dirY >= -0.28) drawHeldWeapon(heldWeapon);
+  if (player.attackTimer > 0 && heldWeapon?.type !== "pistol") {
     const attackAngle = Math.atan2(player.dirY, player.dirX);
     ctx.save();
     ctx.translate(player.x, player.y);

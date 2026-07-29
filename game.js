@@ -314,9 +314,14 @@ let draggedQuickSlot = -1;
 let jumpscareSequence = 0;
 let audioContext = null;
 let masterGain = null;
+let effectsGain = null;
+let ambienceGain = null;
+let audioCompressor = null;
 let noiseBuffer = null;
 let audioEnabled = true;
 let ambienceTimer = 1.5;
+let playerFootstepTimer = 0;
+let playerFootstepSide = -1;
 let nightMaskCanvas = null;
 let nightMaskContext = null;
 let assetsReady = false;
@@ -712,6 +717,13 @@ function audioPanForWorldX(worldX) {
   return Math.max(-1, Math.min(1, (worldX - player.x) / AUDIO_PAN_DISTANCE));
 }
 
+function spatialAttenuation(worldX, worldY, range = 720) {
+  if (!Number.isFinite(worldX) || !Number.isFinite(worldY)) return 1;
+  const distance = Math.hypot(worldX - player.x, worldY - player.y);
+  const normalized = Math.max(0, 1 - distance / Math.max(1, range));
+  return normalized ** 1.35;
+}
+
 function ensureAudio() {
   if (!audioEnabled) return null;
   const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -720,11 +732,31 @@ function ensureAudio() {
     try {
       audioContext = new AudioContextClass();
       masterGain = audioContext.createGain();
+      effectsGain = audioContext.createGain();
+      ambienceGain = audioContext.createGain();
+      audioCompressor = audioContext.createDynamicsCompressor?.() || null;
       masterGain.gain.value = masterVolumeValue();
-      masterGain.connect(audioContext.destination);
+      effectsGain.gain.value = 0.92;
+      ambienceGain.gain.value = 0.42;
+      effectsGain.connect(masterGain);
+      ambienceGain.connect(masterGain);
+      if (audioCompressor) {
+        audioCompressor.threshold.setValueAtTime(-18, audioContext.currentTime);
+        audioCompressor.knee.setValueAtTime(12, audioContext.currentTime);
+        audioCompressor.ratio.setValueAtTime(5, audioContext.currentTime);
+        audioCompressor.attack.setValueAtTime(0.003, audioContext.currentTime);
+        audioCompressor.release.setValueAtTime(0.2, audioContext.currentTime);
+        masterGain.connect(audioCompressor);
+        audioCompressor.connect(audioContext.destination);
+      } else {
+        masterGain.connect(audioContext.destination);
+      }
     } catch {
       audioContext = null;
       masterGain = null;
+      effectsGain = null;
+      ambienceGain = null;
+      audioCompressor = null;
       return null;
     }
   }
@@ -732,8 +764,9 @@ function ensureAudio() {
   return audioContext;
 }
 
-function connectAudioOutput(node, worldX = null, panOverride = null) {
+function connectAudioOutput(node, worldX = null, panOverride = null, bus = "effects") {
   if (!audioContext || !masterGain) return;
+  const output = bus === "ambience" ? (ambienceGain || masterGain) : (effectsGain || masterGain);
   const pan = panOverride === null
     ? (worldX === null ? 0 : audioPanForWorldX(worldX))
     : Math.max(-1, Math.min(1, panOverride));
@@ -741,9 +774,9 @@ function connectAudioOutput(node, worldX = null, panOverride = null) {
     const panner = audioContext.createStereoPanner();
     panner.pan.setValueAtTime(pan, audioContext.currentTime);
     node.connect(panner);
-    panner.connect(masterGain);
+    panner.connect(output);
   } else {
-    node.connect(masterGain);
+    node.connect(output);
   }
 }
 
@@ -755,7 +788,11 @@ function playTone({
   type = "sine",
   delay = 0,
   worldX = null,
-  pan = null
+  worldY = null,
+  range = 720,
+  pan = null,
+  bus = "effects",
+  attack = 0.012
 }) {
   const context = ensureAudio();
   if (!context) return;
@@ -765,11 +802,15 @@ function playTone({
   oscillator.type = type;
   oscillator.frequency.setValueAtTime(Math.max(20, frequency), start);
   oscillator.frequency.exponentialRampToValueAtTime(Math.max(20, endFrequency), start + duration);
+  const spatialVolume = volume * spatialAttenuation(worldX, worldY, range);
   gain.gain.setValueAtTime(0.0001, start);
-  gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, volume), start + Math.min(0.018, duration * 0.25));
+  gain.gain.exponentialRampToValueAtTime(
+    Math.max(0.0001, spatialVolume),
+    start + Math.min(attack, duration * 0.4)
+  );
   gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
   oscillator.connect(gain);
-  connectAudioOutput(gain, worldX, pan);
+  connectAudioOutput(gain, worldX, pan, bus);
   oscillator.start(start);
   oscillator.stop(start + duration + 0.02);
 }
@@ -778,7 +819,7 @@ function getNoiseBuffer() {
   const context = ensureAudio();
   if (!context) return null;
   if (noiseBuffer) return noiseBuffer;
-  noiseBuffer = context.createBuffer(1, context.sampleRate * 2, context.sampleRate);
+  noiseBuffer = context.createBuffer(1, context.sampleRate * 4, context.sampleRate);
   const samples = noiseBuffer.getChannelData(0);
   for (let index = 0; index < samples.length; index += 1) {
     samples[index] = Math.random() * 2 - 1;
@@ -791,9 +832,14 @@ function playNoise({
   volume = 0.05,
   frequency = 700,
   filterType = "lowpass",
+  resonance = 0.8,
   delay = 0,
   worldX = null,
-  pan = null
+  worldY = null,
+  range = 720,
+  pan = null,
+  bus = "effects",
+  attack = 0.018
 } = {}) {
   const context = ensureAudio();
   const buffer = getNoiseBuffer();
@@ -805,94 +851,289 @@ function playNoise({
   source.buffer = buffer;
   filter.type = filterType;
   filter.frequency.setValueAtTime(frequency, start);
-  filter.Q.setValueAtTime(0.8, start);
+  filter.Q.setValueAtTime(resonance, start);
+  const spatialVolume = volume * spatialAttenuation(worldX, worldY, range);
   gain.gain.setValueAtTime(0.0001, start);
-  gain.gain.exponentialRampToValueAtTime(Math.max(0.0001, volume), start + Math.min(0.025, duration * 0.25));
+  gain.gain.exponentialRampToValueAtTime(
+    Math.max(0.0001, spatialVolume),
+    start + Math.min(attack, duration * 0.4)
+  );
   gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
   source.connect(filter);
   filter.connect(gain);
-  connectAudioOutput(gain, worldX, pan);
+  connectAudioOutput(gain, worldX, pan, bus);
   source.start(start, Math.random() * Math.max(0.01, buffer.duration - duration), duration);
 }
 
 function distanceVolume(worldX, worldY, maximum, range = 700) {
-  const distance = Math.hypot(worldX - player.x, worldY - player.y);
-  return maximum * Math.max(0.08, 1 - distance / range);
+  return maximum * spatialAttenuation(worldX, worldY, range);
 }
 
-function playGatherSound(type, worldX) {
+function playGatherSound(type, worldX, worldY) {
   if (type === "wood") {
-    playTone({ frequency: 128, endFrequency: 92, type: "square", duration: 0.09, volume: 0.055, worldX });
-    playTone({ frequency: 104, endFrequency: 76, type: "square", duration: 0.08, volume: 0.04, delay: 0.075, worldX });
+    playNoise({
+      duration: 0.075, volume: 0.065, frequency: 640, filterType: "bandpass",
+      resonance: 1.4, attack: 0.004, worldX, worldY, range: 260
+    });
+    playTone({
+      frequency: 156, endFrequency: 82, type: "triangle", duration: 0.09,
+      volume: 0.052, attack: 0.004, worldX, worldY, range: 260
+    });
+    playNoise({
+      duration: 0.055, volume: 0.032, frequency: 1350, filterType: "highpass",
+      delay: 0.055, attack: 0.003, worldX, worldY, range: 260
+    });
   } else if (type === "stone") {
-    playTone({ frequency: 510, endFrequency: 330, type: "triangle", duration: 0.07, volume: 0.045, worldX });
-    playTone({ frequency: 720, endFrequency: 440, type: "triangle", duration: 0.055, volume: 0.035, delay: 0.06, worldX });
+    playNoise({
+      duration: 0.045, volume: 0.052, frequency: 1700, filterType: "highpass",
+      attack: 0.002, worldX, worldY, range: 280
+    });
+    playTone({
+      frequency: 760, endFrequency: 420, type: "triangle", duration: 0.11,
+      volume: 0.046, attack: 0.002, worldX, worldY, range: 280
+    });
+    playTone({
+      frequency: 1120, endFrequency: 620, type: "sine", duration: 0.08,
+      volume: 0.025, delay: 0.026, attack: 0.002, worldX, worldY, range: 280
+    });
   } else {
-    playTone({ frequency: 570, endFrequency: 820, type: "sine", duration: 0.13, volume: 0.04, worldX });
+    playNoise({
+      duration: 0.13, volume: 0.026, frequency: 1500, filterType: "bandpass",
+      resonance: 0.5, worldX, worldY, range: 220
+    });
+    playTone({
+      frequency: 490, endFrequency: 710, type: "sine", duration: 0.12,
+      volume: 0.026, worldX, worldY, range: 220
+    });
   }
 }
 
-function playWeaponSound(worldX) {
-  playNoise({ duration: 0.11, volume: 0.065, frequency: 1250, filterType: "bandpass", worldX });
-  playTone({ frequency: 185, endFrequency: 95, type: "sawtooth", duration: 0.1, volume: 0.035, worldX });
-}
-
-function playPistolSound(worldX) {
-  playNoise({ duration: 0.13, volume: 0.12, frequency: 1900, filterType: "highpass", worldX });
-  playTone({ frequency: 220, endFrequency: 82, type: "square", duration: 0.12, volume: 0.055, worldX });
-}
-
-function playBuildSound(worldX) {
-  playTone({ frequency: 118, endFrequency: 72, type: "square", duration: 0.11, volume: 0.05, worldX });
-  playNoise({ duration: 0.075, volume: 0.04, frequency: 480, delay: 0.06, worldX });
-}
-
-function playDoorSound(worldX, open) {
+function playPickupSound(type) {
+  const start = type === "stone" ? 330 : type === "wood" ? 270 : 440;
+  playTone({ frequency: start, endFrequency: start * 1.5, type: "triangle", duration: 0.08, volume: 0.025 });
   playTone({
-    frequency: open ? 155 : 105,
-    endFrequency: open ? 92 : 72,
-    type: "sawtooth",
-    duration: 0.18,
-    volume: 0.035,
-    worldX
+    frequency: start * 1.35, endFrequency: start * 1.85, type: "sine",
+    duration: 0.1, volume: 0.018, delay: 0.065
+  });
+}
+
+function playPlayerFootstep() {
+  const sand = terrainAtWorld(player.x, player.y) === TERRAIN_FRAME.sand;
+  playerFootstepSide *= -1;
+  playNoise({
+    duration: sand ? 0.095 : 0.065,
+    volume: sand ? 0.028 : 0.022,
+    frequency: sand ? 720 : 460,
+    filterType: sand ? "lowpass" : "bandpass",
+    resonance: sand ? 0.45 : 0.8,
+    pan: playerFootstepSide * 0.065,
+    attack: 0.003
+  });
+  playTone({
+    frequency: sand ? 92 : 78,
+    endFrequency: sand ? 58 : 46,
+    type: "sine",
+    duration: 0.075,
+    volume: sand ? 0.013 : 0.017,
+    pan: playerFootstepSide * 0.065,
+    attack: 0.003
+  });
+}
+
+function playWeaponSound(worldX, worldY, hit) {
+  playNoise({
+    duration: 0.12, volume: 0.05, frequency: 1450, filterType: "highpass",
+    attack: 0.004, worldX, worldY, range: 400
+  });
+  if (!hit) return;
+  playNoise({
+    duration: 0.085, volume: 0.075, frequency: 440, filterType: "bandpass",
+    resonance: 0.7, delay: 0.035, attack: 0.003, worldX, worldY, range: 430
+  });
+  playTone({
+    frequency: 142, endFrequency: 66, type: "triangle", duration: 0.11,
+    volume: 0.055, delay: 0.035, attack: 0.003, worldX, worldY, range: 430
+  });
+}
+
+function playPistolSound(worldX, worldY = player.y) {
+  playNoise({
+    duration: 0.052, volume: 0.15, frequency: 3200, filterType: "highpass",
+    resonance: 0.65, attack: 0.001, worldX, worldY, range: 1200
+  });
+  playTone({
+    frequency: 172, endFrequency: 54, type: "sawtooth", duration: 0.13,
+    volume: 0.072, attack: 0.002, worldX, worldY, range: 1200
+  });
+  playTone({
+    frequency: 720, endFrequency: 410, type: "triangle", duration: 0.045,
+    volume: 0.024, delay: 0.032, attack: 0.001, worldX, worldY, range: 420
+  });
+  playNoise({
+    duration: 0.2, volume: 0.042, frequency: 1150, filterType: "bandpass",
+    resonance: 1.2, delay: 0.095, pan: (Math.random() - 0.5) * 0.5,
+    bus: "ambience", attack: 0.012
+  });
+}
+
+function playBulletImpact(worldX, worldY) {
+  playNoise({
+    duration: 0.065, volume: 0.075, frequency: 1350, filterType: "bandpass",
+    resonance: 1.1, attack: 0.002, worldX, worldY, range: 900
+  });
+  playTone({
+    frequency: 430, endFrequency: 130, type: "triangle", duration: 0.09,
+    volume: 0.04, attack: 0.002, worldX, worldY, range: 900
+  });
+}
+
+function playReloadSound() {
+  playNoise({ duration: 0.035, volume: 0.04, frequency: 1900, filterType: "highpass", attack: 0.001 });
+  playTone({
+    frequency: 230, endFrequency: 165, type: "square", duration: 0.055,
+    volume: 0.026, delay: 0.025, attack: 0.002
+  });
+  playNoise({
+    duration: 0.045, volume: 0.048, frequency: 1250, filterType: "bandpass",
+    delay: 0.18, attack: 0.001
+  });
+  playTone({
+    frequency: 170, endFrequency: 260, type: "triangle", duration: 0.07,
+    volume: 0.032, delay: 0.205, attack: 0.002
+  });
+}
+
+function playBuildSound(worldX, worldY = player.y) {
+  playTone({
+    frequency: 132, endFrequency: 68, type: "triangle", duration: 0.1,
+    volume: 0.055, attack: 0.003, worldX, worldY, range: 360
+  });
+  playNoise({
+    duration: 0.07, volume: 0.052, frequency: 520, filterType: "bandpass",
+    delay: 0.055, attack: 0.002, worldX, worldY, range: 360
+  });
+  playTone({
+    frequency: 102, endFrequency: 62, type: "triangle", duration: 0.08,
+    volume: 0.035, delay: 0.1, attack: 0.002, worldX, worldY, range: 360
+  });
+}
+
+function playDoorSound(worldX, worldY, open) {
+  playNoise({
+    duration: open ? 0.25 : 0.11, volume: 0.04, frequency: open ? 520 : 310,
+    filterType: "bandpass", resonance: 2.2, worldX, worldY, range: 420
+  });
+  playTone({
+    frequency: open ? 185 : 118, endFrequency: open ? 78 : 62,
+    type: "sawtooth", duration: open ? 0.28 : 0.13, volume: 0.032,
+    worldX, worldY, range: 420
+  });
+  if (!open) {
+    playNoise({
+      duration: 0.035, volume: 0.055, frequency: 900, filterType: "highpass",
+      delay: 0.075, attack: 0.001, worldX, worldY, range: 420
+    });
+  }
+}
+
+function playContainerSound(worldX, worldY) {
+  playTone({
+    frequency: 138, endFrequency: 76, type: "triangle", duration: 0.2,
+    volume: 0.032, worldX, worldY, range: 320
+  });
+  playNoise({
+    duration: 0.06, volume: 0.04, frequency: 780, filterType: "bandpass",
+    delay: 0.12, attack: 0.002, worldX, worldY, range: 320
   });
 }
 
 function playMimicDetected(monster) {
-  const volume = distanceVolume(monster.x, monster.y, 0.075, MIMIC_DETECTION_DISTANCE + 120);
-  playNoise({ duration: 0.42, volume, frequency: 390, filterType: "bandpass", worldX: monster.x });
-  playTone({ frequency: 86, endFrequency: 62, type: "sawtooth", duration: 0.34, volume: volume * 0.55, worldX: monster.x });
+  const range = MIMIC_DETECTION_DISTANCE + 180;
+  const volume = 0.12;
+  playNoise({
+    duration: 0.46, volume, frequency: 430, filterType: "bandpass",
+    resonance: 2.4, worldX: monster.x, worldY: monster.y, range
+  });
+  playTone({
+    frequency: 92, endFrequency: 48, type: "sawtooth", duration: 0.4,
+    volume: volume * 0.72, worldX: monster.x, worldY: monster.y, range
+  });
+  playTone({
+    frequency: 310, endFrequency: 92, type: "triangle", duration: 0.22,
+    volume: volume * 0.35, delay: 0.1, worldX: monster.x, worldY: monster.y, range
+  });
 }
 
 function playMimicFootstep(monster) {
-  const volume = distanceVolume(monster.x, monster.y, 0.105, MIMIC_LOSE_DISTANCE + 100);
-  playNoise({ duration: 0.12, volume, frequency: 190, worldX: monster.x });
-  playTone({ frequency: 72, endFrequency: 48, type: "sine", duration: 0.1, volume: volume * 0.72, worldX: monster.x });
+  const range = MIMIC_LOSE_DISTANCE + 180;
+  const volume = 0.15;
+  const pitchJitter = 0.9 + Math.random() * 0.18;
+  playNoise({
+    duration: 0.11, volume, frequency: 230 * pitchJitter, filterType: "lowpass",
+    attack: 0.003, worldX: monster.x, worldY: monster.y, range
+  });
+  playTone({
+    frequency: 68 * pitchJitter, endFrequency: 38, type: "sine", duration: 0.105,
+    volume: volume * 0.62, attack: 0.003, worldX: monster.x, worldY: monster.y, range
+  });
 }
 
 function playMimicJumpscare(worldX) {
-  playNoise({ duration: 0.48, volume: 0.19, frequency: 1050, filterType: "bandpass", worldX });
-  playTone({ frequency: 62, endFrequency: 310, type: "sawtooth", duration: 0.48, volume: 0.14, worldX });
+  playNoise({
+    duration: 0.42, volume: 0.17, frequency: 1450, filterType: "bandpass",
+    resonance: 1.5, attack: 0.001, worldX, worldY: player.y, range: 240
+  });
+  playTone({
+    frequency: 54, endFrequency: 330, type: "sawtooth", duration: 0.42,
+    volume: 0.11, attack: 0.002, worldX, worldY: player.y, range: 240
+  });
+  playNoise({
+    duration: 0.18, volume: 0.065, frequency: 3000, filterType: "highpass",
+    delay: 0.12, pan: audioPanForWorldX(worldX) * -0.45, attack: 0.002
+  });
 }
 
 function playPhaseSound(night) {
   if (night) {
-    playTone({ frequency: 94, endFrequency: 48, type: "sawtooth", duration: 0.7, volume: 0.065 });
-    playNoise({ duration: 0.8, volume: 0.035, frequency: 330 });
+    playTone({ frequency: 88, endFrequency: 42, type: "sawtooth", duration: 0.85, volume: 0.052, bus: "ambience" });
+    playNoise({ duration: 1.15, volume: 0.032, frequency: 360, bus: "ambience", attack: 0.12 });
   } else {
-    playTone({ frequency: 180, endFrequency: 360, type: "sine", duration: 0.45, volume: 0.04 });
+    playTone({ frequency: 170, endFrequency: 410, type: "sine", duration: 0.5, volume: 0.036, bus: "ambience" });
+    playTone({
+      frequency: 255, endFrequency: 510, type: "triangle", duration: 0.36,
+      volume: 0.018, delay: 0.12, bus: "ambience"
+    });
   }
 }
 
 function updateAudioAmbience(delta) {
   ambienceTimer -= delta;
   if (ambienceTimer > 0) return;
-  ambienceTimer = 3.5 + Math.random() * 4.5;
+  ambienceTimer = isNight() ? 2.8 + Math.random() * 3.8 : 4.5 + Math.random() * 5.5;
+  const pan = Math.random() * 2 - 1;
   playNoise({
-    duration: 1.8,
-    volume: isNight() ? 0.026 : 0.014,
-    frequency: isNight() ? 430 : 620,
-    pan: Math.random() * 2 - 1
+    duration: 2.2 + Math.random() * 1.2,
+    volume: isNight() ? 0.03 : 0.017,
+    frequency: isNight() ? 380 + Math.random() * 140 : 560 + Math.random() * 180,
+    filterType: "lowpass",
+    resonance: 0.35,
+    pan,
+    bus: "ambience",
+    attack: 0.18
+  });
+  if (!isNight() || Math.random() > 0.55) return;
+  const side = Math.random() < 0.5 ? -1 : 1;
+  const worldX = player.x + side * (320 + Math.random() * 330);
+  const worldY = player.y + (Math.random() - 0.5) * 520;
+  playNoise({
+    duration: 0.07, volume: 0.065, frequency: 920, filterType: "bandpass",
+    resonance: 1.8, delay: 0.2 + Math.random() * 0.7, attack: 0.002,
+    worldX, worldY, range: 900
+  });
+  playTone({
+    frequency: 190, endFrequency: 72, type: "triangle", duration: 0.09,
+    volume: 0.035, delay: 0.23 + Math.random() * 0.7, attack: 0.002,
+    worldX, worldY, range: 900
   });
 }
 
@@ -1030,6 +1271,7 @@ function startGame() {
   state = "game";
   ensureAudio();
   ambienceTimer = 0.8;
+  playerFootstepTimer = 0;
   updateAudioButton();
   titleScreen.classList.add("hidden");
   gameScreen.classList.remove("hidden");
@@ -1101,6 +1343,8 @@ function continueGame() {
 
   state = "game";
   ensureAudio();
+  ambienceTimer = 0.8;
+  playerFootstepTimer = 0;
   updateAudioButton();
   titleScreen.classList.add("hidden");
   gameScreen.classList.remove("hidden");
@@ -1447,6 +1691,15 @@ function updatePlayer(delta) {
   }
 
   const sprinting = keys.has("ShiftLeft") || keys.has("ShiftRight");
+  if (player.moving) {
+    playerFootstepTimer -= delta;
+    if (playerFootstepTimer <= 0) {
+      playPlayerFootstep();
+      playerFootstepTimer = sprinting ? 0.22 : 0.31;
+    }
+  } else {
+    playerFootstepTimer = Math.min(playerFootstepTimer, 0.06);
+  }
   const speed = player.speed * (sprinting ? 1.45 : 1);
   const nextX = player.x + x * speed * delta;
   const nextY = player.y + y * speed * delta;
@@ -1530,7 +1783,7 @@ function interact() {
   const nearbyDoor = doors.find((door) => Math.hypot(player.x - door.x, player.y - door.y) < 72);
   if (nearbyDoor) {
     nearbyDoor.open = !nearbyDoor.open;
-    playDoorSound(nearbyDoor.x, nearbyDoor.open);
+    playDoorSound(nearbyDoor.x, nearbyDoor.y, nearbyDoor.open);
     showMessage(nearbyDoor.open ? "木门打开了" : "木门关上了", 1.1);
     return;
   }
@@ -1663,6 +1916,7 @@ function nearbyChest() {
 function openChest(chest) {
   normalizeChestStorage(chest);
   activeChestId = chest.id;
+  playContainerSound(chest.x, chest.y);
   setInventoryOpen(true);
   showMessage("储物箱已打开，拖动物品即可存取", 1.2);
 }
@@ -1749,7 +2003,8 @@ function collectResource() {
   }
 
   player.gatherCooldown = 0.24;
-  playGatherSound(target.type === "tree" ? "wood" : target.type === "rock" ? "stone" : "berry", target.x);
+  const gatheredType = target.type === "tree" ? "wood" : target.type === "rock" ? "stone" : "berry";
+  playGatherSound(gatheredType, target.x, target.y);
   const requiredHits = resourceHarvestHits(target.type);
   target.harvestHits = Math.min(requiredHits, (target.harvestHits || 0) + 1);
   if (target.harvestHits < requiredHits) {
@@ -1761,6 +2016,7 @@ function collectResource() {
 
   const index = resources.indexOf(target);
   resources.splice(index, 1);
+  playPickupSound(gatheredType);
   if (target.spawnKey) harvestedResourceKeys.add(target.spawnKey);
   if (target.type === "tree") {
     const amount = resourceHarvestYield("tree");
@@ -1865,7 +2121,7 @@ function craftWeapon(weaponIndex) {
   const weapon = { ...recipe, cost: { ...recipe.cost }, count: 1, source: "workbench" };
   if (inventoryIndex >= 0) inventoryItems[inventoryIndex] = weapon;
   else quickbarItems[quickIndex] = weapon;
-  playBuildSound(player.x);
+  playBuildSound(player.x, player.y);
   if (craftStatus) {
     craftStatus.textContent = inventoryIndex >= 0
       ? `已制作${recipe.label}，放入背包 ${inventoryIndex + 1}`
@@ -2040,7 +2296,7 @@ function reloadPistol() {
   }
   pistol.loadedAmmo = PISTOL_MAGAZINE_SIZE;
   player.attackCooldown = Math.max(player.attackCooldown, 0.7);
-  playTone({ frequency: 155, endFrequency: 245, type: "square", duration: 0.12, volume: 0.035 });
+  playReloadSound();
   showMessage(`换上新弹夹：${PISTOL_MAGAZINE_SIZE}/${PISTOL_MAGAZINE_SIZE}，剩余弹药箱 ${portableItemCount("ammo_box")}`, 1.5);
   updateHud();
   return true;
@@ -2079,7 +2335,7 @@ function buildBarricade(payCost = true) {
     health: 120,
     maxHealth: 120
   });
-  playBuildSound(placement.x);
+  playBuildSound(placement.x, placement.y);
   if (payCost) {
     spendResource("wood", 3);
     spendResource("stone", 1);
@@ -2106,7 +2362,7 @@ function buildDoor(payCost = true) {
     health: 90,
     maxHealth: 90
   });
-  playBuildSound(placement.x);
+  playBuildSound(placement.x, placement.y);
   if (payCost) {
     spendResource("wood", 4);
     spendResource("stone", 1);
@@ -2127,7 +2383,7 @@ function buildProp(type, cost, label, payCost = true) {
   if (type === "trap") Object.assign(building, { uses: trapStats().uses, cooldown: 0 });
   if (type === "chest") building.items = Array(CHEST_SLOT_COUNT).fill(null);
   buildings.push(building);
-  playBuildSound(placement.x);
+  playBuildSound(placement.x, placement.y);
   if (payCost) {
     spendResource("wood", cost.wood);
     spendResource("stone", cost.stone);
@@ -2314,7 +2570,7 @@ function firePistol(weapon) {
     range,
     damage: weaponDamage(weapon)
   });
-  playPistolSound(player.x);
+  playPistolSound(player.x, player.y);
   const ammoText = `${weapon.loadedAmmo}/${PISTOL_MAGAZINE_SIZE}`;
   showMessage(`手枪开火 · 弹夹 ${ammoText}`, 0.75);
   updateHud();
@@ -2362,7 +2618,7 @@ function updateProjectiles(delta) {
       target.x += bullet.directionX * 12;
       target.y += bullet.directionY * 12;
       pistolShot.hit = true;
-      playTone({ frequency: 610, endFrequency: 250, type: "triangle", duration: 0.08, volume: 0.03, worldX: target.x });
+      playBulletImpact(target.x, target.y);
       showMessage("手枪子弹命中怪物", 0.65);
       projectiles.splice(index, 1);
       continue;
@@ -2389,6 +2645,7 @@ function attack() {
   player.attackTimer = 0.16;
   let hit = false;
   let soundX = player.x + player.dirX * 52;
+  let soundY = player.y + player.dirY * 52;
   for (const monster of monsters) {
     if (monster.dead) continue;
     const dx = monster.x - player.x;
@@ -2400,9 +2657,10 @@ function attack() {
       monster.y += (dy / (Math.hypot(dx, dy) || 1)) * knockback;
       hit = true;
       soundX = monster.x;
+      soundY = monster.y;
     }
   }
-  playWeaponSound(soundX);
+  playWeaponSound(soundX, soundY, hit);
   showMessage(hit ? "击中了怪物" : "攻击落空", 0.7);
 }
 

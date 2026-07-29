@@ -2733,3 +2733,50 @@ h1 {
 .inventory-slot[data-item-type="trap"] .item-sprite { background-position: -224px -96px; }
 .inventory-slot[data-item-type="club"] .item-sprite { background-position: 0 -128px; }
 .inventory-slot[data-item-type="axe"] .item-sprite { background-position: -32px -128px; }
+
+/* 求救信标暂时使用代码绘制的像素图标，不占用用户的素材图集。 */
+.signal-beacon,
+.inventory-slot[data-item-type="beacon"] .item-sprite,
+.quick-slot[data-item-type="beacon"] .item-sprite {
+  background-image:
+    linear-gradient(#ffd29a, #ffd29a),
+    linear-gradient(#e85d50, #8d3433),
+    linear-gradient(#9eaa98, #59675e),
+    linear-gradient(#26312c, #26312c);
+  background-repeat: no-repeat;
+  background-position:
+    center 5px,
+    center 3px,
+    center 9px,
+    center 25px;
+  background-size:
+    4px 4px,
+    14px 7px,
+    6px 19px,
+    26px 6px;
+  image-rendering: pixelated;
+}
+
+.craft-button.workbench-locked {
+  filter: grayscale(.85);
+}
+
+.victory-panel {
+  background:
+    repeating-linear-gradient(0deg, transparent 0 3px, rgba(0, 0, 0, .08) 3px 4px),
+    radial-gradient(circle, rgba(68, 104, 74, .48), rgba(1, 4, 4, .97) 64%);
+}
+
+.victory-panel::before {
+  content: "RESCUE COMPLETE";
+  color: #9db68f;
+}
+
+.victory-panel h2 {
+  color: #e1ddbd;
+  text-shadow: 4px 4px 0 #0c1510, -2px 0 #61785b;
+}
+
+.victory-panel p {
+  color: #9daa92;
+}

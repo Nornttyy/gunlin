@@ -10,7 +10,7 @@
   <link rel="preload" href="assets/mimic.png?v=20260728-mimic-drawn1" as="image" />
   <link rel="preload" href="assets/forest-assets.png?v=20260728-assets2" as="image" />
   <link rel="preload" href="assets/ark-pixel-12px-zh_cn.woff2?v=20260728-assets2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=20260729-itemflow1" />
+  <link rel="stylesheet" href="styles.css?v=20260729-rescue1" />
 </head>
 <body>
   <main id="app">
@@ -96,7 +96,7 @@
               <p>合成栏</p>
               <span>成品优先进入背包</span>
             </div>
-            <span>配方 08</span>
+            <span>配方 09</span>
           </div>
           <div class="craft-list">
             <button type="button" class="craft-button" data-recipe="0"><span class="item-sprite quick-wall" aria-hidden="true"></span><span class="craft-copy"><strong>木墙</strong><small>木材 3 · 石头 1</small></span><span class="craft-owned">0</span></button>
@@ -105,6 +105,7 @@
             <button type="button" class="craft-button" data-recipe="3"><span class="item-sprite quick-chest" aria-hidden="true"></span><span class="craft-copy"><strong>储物箱</strong><small>木材 5</small></span><span class="craft-owned">0</span></button>
             <button type="button" class="craft-button" data-recipe="4"><span class="item-sprite quick-workbench" aria-hidden="true"></span><span class="craft-copy"><strong>工作台</strong><small>木材 6 · 石头 2</small></span><span class="craft-owned">0</span></button>
             <button type="button" class="craft-button" data-recipe="5"><span class="item-sprite quick-trap" aria-hidden="true"></span><span class="craft-copy"><strong>陷阱</strong><small>木材 2 · 石头 1</small></span><span class="craft-owned">0</span></button>
+            <button type="button" class="craft-button beacon-craft-button" data-recipe="6"><span class="item-sprite signal-beacon" aria-hidden="true"></span><span class="craft-copy"><strong>求救信标</strong><small>木材 20 · 石头 12 · 需工作台</small></span><span class="craft-owned">0</span></button>
           </div>
           <div class="workbench-craft-header">
             <span>工作台武器</span>
@@ -217,6 +218,11 @@
         <p>雾正在覆盖你留下的脚印</p>
         <button id="restartButton" class="primary-button">重新开始</button>
       </div>
+      <div id="victoryPanel" class="game-over victory-panel hidden">
+        <h2>救援信号已确认</h2>
+        <p id="victorySummary">你守住了信标，终于离开了森林。</p>
+        <button id="victoryTitleButton" class="primary-button">返回主界面</button>
+      </div>
     </section>
     <section id="settingsPanel" class="settings-panel hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
       <div class="settings-header">
@@ -255,6 +261,6 @@
       <p class="settings-tip">设置会自动保存在这个浏览器中</p>
     </section>
   </main>
-  <script type="module" src="game.js?v=20260729-itemflow1"></script>
+  <script type="module" src="game.js?v=20260729-rescue1"></script>
 </body>
 </html>

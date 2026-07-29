@@ -21,8 +21,8 @@ const SPAWN_CORRIDOR = {
   halfLength: 600,
   radius: 84
 };
-const DAY_LENGTH = 62;
-const NIGHT_LENGTH = 42;
+const DAY_LENGTH = 10 * 60;
+const NIGHT_LENGTH = 15 * 60;
 const CYCLE_LENGTH = DAY_LENGTH + NIGHT_LENGTH;
 const MIMIC_DETECTION_DISTANCE = 360;
 const MIMIC_LOSE_DISTANCE = 540;

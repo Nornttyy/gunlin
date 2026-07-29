@@ -2636,3 +2636,72 @@ h1 {
     white-space: nowrap;
   }
 }
+
+/* 可交互储物箱：打开时以箱子和随身背包两栏显示。 */
+.inventory-workspace.chest-open {
+  grid-template-columns: repeat(2, minmax(300px, 420px));
+}
+
+.inventory-workspace.chest-open::before {
+  content: "STORAGE LINK // 拖动整组材料 // I 关闭";
+}
+
+.chest-panel {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  padding: 22px 24px 20px;
+  border: 1px solid #4f6255;
+  border-top: 3px solid #7d3a39;
+  color: #e7f0db;
+  background:
+    linear-gradient(90deg, rgba(94, 119, 98, .025) 1px, transparent 1px) 0 0 / 11px 100%,
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, .012) 0 1px, transparent 1px 7px),
+    linear-gradient(155deg, #111a16, #050908);
+  box-shadow:
+    12px 15px 0 rgba(0, 0, 0, .45),
+    0 0 0 1px rgba(1, 3, 3, .85),
+    0 24px 70px rgba(0, 0, 0, .46);
+}
+
+.chest-panel::before {
+  content: "CONTAINER // 12";
+  position: absolute;
+  right: 21px;
+  top: 7px;
+  color: #713d3a;
+  font-size: 8px;
+  letter-spacing: .14em;
+}
+
+.chest-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.chest-slot {
+  width: 100%;
+  height: 73px;
+}
+
+@media (max-width: 860px) {
+  .inventory-workspace.chest-open {
+    grid-template-columns: minmax(0, 530px);
+    align-content: start;
+    overflow-y: auto;
+  }
+
+  .chest-panel {
+    order: 1;
+  }
+
+  .inventory-workspace.chest-open .inventory-panel {
+    order: 2;
+  }
+}
+
+@media (max-width: 560px) {
+  .chest-panel {
+    width: 100%;
+    padding: 18px 14px 16px;
+  }
+}

@@ -94,9 +94,13 @@ const buildingLabel = document.getElementById("buildingLabel");
 const inventoryButton = document.getElementById("inventoryButton");
 const inventoryButtonLabel = document.getElementById("inventoryButtonLabel");
 const inventoryWorkspace = document.getElementById("inventoryWorkspace");
+const craftPanel = document.getElementById("craftPanel");
 const inventoryPanel = document.getElementById("inventoryPanel");
 const inventoryCapacity = document.getElementById("inventoryCapacity");
-const inventorySlots = [...document.querySelectorAll(".inventory-slot")];
+const inventorySlots = [...document.querySelectorAll("[data-inventory-slot]")];
+const chestPanel = document.getElementById("chestPanel");
+const chestCapacity = document.getElementById("chestCapacity");
+const chestSlots = [...document.querySelectorAll("[data-chest-slot]")];
 const craftButtons = [...document.querySelectorAll(".craft-button")];
 const weaponCraftButtons = [...document.querySelectorAll(".weapon-craft-button")];
 const craftStatus = document.getElementById("craftStatus");
@@ -194,7 +198,9 @@ let settingsOpen = false;
 let pauseOpen = false;
 let settingsReturnTarget = "title";
 let autosaveTimer = 20;
+let activeChestId = null;
 let draggedInventorySlot = -1;
+let draggedChestSlot = -1;
 let jumpscareSequence = 0;
 let audioContext = null;
 let masterGain = null;
@@ -838,6 +844,8 @@ function startGame() {
     mimicJumpscare.setAttribute("aria-hidden", "true");
   }
   draggedInventorySlot = -1;
+  draggedChestSlot = -1;
+  activeChestId = null;
   inventoryItems.fill(null);
   quickbarItems.fill(null);
   craftedCounts.fill(0);
@@ -891,7 +899,11 @@ function continueGame() {
   inventoryOpen = false;
   settingsOpen = false;
   pauseOpen = false;
+  activeChestId = null;
   inventoryWorkspace?.classList.add("hidden");
+  inventoryWorkspace?.classList.remove("chest-open");
+  craftPanel?.classList.remove("hidden");
+  chestPanel?.classList.add("hidden");
   inventoryPanel.classList.add("hidden");
   settingsPanel?.classList.add("hidden");
   pausePanel?.classList.add("hidden");
@@ -954,6 +966,7 @@ function continueGame() {
   restoreList(barricades, saved.barricades);
   restoreList(doors, saved.doors);
   restoreList(buildings, saved.buildings);
+  buildings.filter((building) => building.type === "chest").forEach(normalizeChestStorage);
   resourceId = 0;
   barricadeId = nextEntityId(barricades);
   doorId = nextEntityId(doors);
@@ -980,6 +993,7 @@ function returnToTitle() {
   inventoryOpen = false;
   settingsOpen = false;
   pauseOpen = false;
+  activeChestId = null;
   classSelectionOpen = false;
   inventoryWorkspace?.classList.add("hidden");
   inventoryPanel.classList.add("hidden");
@@ -1155,6 +1169,11 @@ function interact() {
     showMessage(nearbyDoor.open ? "木门打开了" : "木门关上了", 1.1);
     return;
   }
+  const chest = nearbyChest();
+  if (chest) {
+    openChest(chest);
+    return;
+  }
   if (nearbyWorkbench()) {
     setInventoryOpen(true);
     if (craftStatus) craftStatus.textContent = "工作台已连接：选择一种武器制作";
@@ -1171,6 +1190,43 @@ function interact() {
 
 function resourceItemDefinition(type) {
   return RESOURCE_ITEMS.find((item) => item.type === type);
+}
+
+const CHEST_SLOT_COUNT = 12;
+
+function normalizeChestStorage(chest) {
+  if (!chest || chest.type !== "chest") return [];
+  const previous = Array.isArray(chest.items) ? chest.items : [];
+  chest.items = Array.from({ length: CHEST_SLOT_COUNT }, (_, index) => {
+    const item = previous[index];
+    const definition = resourceItemDefinition(item?.type);
+    const count = Math.max(0, Math.floor(Number(item?.count) || 0));
+    return definition && count > 0
+      ? { ...definition, count, source: "chest" }
+      : null;
+  });
+  return chest.items;
+}
+
+function currentChest() {
+  if (activeChestId === null) return null;
+  return buildings.find((building) => (
+    building.type === "chest" && building.id === activeChestId
+  )) || null;
+}
+
+function nearbyChest() {
+  return buildings.find((building) => (
+    building.type === "chest"
+    && Math.hypot(player.x - building.x, player.y - building.y) < 86
+  )) || null;
+}
+
+function openChest(chest) {
+  normalizeChestStorage(chest);
+  activeChestId = chest.id;
+  setInventoryOpen(true);
+  showMessage("储物箱已打开，拖动物品即可存取", 1.2);
 }
 
 function ensureInventoryResource(type) {
@@ -1366,14 +1422,19 @@ function craftBuilding(buildIndex) {
 // 背包打开时会暂停游戏，就像先把桌面上的玩具按下暂停键再整理盒子。
 function setInventoryOpen(open) {
   inventoryOpen = open && state === "game" && !classSelectionOpen;
+  if (!inventoryOpen) activeChestId = null;
+  const chest = inventoryOpen ? currentChest() : null;
   if (inventoryWorkspace) inventoryWorkspace.classList.toggle("hidden", !inventoryOpen);
+  inventoryWorkspace?.classList.toggle("chest-open", Boolean(chest));
+  craftPanel?.classList.toggle("hidden", Boolean(chest));
+  chestPanel?.classList.toggle("hidden", !chest);
   inventoryPanel.classList.toggle("hidden", !inventoryOpen);
   inventoryButton.classList.toggle("active", inventoryOpen);
   inventoryButton.setAttribute("aria-expanded", String(inventoryOpen));
-  inventoryButtonLabel.textContent = inventoryOpen ? "关闭" : "背包";
+  inventoryButtonLabel.textContent = inventoryOpen ? (chest ? "关闭箱子" : "关闭") : "背包";
   if (inventoryOpen) {
     keys.clear();
-    if (craftStatus) craftStatus.textContent = "选择配方制作，成品会进入快捷栏";
+    if (craftStatus && !chest) craftStatus.textContent = "选择配方制作，成品会进入快捷栏";
   }
   updateHud();
 }
@@ -1488,13 +1549,14 @@ function buildProp(type, cost, label, payCost = true) {
   const building = { id: buildingId++, type, x: placement.x, y: placement.y };
   // 陷阱像一只有三颗牙的夹子，命中三次后就会坏掉。
   if (type === "trap") Object.assign(building, { uses: 3, cooldown: 0 });
+  if (type === "chest") building.items = Array(CHEST_SLOT_COUNT).fill(null);
   buildings.push(building);
   playBuildSound(placement.x);
   if (payCost) {
     player.wood -= cost.wood;
     player.stone -= cost.stone;
   }
-  showMessage(`建造了${label}`);
+  showMessage(type === "chest" ? "建造了储物箱，靠近后按 E 打开" : `建造了${label}`);
   return true;
 }
 
@@ -1885,6 +1947,97 @@ function renderInventory() {
   inventoryCapacity.textContent = `${inventoryItems.filter(Boolean).length} / 12 格`;
 }
 
+function renderChestStorage() {
+  const chest = currentChest();
+  const items = chest ? normalizeChestStorage(chest) : [];
+  chestSlots.forEach((slot, index) => {
+    const item = items[index] || null;
+    slot.classList.toggle("item-empty", !item);
+    slot.classList.toggle("empty-slot", !item);
+    slot.dataset.itemType = item?.type || "empty";
+    slot.dataset.label = item?.label || "";
+    slot.dataset.count = item ? String(item.count) : "";
+    slot.draggable = Boolean(item);
+    slot.title = item
+      ? `${item.label} ×${item.count}；拖回背包可取出`
+      : "储物箱空格，把背包材料拖到这里";
+    slot.setAttribute("aria-label", slot.title);
+  });
+  if (chestCapacity) {
+    chestCapacity.textContent = `${items.filter(Boolean).length} / ${CHEST_SLOT_COUNT} 格`;
+  }
+}
+
+function finishStorageMove(message) {
+  updateHud();
+  saveGame(false);
+  showMessage(message, 0.9);
+}
+
+function moveInventoryToChest(inventoryIndex, chestIndex) {
+  const chest = currentChest();
+  const item = inventoryItems[inventoryIndex];
+  const definition = resourceItemDefinition(item?.type);
+  const amount = definition ? Math.max(0, Math.floor(Number(player[definition.type]) || 0)) : 0;
+  if (!chest || !definition || amount <= 0) return false;
+  const items = normalizeChestStorage(chest);
+  const target = items[chestIndex];
+  if (target && target.type !== definition.type) {
+    showMessage("这个箱子格已经放了其他材料", 1);
+    return false;
+  }
+  if (target) {
+    target.count += amount;
+  } else {
+    items[chestIndex] = { ...definition, count: amount, source: "chest" };
+  }
+  player[definition.type] = 0;
+  inventoryItems[inventoryIndex] = null;
+  finishStorageMove(`已存入${definition.label} ×${amount}`);
+  return true;
+}
+
+function moveChestToInventory(chestIndex, inventoryIndex) {
+  const chest = currentChest();
+  if (!chest) return false;
+  const items = normalizeChestStorage(chest);
+  const item = items[chestIndex];
+  const definition = resourceItemDefinition(item?.type);
+  if (!item || !definition || item.count <= 0) return false;
+  const target = inventoryItems[inventoryIndex];
+  if (target && target.type !== definition.type) {
+    showMessage("请拖到背包空格或相同材料上", 1);
+    return false;
+  }
+  const existingIndex = inventoryItems.findIndex((entry) => entry?.type === definition.type);
+  if (existingIndex < 0) {
+    inventoryItems[inventoryIndex] = { ...definition, source: "inventory" };
+  }
+  player[definition.type] += item.count;
+  const amount = item.count;
+  items[chestIndex] = null;
+  finishStorageMove(`已取出${definition.label} ×${amount}`);
+  return true;
+}
+
+function moveChestItem(chestIndex, targetIndex) {
+  const chest = currentChest();
+  if (!chest || chestIndex === targetIndex) return false;
+  const items = normalizeChestStorage(chest);
+  const source = items[chestIndex];
+  const target = items[targetIndex];
+  if (!source) return false;
+  if (target?.type === source.type) {
+    target.count += source.count;
+    items[chestIndex] = null;
+    finishStorageMove("相同材料已经合并");
+  } else {
+    [items[chestIndex], items[targetIndex]] = [target || null, source];
+    finishStorageMove(target ? "箱内物品已交换位置" : "箱内物品已移动");
+  }
+  return true;
+}
+
 function syncResourceQuickbar() {
   quickbarItems.forEach((item, index) => {
     if (item?.source === "inventory" && player[item.type] <= 0) {
@@ -1964,6 +2117,7 @@ function updateHud() {
   updateSurvivalReadout();
   const selected = BUILD_TYPES[selectedBuild];
   renderInventory();
+  renderChestStorage();
   syncResourceQuickbar();
   renderCrafting();
   renderWeaponCrafting();
@@ -2848,6 +3002,13 @@ resetSettingsButton?.addEventListener("click", () => {
   renderSettings();
   showMessage("设置已恢复默认", 1);
 });
+
+function clearStorageDragState() {
+  draggedInventorySlot = -1;
+  draggedChestSlot = -1;
+  [...inventorySlots, ...chestSlots].forEach((item) => item.classList.remove("dragging", "drag-over"));
+}
+
 inventorySlots.forEach((slot, index) => {
   slot.addEventListener("dragstart", (event) => {
     if (!inventoryItems[index]) {
@@ -2855,6 +3016,7 @@ inventorySlots.forEach((slot, index) => {
       return;
     }
     draggedInventorySlot = index;
+    draggedChestSlot = -1;
     slot.classList.add("dragging");
     if (event.dataTransfer) {
       event.dataTransfer.effectAllowed = "move";
@@ -2862,33 +3024,72 @@ inventorySlots.forEach((slot, index) => {
     }
   });
   slot.addEventListener("dragover", (event) => {
-    if (draggedInventorySlot < 0) return;
+    if (draggedInventorySlot < 0 && draggedChestSlot < 0) return;
     event.preventDefault();
     if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
-    inventorySlots.forEach((item) => item.classList.remove("drag-over"));
+    [...inventorySlots, ...chestSlots].forEach((item) => item.classList.remove("drag-over"));
     slot.classList.add("drag-over");
   });
   slot.addEventListener("dragleave", () => slot.classList.remove("drag-over"));
   slot.addEventListener("drop", (event) => {
     event.preventDefault();
     const sourceIndex = draggedInventorySlot;
-    inventorySlots.forEach((item) => item.classList.remove("dragging", "drag-over"));
-    draggedInventorySlot = -1;
+    const sourceChestIndex = draggedChestSlot;
+    clearStorageDragState();
+    if (sourceChestIndex >= 0) {
+      moveChestToInventory(sourceChestIndex, index);
+      return;
+    }
     if (sourceIndex < 0 || sourceIndex === index || !inventoryItems[sourceIndex]) return;
     [inventoryItems[sourceIndex], inventoryItems[index]] = [
       inventoryItems[index],
       inventoryItems[sourceIndex]
     ];
     updateHud();
+    saveGame(false);
     showMessage(inventoryItems[sourceIndex] ? "两个物品交换了位置" : "物品已移动", 0.9);
   });
-  slot.addEventListener("dragend", () => {
-    draggedInventorySlot = -1;
-    inventorySlots.forEach((item) => item.classList.remove("dragging", "drag-over"));
-  });
+  slot.addEventListener("dragend", clearStorageDragState);
   slot.addEventListener("click", () => {
     if (inventoryItems[index]?.type === "berry") useBerry();
   });
+});
+chestSlots.forEach((slot, index) => {
+  slot.addEventListener("dragstart", (event) => {
+    const chest = currentChest();
+    const items = chest ? normalizeChestStorage(chest) : [];
+    if (!items[index]) {
+      event.preventDefault();
+      return;
+    }
+    draggedChestSlot = index;
+    draggedInventorySlot = -1;
+    slot.classList.add("dragging");
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", `chest:${index}`);
+    }
+  });
+  slot.addEventListener("dragover", (event) => {
+    if (draggedInventorySlot < 0 && draggedChestSlot < 0) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+    [...inventorySlots, ...chestSlots].forEach((item) => item.classList.remove("drag-over"));
+    slot.classList.add("drag-over");
+  });
+  slot.addEventListener("dragleave", () => slot.classList.remove("drag-over"));
+  slot.addEventListener("drop", (event) => {
+    event.preventDefault();
+    const sourceInventoryIndex = draggedInventorySlot;
+    const sourceChestIndex = draggedChestSlot;
+    clearStorageDragState();
+    if (sourceInventoryIndex >= 0) {
+      moveInventoryToChest(sourceInventoryIndex, index);
+      return;
+    }
+    if (sourceChestIndex >= 0) moveChestItem(sourceChestIndex, index);
+  });
+  slot.addEventListener("dragend", clearStorageDragState);
 });
 quickSlots.forEach((slot) => {
   slot.addEventListener("click", () => {

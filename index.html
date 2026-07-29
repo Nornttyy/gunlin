@@ -10,7 +10,7 @@
   <link rel="preload" href="assets/mimic.png?v=20260728-mimic-drawn1" as="image" />
   <link rel="preload" href="assets/forest-assets.png?v=20260728-assets2" as="image" />
   <link rel="preload" href="assets/ark-pixel-12px-zh_cn.woff2?v=20260728-assets2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=20260729-menu-save1" />
+  <link rel="stylesheet" href="styles.css?v=20260729-chest1" />
 </head>
 <body>
   <main id="app">
@@ -115,6 +115,30 @@
             <button type="button" class="weapon-craft-button" data-weapon-recipe="1"><span class="item-sprite weapon-axe" aria-hidden="true"></span><span class="craft-copy"><strong>石斧</strong><small>木材 4 · 石头 3 · 伤害 45</small></span></button>
           </div>
           <p id="craftStatus" class="craft-status">收集材料后可以制作</p>
+        </section>
+        <section id="chestPanel" class="chest-panel hidden" aria-label="储物箱">
+          <div class="inventory-header">
+            <div>
+              <p>储物箱</p>
+              <span>每个箱子独立保存</span>
+            </div>
+            <span id="chestCapacity" class="inventory-capacity">0 / 12 格</span>
+          </div>
+          <div class="inventory-grid chest-grid">
+            <button type="button" class="inventory-slot chest-slot item-empty empty-slot" data-chest-slot="0"><span class="item-sprite" aria-hidden="true"></span></button>
+            <button type="button" class="inventory-slot chest-slot item-empty empty-slot" data-chest-slot="1"><span class="item-sprite" aria-hidden="true"></span></button>
+            <button type="button" class="inventory-slot chest-slot item-empty empty-slot" data-chest-slot="2"><span class="item-sprite" aria-hidden="true"></span></button>
+            <button type="button" class="inventory-slot chest-slot item-empty empty-slot" data-chest-slot="3"><span class="item-sprite" aria-hidden="true"></span></button>
+            <button type="button" class="inventory-slot chest-slot item-empty empty-slot" data-chest-slot="4"><span class="item-sprite" aria-hidden="true"></span></button>
+            <button type="button" class="inventory-slot chest-slot item-empty empty-slot" data-chest-slot="5"><span class="item-sprite" aria-hidden="true"></span></button>
+            <button type="button" class="inventory-slot chest-slot item-empty empty-slot" data-chest-slot="6"><span class="item-sprite" aria-hidden="true"></span></button>
+            <button type="button" class="inventory-slot chest-slot item-empty empty-slot" data-chest-slot="7"><span class="item-sprite" aria-hidden="true"></span></button>
+            <button type="button" class="inventory-slot chest-slot item-empty empty-slot" data-chest-slot="8"><span class="item-sprite" aria-hidden="true"></span></button>
+            <button type="button" class="inventory-slot chest-slot item-empty empty-slot" data-chest-slot="9"><span class="item-sprite" aria-hidden="true"></span></button>
+            <button type="button" class="inventory-slot chest-slot item-empty empty-slot" data-chest-slot="10"><span class="item-sprite" aria-hidden="true"></span></button>
+            <button type="button" class="inventory-slot chest-slot item-empty empty-slot" data-chest-slot="11"><span class="item-sprite" aria-hidden="true"></span></button>
+          </div>
+          <p class="inventory-tip">拖动整组材料，可与相同材料合并</p>
         </section>
         <section id="inventoryPanel" class="inventory-panel hidden" aria-label="玩家物品栏">
           <div class="inventory-header">
@@ -231,6 +255,6 @@
       <p class="settings-tip">设置会自动保存在这个浏览器中</p>
     </section>
   </main>
-  <script type="module" src="game.js?v=20260729-menu-save1"></script>
+  <script type="module" src="game.js?v=20260729-chest1"></script>
 </body>
 </html>

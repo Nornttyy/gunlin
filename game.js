@@ -127,6 +127,8 @@ const PORTABLE_ITEMS = [
   { type: "strength_potion", kind: "consumable", label: "力量药水" }
 ];
 const PISTOL_MAGAZINE_SIZE = 7;
+const PISTOL_BULLET_SPEED = 760;
+const PISTOL_BULLET_WIDTH = 10;
 const CLASS_NAMES = ["枪手", "护士", "伐木工", "守望者", "棒球女", "科学家"];
 const CLASS_SKILLS = [
   { name: "精准射击", description: "武器伤害 +25%，攻击速度 +15%" },
@@ -343,6 +345,7 @@ const RESOURCE_CHUNK_LOAD_RADIUS = 1;
 const RESOURCE_CHUNK_KEEP_RADIUS = 2;
 let activeResourceChunk = "";
 const monsters = [];
+const projectiles = [];
 const barricades = [];
 const doors = [];
 const buildings = [];
@@ -997,6 +1000,7 @@ function resetWorld() {
   harvestedResourceKeys.clear();
   activeResourceChunk = "";
   monsters.length = 0;
+  projectiles.length = 0;
   barricades.length = 0;
   doors.length = 0;
   buildings.length = 0;
@@ -1093,6 +1097,7 @@ function continueGame() {
   classSelectPanel.classList.add("hidden");
   classSelectionOpen = false;
   pistolShot.timer = 0;
+  projectiles.length = 0;
   inventoryOpen = false;
   settingsOpen = false;
   pauseOpen = false;
@@ -1329,6 +1334,7 @@ function update(delta) {
   updatePlayer(delta);
   updateEscapeGateDiscovery();
   updateDoors(delta);
+  updateProjectiles(delta);
   updateTraps(delta);
   updateMonsters(delta, night);
   updateAudioAmbience(delta);
@@ -2195,25 +2201,6 @@ function usePrimaryAction() {
   }
 }
 
-function findPistolTarget(range) {
-  let target = null;
-  let nearestProjection = Infinity;
-  for (const monster of monsters) {
-    if (monster.dead) continue;
-    const dx = monster.x - player.x;
-    const dy = monster.y - player.y;
-    const projection = dx * player.dirX + dy * player.dirY;
-    if (projection <= 0 || projection >= range) continue;
-    const sidewaysDistance = Math.abs(dx * player.dirY - dy * player.dirX);
-    if (sidewaysDistance > (monster.radius || 13) + 18) continue;
-    if (projection < nearestProjection) {
-      target = monster;
-      nearestProjection = projection;
-    }
-  }
-  return target;
-}
-
 function firePistol(weapon) {
   const loadedAmmo = Math.max(0, Math.floor(Number(weapon.loadedAmmo) || 0));
   if (loadedAmmo <= 0) {
@@ -2227,33 +2214,91 @@ function firePistol(weapon) {
   player.attackCooldown = weaponAttackCooldown(weapon);
   player.attackTimer = 0.12;
   const range = weapon.range || 310;
-  const target = findPistolTarget(range);
-  const soundX = target?.x ?? player.x + player.dirX * 140;
-  const startX = player.x + player.dirX * 19;
-  const startY = player.y - 15 + player.dirY * 5;
+  const directionLength = Math.hypot(player.dirX, player.dirY) || 1;
+  const directionX = player.dirX / directionLength;
+  const directionY = player.dirY / directionLength;
+  const startX = player.x + directionX * 19;
+  const startY = player.y - 15 + directionY * 5;
   Object.assign(pistolShot, {
     timer: 0.12,
     startX,
     startY,
-    endX: target?.x ?? startX + player.dirX * range,
-    endY: target ? target.y - 7 : startY + player.dirY * range,
-    hit: Boolean(target)
+    endX: startX,
+    endY: startY,
+    hit: false
   });
-  if (target) {
-    target.health -= weaponDamage(weapon);
-    target.hurtTimer = 0.2;
-    target.x += player.dirX * 12;
-    target.y += player.dirY * 12;
-  }
-  playPistolSound(soundX);
+  projectiles.push({
+    x: startX,
+    y: startY,
+    previousX: startX,
+    previousY: startY,
+    directionX,
+    directionY,
+    angle: Math.atan2(directionY, directionX),
+    speed: PISTOL_BULLET_SPEED,
+    distance: 0,
+    range,
+    damage: weaponDamage(weapon)
+  });
+  playPistolSound(player.x);
   const ammoText = `${weapon.loadedAmmo}/${PISTOL_MAGAZINE_SIZE}`;
-  showMessage(
-    target
-      ? `手枪命中 · 弹夹 ${ammoText}`
-      : `子弹射入雾中 · 弹夹 ${ammoText}`,
-    0.9
-  );
+  showMessage(`手枪开火 · 弹夹 ${ammoText}`, 0.75);
   updateHud();
+}
+
+function segmentDistanceToPoint(startX, startY, endX, endY, pointX, pointY) {
+  const segmentX = endX - startX;
+  const segmentY = endY - startY;
+  const lengthSquared = segmentX * segmentX + segmentY * segmentY;
+  if (lengthSquared <= 0.0001) return Math.hypot(pointX - startX, pointY - startY);
+  const projection = Math.max(0, Math.min(
+    1,
+    ((pointX - startX) * segmentX + (pointY - startY) * segmentY) / lengthSquared
+  ));
+  return Math.hypot(
+    pointX - (startX + segmentX * projection),
+    pointY - (startY + segmentY * projection)
+  );
+}
+
+function updateProjectiles(delta) {
+  for (let index = projectiles.length - 1; index >= 0; index -= 1) {
+    const bullet = projectiles[index];
+    bullet.previousX = bullet.x;
+    bullet.previousY = bullet.y;
+    const step = bullet.speed * delta;
+    bullet.x += bullet.directionX * step;
+    bullet.y += bullet.directionY * step;
+    bullet.distance += step;
+
+    const target = monsters.find((monster) => (
+      !monster.dead
+      && segmentDistanceToPoint(
+        bullet.previousX,
+        bullet.previousY,
+        bullet.x,
+        bullet.y,
+        monster.x,
+        monster.y - 5
+      ) <= (monster.radius || 13) + 4
+    ));
+    if (target) {
+      target.health -= bullet.damage;
+      target.hurtTimer = 0.2;
+      target.x += bullet.directionX * 12;
+      target.y += bullet.directionY * 12;
+      pistolShot.hit = true;
+      playTone({ frequency: 610, endFrequency: 250, type: "triangle", duration: 0.08, volume: 0.03, worldX: target.x });
+      showMessage("手枪子弹命中怪物", 0.65);
+      projectiles.splice(index, 1);
+      continue;
+    }
+    if (bullet.distance >= bullet.range
+      || bullet.x < WORLD.margin || bullet.y < WORLD.margin
+      || bullet.x > WORLD.width - WORLD.margin || bullet.y > WORLD.height - WORLD.margin) {
+      projectiles.splice(index, 1);
+    }
+  }
 }
 
 function attack() {
@@ -2915,7 +2960,7 @@ function render() {
   drawAtmosphere();
   ctx.save();
   ctx.translate(-Math.floor(camera.x) + shakeX, -Math.floor(camera.y) + shakeY);
-  drawPistolShot();
+  drawProjectiles();
   ctx.restore();
 }
 
@@ -3375,28 +3420,38 @@ function getMimicFrame(monster) {
   return Math.floor(monster.animation || 0) % 2;
 }
 
-function drawPistolShot() {
-  if (pistolShot.timer <= 0) return;
-  const strength = Math.min(1, pistolShot.timer / 0.12);
+function drawProjectiles() {
   ctx.save();
-  ctx.globalAlpha = strength;
-  ctx.strokeStyle = "rgba(255, 243, 188, .96)";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(pistolShot.startX, pistolShot.startY);
-  ctx.lineTo(pistolShot.endX, pistolShot.endY);
-  ctx.stroke();
-  ctx.strokeStyle = "rgba(232, 132, 62, .58)";
-  ctx.lineWidth = 5;
-  ctx.globalAlpha = strength * 0.35;
-  ctx.beginPath();
-  ctx.moveTo(pistolShot.startX, pistolShot.startY);
-  ctx.lineTo(pistolShot.endX, pistolShot.endY);
-  ctx.stroke();
-  if (pistolShot.hit) {
-    ctx.globalAlpha = strength;
-    ctx.fillStyle = "#fff0b0";
-    ctx.fillRect(pistolShot.endX - 2, pistolShot.endY - 2, 4, 4);
+  ctx.globalCompositeOperation = "screen";
+  if (pistolShot.timer > 0) {
+    const flashStrength = Math.min(1, pistolShot.timer / 0.12);
+    const flash = ctx.createRadialGradient(
+      pistolShot.startX,
+      pistolShot.startY,
+      0,
+      pistolShot.startX,
+      pistolShot.startY,
+      18
+    );
+    flash.addColorStop(0, `rgba(255, 249, 190, ${0.76 * flashStrength})`);
+    flash.addColorStop(0.42, `rgba(255, 162, 65, ${0.48 * flashStrength})`);
+    flash.addColorStop(1, "rgba(255, 112, 34, 0)");
+    ctx.fillStyle = flash;
+    ctx.fillRect(pistolShot.startX - 18, pistolShot.startY - 18, 36, 36);
+  }
+  for (const bullet of projectiles) {
+    ctx.save();
+    ctx.translate(bullet.x, bullet.y);
+    ctx.rotate(bullet.angle);
+    ctx.shadowColor = "#ffd469";
+    ctx.shadowBlur = 13;
+    ctx.fillStyle = "rgba(255, 185, 72, .72)";
+    ctx.fillRect(-PISTOL_BULLET_WIDTH / 2 - 2, -3, PISTOL_BULLET_WIDTH + 4, 6);
+    ctx.shadowColor = "#fff0a6";
+    ctx.shadowBlur = 7;
+    ctx.fillStyle = "#fff4ba";
+    ctx.fillRect(-PISTOL_BULLET_WIDTH / 2, -1.5, PISTOL_BULLET_WIDTH, 3);
+    ctx.restore();
   }
   ctx.restore();
 }
@@ -3413,6 +3468,7 @@ function drawHeldWeapon(weapon) {
     player.y - 15 + player.dirY * 3
   );
   ctx.rotate(angle);
+  if (player.dirX < 0) ctx.scale(1, -1);
   if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
     ctx.drawImage(worldSprite, frame * 16, 64, 16, 16, -3 + recoil, -16, 32, 32);
   } else {

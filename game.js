@@ -212,7 +212,7 @@ const PLAYER_ASSET_VERSION = "20260728-player-redraw1";
 const TREE_ASSET_VERSION = "20260728-tree-visible2";
 const MIMIC_ASSET_VERSION = "20260728-mimic-drawn1";
 const ESCAPE_GATE_ASSET_VERSION = "20260729-gate-drawn1";
-const HELD_WEAPON_FRAME = { club: 0, axe: 1, pistol: 3 };
+const HELD_WEAPON_FRAME = { club: 0, axe: 1, pickaxe: 2, pistol: 3 };
 const sprite = new Image();
 const worldSprite = new Image();
 const treeSprite = new Image();
@@ -262,6 +262,7 @@ const BUILD_TYPES = [
 const WEAPON_TYPES = [
   { type: "club", kind: "weapon", label: "木棒", cost: { wood: 4, stone: 0 }, damage: 25, range: 54, cooldown: 0.48 },
   { type: "axe", kind: "weapon", label: "石斧", cost: { wood: 4, stone: 3 }, damage: 45, range: 62, cooldown: 0.62 },
+  { type: "pickaxe", kind: "weapon", label: "石镐", cost: { wood: 4, stone: 4 }, damage: 38, range: 60, cooldown: 0.64 },
   {
     type: "pistol",
     kind: "weapon",
@@ -2032,8 +2033,7 @@ function spendResource(type, amount) {
   return true;
 }
 
-function collectResource() {
-  if (player.gatherCooldown > 0) return;
+function findGatherTarget() {
   let target = null;
   let bestScore = Infinity;
   const gatherDistance = 68;
@@ -2050,8 +2050,32 @@ function collectResource() {
       target = resource;
     }
   }
+  return target;
+}
+
+function requiredHarvestTool(type) {
+  if (type === "tree") return { type: "axe", label: "石斧" };
+  if (type === "rock") return { type: "pickaxe", label: "石镐" };
+  return null;
+}
+
+function equippedQuickbarItem() {
+  if (selectedQuickSlot < 0 || selectedQuickSlot >= quickSlots.length) return null;
+  return quickbarItems[selectedQuickSlot];
+}
+
+function collectResource(target = findGatherTarget()) {
+  if (player.gatherCooldown > 0) return;
   if (!target) {
     showMessage("这个方向没有可以采集的资源", 1);
+    return;
+  }
+
+  const requiredTool = requiredHarvestTool(target.type);
+  const heldItem = equippedQuickbarItem();
+  if (requiredTool && heldItem?.type !== requiredTool.type) {
+    const action = target.type === "tree" ? "砍树" : "采石";
+    showMessage(`${action}需要先装备${requiredTool.label}`, 1.2);
     return;
   }
 
@@ -2571,17 +2595,31 @@ function activateQuickSlot(index) {
 }
 
 function isWeaponEquipped() {
-  if (selectedQuickSlot < 0 || selectedQuickSlot >= quickSlots.length) return false;
-  return quickbarItems[selectedQuickSlot]?.kind === "weapon";
+  return equippedQuickbarItem()?.kind === "weapon";
+}
+
+function hasMonsterInWeaponRange(weapon) {
+  const range = weapon?.range || 58;
+  return monsters.some((monster) => (
+    !monster.dead && Math.hypot(monster.x - player.x, monster.y - player.y) < range
+  ));
 }
 
 function usePrimaryAction() {
   stopEmote();
-  if (isWeaponEquipped()) {
-    attack();
-  } else {
+  const heldItem = equippedQuickbarItem();
+  if (!isWeaponEquipped()) {
     collectResource();
+    return;
   }
+  const isHarvestTool = heldItem.type === "axe" || heldItem.type === "pickaxe";
+  if (!isHarvestTool || heldItem.type === "pistol" || hasMonsterInWeaponRange(heldItem)) {
+    attack();
+    return;
+  }
+  const target = findGatherTarget();
+  if (target) collectResource(target);
+  else attack();
 }
 
 function firePistol(weapon) {

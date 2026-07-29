@@ -1490,6 +1490,7 @@ h1 {
 
 .weapon-club { background-position: 0 -128px; }
 .weapon-axe { background-position: -32px -128px; }
+.weapon-pickaxe { background-position: -64px -128px; }
 
 .craft-copy {
   display: grid;
@@ -1604,6 +1605,7 @@ h1 {
 .quick-slot[data-item-type="trap"] .item-sprite { background-position: -224px -96px; }
 .quick-slot[data-item-type="club"] .item-sprite { background-position: 0 -128px; }
 .quick-slot[data-item-type="axe"] .item-sprite { background-position: -32px -128px; }
+.quick-slot[data-item-type="pickaxe"] .item-sprite { background-position: -64px -128px; }
 
 @keyframes vital-panic {
   50% { opacity: .38; }
@@ -2762,6 +2764,7 @@ h1 {
 .inventory-slot[data-item-type="trap"] .item-sprite { background-position: -224px -96px; }
 .inventory-slot[data-item-type="club"] .item-sprite { background-position: 0 -128px; }
 .inventory-slot[data-item-type="axe"] .item-sprite { background-position: -32px -128px; }
+.inventory-slot[data-item-type="pickaxe"] .item-sprite { background-position: -64px -128px; }
 .inventory-slot[data-item-type="pistol"] .item-sprite,
 .quick-slot[data-item-type="pistol"] .item-sprite { background-position: -96px -128px; }
 .inventory-slot[data-item-type="ammo_box"] .item-sprite,

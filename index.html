@@ -10,7 +10,7 @@
   <link rel="preload" href="assets/mimic.png?v=20260728-mimic-drawn1" as="image" />
   <link rel="preload" href="assets/forest-assets.png?v=20260728-assets2" as="image" />
   <link rel="preload" href="assets/ark-pixel-12px-zh_cn.woff2?v=20260728-assets2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=20260729-chest1" />
+  <link rel="stylesheet" href="styles.css?v=20260729-itemflow1" />
 </head>
 <body>
   <main id="app">
@@ -94,7 +94,7 @@
           <div class="craft-header">
             <div>
               <p>合成栏</p>
-              <span>制作后进入快捷栏</span>
+              <span>成品优先进入背包</span>
             </div>
             <span>配方 08</span>
           </div>
@@ -138,7 +138,7 @@
             <button type="button" class="inventory-slot chest-slot item-empty empty-slot" data-chest-slot="10"><span class="item-sprite" aria-hidden="true"></span></button>
             <button type="button" class="inventory-slot chest-slot item-empty empty-slot" data-chest-slot="11"><span class="item-sprite" aria-hidden="true"></span></button>
           </div>
-          <p class="inventory-tip">拖动整组材料，可与相同材料合并</p>
+          <p class="inventory-tip">拖动物品存取，右键可拆分物品堆</p>
         </section>
         <section id="inventoryPanel" class="inventory-panel hidden" aria-label="玩家物品栏">
           <div class="inventory-header">
@@ -162,7 +162,7 @@
             <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="10"><span class="item-sprite" aria-hidden="true"></span></button>
             <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="11"><span class="item-sprite" aria-hidden="true"></span></button>
           </div>
-          <p class="inventory-tip">拖动物品可以移动或交换位置，点击浆果可以食用</p>
+          <p class="inventory-tip">拖到快捷栏使用，右键拆分，点击浆果食用</p>
         </section>
       </div>
       <div id="message" class="message" aria-live="polite"></div>
@@ -255,6 +255,6 @@
       <p class="settings-tip">设置会自动保存在这个浏览器中</p>
     </section>
   </main>
-  <script type="module" src="game.js?v=20260729-chest1"></script>
+  <script type="module" src="game.js?v=20260729-itemflow1"></script>
 </body>
 </html>

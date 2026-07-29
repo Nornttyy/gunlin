@@ -2705,3 +2705,31 @@ h1 {
     padding: 18px 14px 16px;
   }
 }
+
+.game-screen.inventory-open .quickbar {
+  z-index: 5;
+}
+
+.game-screen.inventory-open .quick-slot[draggable="true"] {
+  cursor: grab;
+}
+
+.quick-slot.dragging {
+  opacity: .35;
+  transform: translateY(4px) scale(.94);
+}
+
+.quick-slot.drag-over {
+  border-color: #b9d69e;
+  background: #263d30;
+  box-shadow: inset 0 0 0 2px rgba(185, 214, 158, .18), 0 0 12px rgba(154, 190, 137, .24);
+}
+
+.inventory-slot[data-item-type="wall"] .item-sprite { background-position: -32px -96px; }
+.inventory-slot[data-item-type="door"] .item-sprite { background-position: -64px -96px; }
+.inventory-slot[data-item-type="floor"] .item-sprite { background-position: -128px -96px; }
+.inventory-slot[data-item-type="chest"] .item-sprite { background-position: -160px -96px; }
+.inventory-slot[data-item-type="workbench"] .item-sprite { background-position: -192px -96px; }
+.inventory-slot[data-item-type="trap"] .item-sprite { background-position: -224px -96px; }
+.inventory-slot[data-item-type="club"] .item-sprite { background-position: 0 -128px; }
+.inventory-slot[data-item-type="axe"] .item-sprite { background-position: -32px -128px; }

@@ -316,6 +316,7 @@ let audioContext = null;
 let masterGain = null;
 let effectsGain = null;
 let ambienceGain = null;
+let masterWarmthFilter = null;
 let audioCompressor = null;
 let noiseBuffer = null;
 let audioEnabled = true;
@@ -734,28 +735,34 @@ function ensureAudio() {
       masterGain = audioContext.createGain();
       effectsGain = audioContext.createGain();
       ambienceGain = audioContext.createGain();
+      masterWarmthFilter = audioContext.createBiquadFilter();
       audioCompressor = audioContext.createDynamicsCompressor?.() || null;
       masterGain.gain.value = masterVolumeValue();
-      effectsGain.gain.value = 0.92;
-      ambienceGain.gain.value = 0.42;
+      effectsGain.gain.value = 0.78;
+      ambienceGain.gain.value = 0.34;
+      masterWarmthFilter.type = "lowpass";
+      masterWarmthFilter.frequency.setValueAtTime(4600, audioContext.currentTime);
+      masterWarmthFilter.Q.setValueAtTime(0.35, audioContext.currentTime);
       effectsGain.connect(masterGain);
       ambienceGain.connect(masterGain);
+      masterGain.connect(masterWarmthFilter);
       if (audioCompressor) {
-        audioCompressor.threshold.setValueAtTime(-18, audioContext.currentTime);
-        audioCompressor.knee.setValueAtTime(12, audioContext.currentTime);
-        audioCompressor.ratio.setValueAtTime(5, audioContext.currentTime);
-        audioCompressor.attack.setValueAtTime(0.003, audioContext.currentTime);
-        audioCompressor.release.setValueAtTime(0.2, audioContext.currentTime);
-        masterGain.connect(audioCompressor);
+        audioCompressor.threshold.setValueAtTime(-22, audioContext.currentTime);
+        audioCompressor.knee.setValueAtTime(18, audioContext.currentTime);
+        audioCompressor.ratio.setValueAtTime(8, audioContext.currentTime);
+        audioCompressor.attack.setValueAtTime(0.006, audioContext.currentTime);
+        audioCompressor.release.setValueAtTime(0.28, audioContext.currentTime);
+        masterWarmthFilter.connect(audioCompressor);
         audioCompressor.connect(audioContext.destination);
       } else {
-        masterGain.connect(audioContext.destination);
+        masterWarmthFilter.connect(audioContext.destination);
       }
     } catch {
       audioContext = null;
       masterGain = null;
       effectsGain = null;
       ambienceGain = null;
+      masterWarmthFilter = null;
       audioCompressor = null;
       return null;
     }
@@ -798,18 +805,26 @@ function playTone({
   if (!context) return;
   const start = context.currentTime + delay;
   const oscillator = context.createOscillator();
+  const toneFilter = context.createBiquadFilter();
   const gain = context.createGain();
-  oscillator.type = type;
-  oscillator.frequency.setValueAtTime(Math.max(20, frequency), start);
-  oscillator.frequency.exponentialRampToValueAtTime(Math.max(20, endFrequency), start + duration);
-  const spatialVolume = volume * spatialAttenuation(worldX, worldY, range);
+  oscillator.type = type === "sine" ? "sine" : "triangle";
+  const startFrequency = Math.max(20, Math.min(1600, frequency));
+  const finishFrequency = Math.max(20, Math.min(1600, endFrequency));
+  oscillator.frequency.setValueAtTime(startFrequency, start);
+  oscillator.frequency.exponentialRampToValueAtTime(finishFrequency, start + duration);
+  toneFilter.type = "lowpass";
+  toneFilter.frequency.setValueAtTime(2100, start);
+  toneFilter.Q.setValueAtTime(0.3, start);
+  const spatialVolume = Math.min(0.085, volume) * spatialAttenuation(worldX, worldY, range);
+  const safeAttack = Math.max(0.004, attack);
   gain.gain.setValueAtTime(0.0001, start);
   gain.gain.exponentialRampToValueAtTime(
     Math.max(0.0001, spatialVolume),
-    start + Math.min(attack, duration * 0.4)
+    start + Math.min(safeAttack, duration * 0.4)
   );
   gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
-  oscillator.connect(gain);
+  oscillator.connect(toneFilter);
+  toneFilter.connect(gain);
   connectAudioOutput(gain, worldX, pan, bus);
   oscillator.start(start);
   oscillator.stop(start + duration + 0.02);
@@ -849,14 +864,15 @@ function playNoise({
   const filter = context.createBiquadFilter();
   const gain = context.createGain();
   source.buffer = buffer;
-  filter.type = filterType;
-  filter.frequency.setValueAtTime(frequency, start);
-  filter.Q.setValueAtTime(resonance, start);
-  const spatialVolume = volume * spatialAttenuation(worldX, worldY, range);
+  filter.type = filterType === "highpass" ? "bandpass" : filterType;
+  filter.frequency.setValueAtTime(Math.max(80, Math.min(2200, frequency)), start);
+  filter.Q.setValueAtTime(Math.max(0.2, Math.min(1.4, resonance)), start);
+  const spatialVolume = Math.min(0.11, volume) * spatialAttenuation(worldX, worldY, range);
+  const safeAttack = Math.max(0.003, attack);
   gain.gain.setValueAtTime(0.0001, start);
   gain.gain.exponentialRampToValueAtTime(
     Math.max(0.0001, spatialVolume),
-    start + Math.min(attack, duration * 0.4)
+    start + Math.min(safeAttack, duration * 0.4)
   );
   gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
   source.connect(filter);
@@ -880,13 +896,13 @@ function playGatherSound(type, worldX, worldY) {
       volume: 0.052, attack: 0.004, worldX, worldY, range: 260
     });
     playNoise({
-      duration: 0.055, volume: 0.032, frequency: 1350, filterType: "highpass",
+      duration: 0.055, volume: 0.026, frequency: 1050, filterType: "bandpass",
       delay: 0.055, attack: 0.003, worldX, worldY, range: 260
     });
   } else if (type === "stone") {
     playNoise({
-      duration: 0.045, volume: 0.052, frequency: 1700, filterType: "highpass",
-      attack: 0.002, worldX, worldY, range: 280
+      duration: 0.055, volume: 0.042, frequency: 1250, filterType: "bandpass",
+      attack: 0.004, worldX, worldY, range: 280
     });
     playTone({
       frequency: 760, endFrequency: 420, type: "triangle", duration: 0.11,
@@ -909,11 +925,48 @@ function playGatherSound(type, worldX, worldY) {
 }
 
 function playPickupSound(type) {
-  const start = type === "stone" ? 330 : type === "wood" ? 270 : 440;
-  playTone({ frequency: start, endFrequency: start * 1.5, type: "triangle", duration: 0.08, volume: 0.025 });
+  const stone = type === "stone";
+  const berry = type === "berry";
+  playNoise({
+    duration: berry ? 0.09 : 0.055,
+    volume: berry ? 0.018 : 0.028,
+    frequency: stone ? 1050 : berry ? 620 : 480,
+    filterType: stone ? "bandpass" : "lowpass",
+    resonance: 0.45,
+    attack: 0.006
+  });
+  if (berry) return;
   playTone({
-    frequency: start * 1.35, endFrequency: start * 1.85, type: "sine",
-    duration: 0.1, volume: 0.018, delay: 0.065
+    frequency: stone ? 360 : 112,
+    endFrequency: stone ? 245 : 72,
+    type: "triangle",
+    duration: stone ? 0.075 : 0.065,
+    volume: stone ? 0.02 : 0.018,
+    attack: 0.005
+  });
+}
+
+function playDryFireSound() {
+  playNoise({
+    duration: 0.032, volume: 0.025, frequency: 820,
+    filterType: "bandpass", resonance: 0.65, attack: 0.004
+  });
+  playTone({
+    frequency: 135, endFrequency: 98, type: "triangle",
+    duration: 0.038, volume: 0.016, delay: 0.012, attack: 0.004
+  });
+}
+
+function playFlashlightSwitchSound(enabled) {
+  playNoise({
+    duration: 0.028, volume: 0.024, frequency: enabled ? 760 : 590,
+    filterType: "bandpass", resonance: 0.55, attack: 0.004
+  });
+  playTone({
+    frequency: enabled ? 150 : 118,
+    endFrequency: enabled ? 185 : 82,
+    type: "triangle", duration: 0.045, volume: 0.014,
+    delay: 0.008, attack: 0.004
   });
 }
 
@@ -942,8 +995,8 @@ function playPlayerFootstep() {
 
 function playWeaponSound(worldX, worldY, hit) {
   playNoise({
-    duration: 0.12, volume: 0.05, frequency: 1450, filterType: "highpass",
-    attack: 0.004, worldX, worldY, range: 400
+    duration: 0.13, volume: 0.04, frequency: 900, filterType: "bandpass",
+    resonance: 0.45, attack: 0.008, worldX, worldY, range: 400
   });
   if (!hit) return;
   playNoise({
@@ -958,19 +1011,19 @@ function playWeaponSound(worldX, worldY, hit) {
 
 function playPistolSound(worldX, worldY = player.y) {
   playNoise({
-    duration: 0.052, volume: 0.15, frequency: 3200, filterType: "highpass",
-    resonance: 0.65, attack: 0.001, worldX, worldY, range: 1200
+    duration: 0.065, volume: 0.095, frequency: 1850, filterType: "bandpass",
+    resonance: 0.5, attack: 0.004, worldX, worldY, range: 1200
   });
   playTone({
-    frequency: 172, endFrequency: 54, type: "sawtooth", duration: 0.13,
-    volume: 0.072, attack: 0.002, worldX, worldY, range: 1200
+    frequency: 148, endFrequency: 52, type: "triangle", duration: 0.15,
+    volume: 0.058, attack: 0.004, worldX, worldY, range: 1200
   });
   playTone({
     frequency: 720, endFrequency: 410, type: "triangle", duration: 0.045,
-    volume: 0.024, delay: 0.032, attack: 0.001, worldX, worldY, range: 420
+    volume: 0.018, delay: 0.038, attack: 0.004, worldX, worldY, range: 420
   });
   playNoise({
-    duration: 0.2, volume: 0.042, frequency: 1150, filterType: "bandpass",
+    duration: 0.22, volume: 0.026, frequency: 880, filterType: "bandpass",
     resonance: 1.2, delay: 0.095, pan: (Math.random() - 0.5) * 0.5,
     bus: "ambience", attack: 0.012
   });
@@ -988,18 +1041,18 @@ function playBulletImpact(worldX, worldY) {
 }
 
 function playReloadSound() {
-  playNoise({ duration: 0.035, volume: 0.04, frequency: 1900, filterType: "highpass", attack: 0.001 });
+  playNoise({ duration: 0.04, volume: 0.03, frequency: 1050, filterType: "bandpass", attack: 0.004 });
   playTone({
-    frequency: 230, endFrequency: 165, type: "square", duration: 0.055,
-    volume: 0.026, delay: 0.025, attack: 0.002
+    frequency: 210, endFrequency: 150, type: "triangle", duration: 0.06,
+    volume: 0.02, delay: 0.025, attack: 0.004
   });
   playNoise({
     duration: 0.045, volume: 0.048, frequency: 1250, filterType: "bandpass",
-    delay: 0.18, attack: 0.001
+    delay: 0.18, attack: 0.004
   });
   playTone({
     frequency: 170, endFrequency: 260, type: "triangle", duration: 0.07,
-    volume: 0.032, delay: 0.205, attack: 0.002
+    volume: 0.024, delay: 0.205, attack: 0.004
   });
 }
 
@@ -1025,13 +1078,13 @@ function playDoorSound(worldX, worldY, open) {
   });
   playTone({
     frequency: open ? 185 : 118, endFrequency: open ? 78 : 62,
-    type: "sawtooth", duration: open ? 0.28 : 0.13, volume: 0.032,
+    type: "triangle", duration: open ? 0.28 : 0.13, volume: 0.026,
     worldX, worldY, range: 420
   });
   if (!open) {
     playNoise({
-      duration: 0.035, volume: 0.055, frequency: 900, filterType: "highpass",
-      delay: 0.075, attack: 0.001, worldX, worldY, range: 420
+      duration: 0.04, volume: 0.038, frequency: 720, filterType: "bandpass",
+      delay: 0.075, attack: 0.004, worldX, worldY, range: 420
     });
   }
 }
@@ -1055,8 +1108,8 @@ function playMimicDetected(monster) {
     resonance: 2.4, worldX: monster.x, worldY: monster.y, range
   });
   playTone({
-    frequency: 92, endFrequency: 48, type: "sawtooth", duration: 0.4,
-    volume: volume * 0.72, worldX: monster.x, worldY: monster.y, range
+    frequency: 84, endFrequency: 46, type: "triangle", duration: 0.44,
+    volume: volume * 0.55, worldX: monster.x, worldY: monster.y, range
   });
   playTone({
     frequency: 310, endFrequency: 92, type: "triangle", duration: 0.22,
@@ -1080,22 +1133,22 @@ function playMimicFootstep(monster) {
 
 function playMimicJumpscare(worldX) {
   playNoise({
-    duration: 0.42, volume: 0.17, frequency: 1450, filterType: "bandpass",
-    resonance: 1.5, attack: 0.001, worldX, worldY: player.y, range: 240
+    duration: 0.46, volume: 0.1, frequency: 820, filterType: "lowpass",
+    resonance: 0.6, attack: 0.006, worldX, worldY: player.y, range: 240
   });
   playTone({
-    frequency: 54, endFrequency: 330, type: "sawtooth", duration: 0.42,
-    volume: 0.11, attack: 0.002, worldX, worldY: player.y, range: 240
+    frequency: 52, endFrequency: 118, type: "triangle", duration: 0.44,
+    volume: 0.075, attack: 0.006, worldX, worldY: player.y, range: 240
   });
   playNoise({
-    duration: 0.18, volume: 0.065, frequency: 3000, filterType: "highpass",
-    delay: 0.12, pan: audioPanForWorldX(worldX) * -0.45, attack: 0.002
+    duration: 0.2, volume: 0.038, frequency: 980, filterType: "bandpass",
+    delay: 0.12, pan: audioPanForWorldX(worldX) * -0.35, attack: 0.006
   });
 }
 
 function playPhaseSound(night) {
   if (night) {
-    playTone({ frequency: 88, endFrequency: 42, type: "sawtooth", duration: 0.85, volume: 0.052, bus: "ambience" });
+    playTone({ frequency: 82, endFrequency: 42, type: "sine", duration: 0.9, volume: 0.04, bus: "ambience" });
     playNoise({ duration: 1.15, volume: 0.032, frequency: 360, bus: "ambience", attack: 0.12 });
   } else {
     playTone({ frequency: 170, endFrequency: 410, type: "sine", duration: 0.5, volume: 0.036, bus: "ambience" });
@@ -2261,7 +2314,7 @@ function useConsumable(type) {
   if (type === "strength_potion") {
     spendPortableItem(type, 1);
     player.strengthTimer = Math.min(120, player.strengthTimer + 60);
-    playTone({ frequency: 180, endFrequency: 520, type: "sawtooth", duration: 0.3, volume: 0.045 });
+    playTone({ frequency: 180, endFrequency: 420, type: "triangle", duration: 0.32, volume: 0.032 });
     showMessage("喝下力量药水：60 秒内武器伤害 +50%", 1.8);
     updateHud();
     return true;
@@ -2535,7 +2588,7 @@ function firePistol(weapon) {
   const loadedAmmo = Math.max(0, Math.floor(Number(weapon.loadedAmmo) || 0));
   if (loadedAmmo <= 0) {
     player.attackCooldown = 0.18;
-    playTone({ frequency: 105, endFrequency: 78, type: "square", duration: 0.05, volume: 0.025 });
+    playDryFireSound();
     showMessage(`弹夹空了，按 R 换弹 · 弹药箱 ${portableItemCount("ammo_box")}`, 1.2);
     return;
   }
@@ -4274,13 +4327,7 @@ window.addEventListener("keydown", (event) => {
   if (event.code === "KeyR") reloadPistol();
   if (event.code === "KeyF") {
     player.flashlight = !player.flashlight;
-    playTone({
-      frequency: player.flashlight ? 520 : 310,
-      endFrequency: player.flashlight ? 680 : 220,
-      type: "square",
-      duration: 0.055,
-      volume: 0.025
-    });
+    playFlashlightSwitchSound(player.flashlight);
     showMessage(player.flashlight ? "打开手电筒" : "关闭手电筒", 1);
   }
 });

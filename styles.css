@@ -2766,35 +2766,11 @@ h1 {
 .quick-slot[data-item-type="pistol"] .item-sprite { background-position: -96px -128px; }
 .inventory-slot[data-item-type="ammo_box"] .item-sprite,
 .quick-slot[data-item-type="ammo_box"] .item-sprite {
-  position: relative;
-  background-image: none;
-}
-.inventory-slot[data-item-type="ammo_box"] .item-sprite::before,
-.quick-slot[data-item-type="ammo_box"] .item-sprite::before {
-  content: "";
-  position: absolute;
-  left: 3px;
-  top: 8px;
-  width: 26px;
-  height: 19px;
-  background: linear-gradient(#77704e 0 4px, #494d37 4px 15px, #2e3327 15px);
-  border: 2px solid #171b15;
-  box-shadow: inset 2px 2px 0 rgba(210, 193, 118, .25), 2px 2px 0 rgba(0, 0, 0, .34);
-  box-sizing: border-box;
-}
-.inventory-slot[data-item-type="ammo_box"] .item-sprite::after,
-.quick-slot[data-item-type="ammo_box"] .item-sprite::after {
-  content: "";
-  position: absolute;
-  left: 8px;
-  top: 14px;
-  width: 3px;
-  height: 7px;
-  background: #c8a24e;
-  box-shadow: 5px 0 #c8a24e, 10px 0 #c8a24e, 15px 0 #c8a24e;
+  background-image: url("assets/forest-assets.png?v=20260728-assets2");
+  background-position: -192px -64px;
 }
 .inventory-slot[data-item-type="medkit"] .item-sprite,
-.quick-slot[data-item-type="medkit"] .item-sprite { background-position: -192px -64px; }
+.quick-slot[data-item-type="medkit"] .item-sprite { background-position: -160px -64px; }
 
 .inventory-slot[data-item-type="healing_potion"] .item-sprite,
 .quick-slot[data-item-type="healing_potion"] .item-sprite,

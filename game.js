@@ -274,7 +274,8 @@ const WEAPON_TYPES = [
     magazineSize: PISTOL_MAGAZINE_SIZE
   }
 ];
-const RESOURCE_HARVEST_HITS = { tree: 4, rock: 3, berry: 2 };
+const RESOURCE_HARVEST_HITS = { tree: 7, rock: 6, berry: 3 };
+const RESOURCE_GATHER_COOLDOWN = { tree: 0.42, rock: 0.46, berry: 0.3 };
 const craftedCounts = Array(BUILD_TYPES.length).fill(0);
 const DEFAULT_GAME_SETTINGS = {
   volume: 70,
@@ -2079,7 +2080,7 @@ function collectResource(target = findGatherTarget()) {
     return;
   }
 
-  player.gatherCooldown = 0.24;
+  player.gatherCooldown = RESOURCE_GATHER_COOLDOWN[target.type] || 0.32;
   const gatheredType = target.type === "tree" ? "wood" : target.type === "rock" ? "stone" : "berry";
   playGatherSound(gatheredType, target.x, target.y);
   const requiredHits = resourceHarvestHits(target.type);
@@ -3713,7 +3714,7 @@ function drawResources() {
 function drawHarvestProgress(resource) {
   const hits = resource.harvestHits || 0;
   if (hits <= 0) return;
-  const requiredHits = RESOURCE_HARVEST_HITS[resource.type] || 1;
+  const requiredHits = resourceHarvestHits(resource.type);
   const width = 38;
   const x = Math.round(resource.x - width / 2);
   const y = Math.round(resource.y - (resource.type === "tree" ? 171 : 36));

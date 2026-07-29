@@ -56,6 +56,19 @@ const gameOverPanel = document.getElementById("gameOver");
 const mimicJumpscare = document.getElementById("mimicJumpscare");
 const audioButton = document.getElementById("audioButton");
 const audioButtonLabel = document.getElementById("audioButtonLabel");
+const settingsButton = document.getElementById("settingsButton");
+const settingsPanel = document.getElementById("settingsPanel");
+const settingsCloseButton = document.getElementById("settingsCloseButton");
+const volumeSetting = document.getElementById("volumeSetting");
+const volumeSettingValue = document.getElementById("volumeSettingValue");
+const brightnessSetting = document.getElementById("brightnessSetting");
+const brightnessSettingValue = document.getElementById("brightnessSettingValue");
+const fogSetting = document.getElementById("fogSetting");
+const fogSettingValue = document.getElementById("fogSettingValue");
+const screenShakeSetting = document.getElementById("screenShakeSetting");
+const jumpscareSetting = document.getElementById("jumpscareSetting");
+const fullscreenButton = document.getElementById("fullscreenButton");
+const resetSettingsButton = document.getElementById("resetSettingsButton");
 const messageElement = document.getElementById("message");
 const classButtons = [...document.querySelectorAll(".class-button")];
 const classSelectPanel = document.getElementById("classSelectPanel");
@@ -145,6 +158,13 @@ const WEAPON_TYPES = [
 ];
 const RESOURCE_HARVEST_HITS = { tree: 4, rock: 3, berry: 2 };
 const craftedCounts = Array(BUILD_TYPES.length).fill(0);
+const DEFAULT_GAME_SETTINGS = {
+  volume: 70,
+  nightBrightness: 50,
+  fogDensity: 100,
+  screenShake: true,
+  jumpscare: true
+};
 
 const keys = new Set();
 let state = "title";
@@ -163,6 +183,7 @@ let selectedQuickSlot = -1;
 let selectedClass = -1;
 let classSelectionOpen = false;
 let inventoryOpen = false;
+let settingsOpen = false;
 let draggedInventorySlot = -1;
 let jumpscareSequence = 0;
 let audioContext = null;
@@ -174,6 +195,7 @@ let nightMaskCanvas = null;
 let nightMaskContext = null;
 let assetsReady = false;
 let assetsLoading = false;
+let gameSettings = loadGameSettings();
 
 const player = {
   x: PLAYER_START.x,
@@ -318,6 +340,72 @@ function wait(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
+function clampPercent(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.min(100, number)) : fallback;
+}
+
+function loadGameSettings() {
+  try {
+    const saved = window.localStorage?.getItem("guilin-settings-v1");
+    if (!saved) return { ...DEFAULT_GAME_SETTINGS };
+    const parsed = JSON.parse(saved);
+    return {
+      volume: clampPercent(parsed.volume, DEFAULT_GAME_SETTINGS.volume),
+      nightBrightness: clampPercent(parsed.nightBrightness, DEFAULT_GAME_SETTINGS.nightBrightness),
+      fogDensity: clampPercent(parsed.fogDensity, DEFAULT_GAME_SETTINGS.fogDensity),
+      screenShake: parsed.screenShake !== false,
+      jumpscare: parsed.jumpscare !== false
+    };
+  } catch {
+    return { ...DEFAULT_GAME_SETTINGS };
+  }
+}
+
+function saveGameSettings() {
+  try {
+    window.localStorage?.setItem("guilin-settings-v1", JSON.stringify(gameSettings));
+  } catch {
+    // 隐私模式或禁用网站存储时，设置仍会在本次游戏中生效。
+  }
+}
+
+function masterVolumeValue() {
+  return Math.max(0.0001, 0.6 * gameSettings.volume / 100);
+}
+
+function renderSettings() {
+  if (volumeSetting) volumeSetting.value = String(gameSettings.volume);
+  if (volumeSettingValue) volumeSettingValue.textContent = `${Math.round(gameSettings.volume)}%`;
+  if (brightnessSetting) brightnessSetting.value = String(gameSettings.nightBrightness);
+  if (brightnessSettingValue) brightnessSettingValue.textContent = `${Math.round(gameSettings.nightBrightness)}%`;
+  if (fogSetting) fogSetting.value = String(gameSettings.fogDensity);
+  if (fogSettingValue) fogSettingValue.textContent = `${Math.round(gameSettings.fogDensity)}%`;
+  if (screenShakeSetting) screenShakeSetting.checked = gameSettings.screenShake;
+  if (jumpscareSetting) jumpscareSetting.checked = gameSettings.jumpscare;
+  if (masterGain && audioContext) {
+    masterGain.gain.setTargetAtTime(audioEnabled ? masterVolumeValue() : 0.0001, audioContext.currentTime, 0.025);
+  }
+}
+
+function updateGameSetting(key, value) {
+  gameSettings = { ...gameSettings, [key]: value };
+  saveGameSettings();
+  renderSettings();
+}
+
+async function toggleFullscreen() {
+  try {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen?.();
+    } else {
+      await document.documentElement?.requestFullscreen?.();
+    }
+  } catch {
+    showMessage("浏览器没有允许全屏", 1.1);
+  }
+}
+
 function audioPanForWorldX(worldX) {
   return Math.max(-1, Math.min(1, (worldX - player.x) / AUDIO_PAN_DISTANCE));
 }
@@ -330,7 +418,7 @@ function ensureAudio() {
     try {
       audioContext = new AudioContextClass();
       masterGain = audioContext.createGain();
-      masterGain.gain.value = 0.42;
+      masterGain.gain.value = masterVolumeValue();
       masterGain.connect(audioContext.destination);
     } catch {
       audioContext = null;
@@ -512,7 +600,7 @@ function setAudioEnabled(enabled, announce = true) {
   audioEnabled = Boolean(enabled);
   if (audioEnabled) ensureAudio();
   if (masterGain && audioContext) {
-    masterGain.gain.setTargetAtTime(audioEnabled ? 0.42 : 0.0001, audioContext.currentTime, 0.025);
+    masterGain.gain.setTargetAtTime(audioEnabled ? masterVolumeValue() : 0.0001, audioContext.currentTime, 0.025);
   }
   updateAudioButton();
   if (announce && state === "game") showMessage(audioEnabled ? "声音已打开" : "声音已关闭", 0.9);
@@ -665,8 +753,10 @@ function startGame() {
   });
   camera.x = Math.max(0, Math.min(WORLD.width - W, player.x - W / 2));
   camera.y = Math.max(0, Math.min(WORLD.height - H, player.y - H / 2));
+  setSettingsOpen(false);
   setInventoryOpen(false);
   inventoryButton.disabled = true;
+  if (settingsButton) settingsButton.disabled = true;
   classButtons.forEach((button) => button.classList.remove("selected"));
   classSelectPanel.classList.remove("hidden");
   resetWorld();
@@ -680,6 +770,7 @@ function endGame() {
   state = "over";
   classSelectionOpen = false;
   classSelectPanel.classList.add("hidden");
+  setSettingsOpen(false);
   setInventoryOpen(false);
   gameOverPanel.classList.remove("hidden");
 }
@@ -1058,6 +1149,21 @@ function setInventoryOpen(open) {
   updateHud();
 }
 
+function setSettingsOpen(open) {
+  const shouldOpen = Boolean(open) && state === "game" && !classSelectionOpen;
+  if (shouldOpen && inventoryOpen) setInventoryOpen(false);
+  settingsOpen = shouldOpen;
+  if (settingsPanel) settingsPanel.classList.toggle("hidden", !settingsOpen);
+  if (settingsButton) {
+    settingsButton.classList.toggle("active", settingsOpen);
+    settingsButton.setAttribute("aria-expanded", String(settingsOpen));
+  }
+  if (settingsOpen) {
+    keys.clear();
+    renderSettings();
+  }
+}
+
 function useBerry() {
   if (state !== "game" || player.berry <= 0) {
     showMessage("背包里还没有浆果", 1.1);
@@ -1350,7 +1456,7 @@ function spawnMonster() {
 }
 
 function triggerMimicJumpscare(worldX = player.x) {
-  if (!mimicJumpscare) return;
+  if (!mimicJumpscare || !gameSettings.jumpscare) return;
   playMimicJumpscare(worldX);
   const sequence = ++jumpscareSequence;
   mimicJumpscare.classList.remove("active");
@@ -1652,7 +1758,9 @@ function render() {
   camera.x += (targetX - camera.x) * 0.12;
   camera.y += (targetY - camera.y) * 0.12;
   updatePointerFacing();
-  const shakeStrength = player.hurtTimer > 0 ? Math.min(5, player.hurtTimer * 7) : 0;
+  const shakeStrength = gameSettings.screenShake && player.hurtTimer > 0
+    ? Math.min(5, player.hurtTimer * 7)
+    : 0;
   const shakeX = Math.sin(elapsed * 89) * shakeStrength;
   const shakeY = Math.cos(elapsed * 113) * shakeStrength;
 
@@ -1719,6 +1827,7 @@ function isBuildMode() {
   return state === "game"
     && !classSelectionOpen
     && !inventoryOpen
+    && !settingsOpen
     && selectedQuickSlot >= 0
     && quickbarItems[selectedQuickSlot]?.kind === "building";
 }
@@ -2170,7 +2279,8 @@ function drawNightCurtain(darkness) {
 
   mask.clearRect(0, 0, W, H);
   mask.globalCompositeOperation = "source-over";
-  mask.fillStyle = `rgba(0, 1, 3, ${darkness * (player.flashlight ? 0.74 : 0.9)})`;
+  const brightnessScale = 1.25 - gameSettings.nightBrightness / 200;
+  mask.fillStyle = `rgba(0, 1, 3, ${darkness * (player.flashlight ? 0.74 : 0.9) * brightnessScale})`;
   mask.fillRect(0, 0, W, H);
   mask.globalCompositeOperation = "destination-out";
   mask.fillStyle = "#000";
@@ -2277,7 +2387,8 @@ function getFogShape(index, time = elapsed, darkness = nightIntensity()) {
 }
 
 function drawDriftingFog(darkness) {
-  for (let index = 0; index < 16; index += 1) {
+  const fogCount = Math.round(16 * gameSettings.fogDensity / 100);
+  for (let index = 0; index < fogCount; index += 1) {
     const fogShape = getFogShape(index, elapsed, darkness);
     ctx.save();
     ctx.translate(fogShape.x, fogShape.y);
@@ -2392,7 +2503,7 @@ function loop(now) {
   const delta = Math.min(0.04, Math.max(0, (now - lastTime) / 1000));
   lastTime = now;
   // 打开物品栏时只画画面，不推进时间、玩家或怪物。
-  if (!inventoryOpen && !classSelectionOpen) update(delta);
+  if (!inventoryOpen && !settingsOpen && !classSelectionOpen) update(delta);
   render();
   requestAnimationFrame(loop);
 }
@@ -2405,6 +2516,14 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   if (classSelectionOpen) return;
+  if (event.code === "KeyO") {
+    if (!event.repeat) setSettingsOpen(!settingsOpen);
+    return;
+  }
+  if (settingsOpen) {
+    if (event.code === "Escape") setSettingsOpen(false);
+    return;
+  }
   if (event.code === "KeyI" || event.code === "Tab") {
     if (!event.repeat) setInventoryOpen(!inventoryOpen);
     return;
@@ -2436,7 +2555,7 @@ window.addEventListener("keydown", (event) => {
 });
 
 canvas.addEventListener("pointerdown", (event) => {
-  if (state !== "game" || inventoryOpen || classSelectionOpen) return;
+  if (state !== "game" || inventoryOpen || settingsOpen || classSelectionOpen) return;
   if (event.button !== 0 && event.button !== 2) return;
   event.preventDefault();
   aimAtPointer(event);
@@ -2445,7 +2564,7 @@ canvas.addEventListener("pointerdown", (event) => {
 });
 
 canvas.addEventListener("pointermove", (event) => {
-  if (state !== "game" || inventoryOpen || classSelectionOpen) return;
+  if (state !== "game" || inventoryOpen || settingsOpen || classSelectionOpen) return;
   aimAtPointer(event);
 });
 
@@ -2458,6 +2577,22 @@ retryAssetsButton.addEventListener("click", loadGameAssets);
 restartButton.addEventListener("click", startGame);
 inventoryButton.addEventListener("click", () => setInventoryOpen(!inventoryOpen));
 audioButton?.addEventListener("click", () => setAudioEnabled(!audioEnabled));
+settingsButton?.addEventListener("click", () => setSettingsOpen(!settingsOpen));
+settingsCloseButton?.addEventListener("click", () => setSettingsOpen(false));
+volumeSetting?.addEventListener("input", () => updateGameSetting("volume", clampPercent(volumeSetting.value, 70)));
+brightnessSetting?.addEventListener("input", () => (
+  updateGameSetting("nightBrightness", clampPercent(brightnessSetting.value, 50))
+));
+fogSetting?.addEventListener("input", () => updateGameSetting("fogDensity", clampPercent(fogSetting.value, 100)));
+screenShakeSetting?.addEventListener("change", () => updateGameSetting("screenShake", screenShakeSetting.checked));
+jumpscareSetting?.addEventListener("change", () => updateGameSetting("jumpscare", jumpscareSetting.checked));
+fullscreenButton?.addEventListener("click", toggleFullscreen);
+resetSettingsButton?.addEventListener("click", () => {
+  gameSettings = { ...DEFAULT_GAME_SETTINGS };
+  saveGameSettings();
+  renderSettings();
+  showMessage("设置已恢复默认", 1);
+});
 inventorySlots.forEach((slot, index) => {
   slot.addEventListener("dragstart", (event) => {
     if (!inventoryItems[index]) {
@@ -2525,6 +2660,7 @@ classButtons.forEach((button) => {
     classSelectionOpen = false;
     classSelectPanel.classList.add("hidden");
     inventoryButton.disabled = false;
+    if (settingsButton) settingsButton.disabled = false;
     keys.clear();
     lastTime = performance.now();
     showMessage(`已选择职业：${CLASS_NAMES[selectedClass]}`, 1.6);
@@ -2534,4 +2670,5 @@ classButtons.forEach((button) => {
 
 updateHud();
 updateAudioButton();
+renderSettings();
 loadGameAssets();

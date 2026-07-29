@@ -10,7 +10,7 @@
   <link rel="preload" href="assets/mimic.png?v=20260728-mimic-drawn1" as="image" />
   <link rel="preload" href="assets/forest-assets.png?v=20260728-assets2" as="image" />
   <link rel="preload" href="assets/ark-pixel-12px-zh_cn.woff2?v=20260728-assets2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=20260728-workbench-gather1" />
+  <link rel="stylesheet" href="styles.css?v=20260729-settings1" />
 </head>
 <body>
   <main id="app">
@@ -85,6 +85,45 @@
       <button id="audioButton" class="audio-button" aria-pressed="true">
         <span id="audioButtonLabel">声音 开</span> <b>[M]</b>
       </button>
+      <button id="settingsButton" class="settings-button" aria-expanded="false" aria-controls="settingsPanel">
+        <span>设置</span> <b>[O]</b>
+      </button>
+      <section id="settingsPanel" class="settings-panel hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+        <div class="settings-header">
+          <div>
+            <small>SYSTEM // OPTIONS</small>
+            <h2 id="settingsTitle">游戏设置</h2>
+          </div>
+          <button id="settingsCloseButton" class="settings-close-button" type="button" aria-label="关闭设置">×</button>
+        </div>
+        <div class="settings-list">
+          <label class="setting-range" for="volumeSetting">
+            <span>总音量 <output id="volumeSettingValue">70%</output></span>
+            <input id="volumeSetting" type="range" min="0" max="100" value="70" />
+          </label>
+          <label class="setting-range" for="brightnessSetting">
+            <span>夜晚亮度 <output id="brightnessSettingValue">50%</output></span>
+            <input id="brightnessSetting" type="range" min="0" max="100" value="50" />
+          </label>
+          <label class="setting-range" for="fogSetting">
+            <span>雾气浓度 <output id="fogSettingValue">100%</output></span>
+            <input id="fogSetting" type="range" min="0" max="100" value="100" />
+          </label>
+          <label class="setting-toggle" for="screenShakeSetting">
+            <span><strong>屏幕震动</strong><small>受伤时轻微晃动</small></span>
+            <input id="screenShakeSetting" type="checkbox" checked />
+          </label>
+          <label class="setting-toggle" for="jumpscareSetting">
+            <span><strong>突脸效果</strong><small>模仿者命中时显示惊吓画面</small></span>
+            <input id="jumpscareSetting" type="checkbox" checked />
+          </label>
+        </div>
+        <div class="settings-actions">
+          <button id="fullscreenButton" type="button">切换全屏</button>
+          <button id="resetSettingsButton" type="button">恢复默认</button>
+        </div>
+        <p class="settings-tip">设置会自动保存在这个浏览器中　·　按 O 关闭</p>
+      </section>
       <div id="inventoryWorkspace" class="inventory-workspace hidden">
         <section id="craftPanel" class="craft-panel" aria-label="合成栏">
           <div class="craft-header">
@@ -168,7 +207,7 @@
           <span class="quick-key">9</span><span class="item-sprite"></span><span class="quick-name">空</span>
         </button>
       </nav>
-      <div class="controls">WASD 移动　/　左键 攻击或采集　/　右键 建造　/　E 互动　/　F 手电筒　/　I 背包　/　M 声音</div>
+      <div class="controls">WASD 移动　/　左键 攻击或采集　/　右键 建造　/　E 互动　/　F 手电筒　/　I 背包　/　M 声音　/　O 设置</div>
       <div id="mimicJumpscare" class="mimic-jumpscare" aria-hidden="true">
         <div class="mimic-jumpscare-face" aria-hidden="true"></div>
         <span>信号中断 // 模仿者</span>
@@ -180,6 +219,6 @@
       </div>
     </section>
   </main>
-  <script type="module" src="game.js?v=20260728-workbench-gather1"></script>
+  <script type="module" src="game.js?v=20260729-settings1"></script>
 </body>
 </html>

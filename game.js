@@ -34,8 +34,8 @@ const MIMIC_FRAME_SIZE = 32;
 const MIMIC_DEATH_DURATION = 0.72;
 const AUDIO_PAN_DISTANCE = 420;
 const BUILD_GRID_SIZE = TILE_SIZE;
-const ESCAPE_GATE_MIN_DISTANCE = 7200;
-const ESCAPE_GATE_MAX_DISTANCE = 10800;
+const ESCAPE_GATE_MIN_DISTANCE = 600 * TILE_SIZE;
+const ESCAPE_GATE_MAX_DISTANCE = 900 * TILE_SIZE;
 const ESCAPE_GATE_DISCOVERY_DISTANCE = 550;
 const ESCAPE_GATE_INTERACT_DISTANCE = 120;
 const DEFENSE_COLLIDER = {
@@ -126,14 +126,17 @@ const ASSET_VERSION = "20260728-assets2";
 const PLAYER_ASSET_VERSION = "20260728-player-redraw1";
 const TREE_ASSET_VERSION = "20260728-tree-visible2";
 const MIMIC_ASSET_VERSION = "20260728-mimic-drawn1";
+const ESCAPE_GATE_ASSET_VERSION = "20260729-gate-drawn1";
 const sprite = new Image();
 const worldSprite = new Image();
 const treeSprite = new Image();
 const mimicSprite = new Image();
+const escapeGateSprite = new Image();
 sprite.decoding = "async";
 worldSprite.decoding = "async";
 treeSprite.decoding = "async";
 mimicSprite.decoding = "async";
+escapeGateSprite.decoding = "async";
 
 // 建筑素材在 128×96 图集的第 4 行（每格 16×16）。
 const BUILDING_ROW = 3;
@@ -301,12 +304,18 @@ function generateEscapeGate() {
 }
 
 function restoreEscapeGate(savedGate) {
+  const savedDistance = Math.hypot(
+    Number(savedGate?.x) - CAMP_POSITION.x,
+    Number(savedGate?.y) - CAMP_POSITION.y
+  );
   const valid = Number.isFinite(savedGate?.x)
     && Number.isFinite(savedGate?.y)
     && savedGate.x > WORLD.margin
     && savedGate.y > WORLD.margin
     && savedGate.x < WORLD.width - WORLD.margin
-    && savedGate.y < WORLD.height - WORLD.margin;
+    && savedGate.y < WORLD.height - WORLD.margin
+    && savedDistance >= ESCAPE_GATE_MIN_DISTANCE - TILE_SIZE
+    && savedDistance <= ESCAPE_GATE_MAX_DISTANCE + TILE_SIZE;
   if (!valid) {
     generateEscapeGate();
     return;
@@ -423,7 +432,9 @@ function assetUrl(path, retry = 0) {
     ? PLAYER_ASSET_VERSION
     : path === "assets/tree-sprites.png"
       ? TREE_ASSET_VERSION
-      : path === "assets/mimic.png" ? MIMIC_ASSET_VERSION : ASSET_VERSION;
+      : path === "assets/mimic.png"
+        ? MIMIC_ASSET_VERSION
+        : path === "assets/escape-gate.png" ? ESCAPE_GATE_ASSET_VERSION : ASSET_VERSION;
   return `${path}?v=${version}${retryText}`;
 }
 
@@ -841,7 +852,7 @@ async function loadGameAssets() {
   if (continueButton) continueButton.disabled = true;
   retryAssetsButton.classList.add("hidden");
   loadingStatus.classList.remove("ready", "failed");
-  showLoadingProgress(0, 5, "正在准备像素素材…");
+  showLoadingProgress(0, 6, "正在准备像素素材…");
 
   let loaded = 0;
   const jobs = [
@@ -849,6 +860,7 @@ async function loadGameAssets() {
     ["场景图", () => loadImageWithRetry(worldSprite, "assets/forest-assets.png")],
     ["树木图", () => loadImageWithRetry(treeSprite, "assets/tree-sprites.png")],
     ["模仿者", () => loadImageWithRetry(mimicSprite, "assets/mimic.png")],
+    ["逃生大门", () => loadImageWithRetry(escapeGateSprite, "assets/escape-gate.png")],
     ["像素字体", loadFontWithRetry]
   ];
   const results = await Promise.allSettled(jobs.map(async ([label, load]) => {
@@ -1288,7 +1300,7 @@ function getEscapeGateCollider() {
   return {
     x: escapeGate.x,
     y: escapeGate.y + 7,
-    width: 188,
+    width: 148,
     height: 36
   };
 }
@@ -2789,80 +2801,34 @@ function drawTerrainTile(frame, x, y) {
 }
 
 function drawEscapeGate() {
-  if (escapeGate.x < camera.x - 150 || escapeGate.x > camera.x + W + 150
-    || escapeGate.y < camera.y - 80 || escapeGate.y > camera.y + H + 230) return;
+  if (escapeGate.x < camera.x - 170 || escapeGate.x > camera.x + W + 170
+    || escapeGate.y < camera.y - 80 || escapeGate.y > camera.y + H + 260) return;
   ctx.save();
   ctx.translate(escapeGate.x, escapeGate.y);
-
   ctx.fillStyle = "rgba(1, 4, 5, .48)";
   ctx.beginPath();
-  ctx.ellipse(0, 18, 104, 23, 0, 0, Math.PI * 2);
+  ctx.ellipse(-4, 9, 78, 18, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = "#111817";
-  ctx.fillRect(-72, -146, 144, 154);
-  ctx.fillStyle = "#29342f";
-  ctx.fillRect(-96, -162, 192, 30);
-  ctx.fillStyle = "#465248";
-  ctx.fillRect(-88, -154, 176, 9);
-  ctx.fillStyle = "#1b2420";
-  ctx.fillRect(-72, -132, 144, 13);
-
-  for (const side of [-1, 1]) {
-    const x = side * 74 - 17;
-    ctx.fillStyle = "#313c35";
-    ctx.fillRect(x, -137, 34, 149);
-    ctx.fillStyle = "#566156";
-    ctx.fillRect(x + (side < 0 ? 5 : 0), -130, 8, 132);
-    ctx.fillStyle = "#202923";
-    for (let segment = 0; segment < 4; segment += 1) {
-      ctx.fillRect(x, -100 + segment * 34, 34, 4);
-    }
-    ctx.fillStyle = "#667065";
-    ctx.fillRect(x - 5, 5, 44, 15);
+  if (escapeGateSprite.complete
+    && escapeGateSprite.naturalWidth >= 64
+    && escapeGateSprite.naturalHeight >= 64) {
+    ctx.drawImage(escapeGateSprite, 0, 0, 64, 64, -128, -244, 256, 256);
+  } else {
+    ctx.fillStyle = "#18201d";
+    ctx.fillRect(-70, -190, 140, 196);
+    ctx.fillStyle = "#566158";
+    ctx.fillRect(-70, -190, 10, 196);
+    ctx.fillRect(60, -190, 10, 196);
+    ctx.fillRect(-60, -190, 120, 10);
+    ctx.fillStyle = "#303b35";
+    ctx.fillRect(-52, -172, 104, 178);
+    ctx.fillStyle = "#69746a";
+    ctx.fillRect(-4, -172, 8, 178);
   }
-
-  ctx.fillStyle = "#101615";
-  ctx.fillRect(-57, -119, 114, 127);
-  ctx.fillStyle = "#26332e";
-  ctx.fillRect(-52, -114, 50, 119);
-  ctx.fillRect(2, -114, 50, 119);
-  ctx.fillStyle = "#4a5a50";
-  ctx.fillRect(-4, -114, 8, 119);
-  for (let bar = -43; bar <= 43; bar += 22) {
-    ctx.fillStyle = "#58645b";
-    ctx.fillRect(bar - 3, -107, 6, 104);
-    ctx.fillStyle = "#252e29";
-    ctx.fillRect(bar + 3, -107, 3, 104);
-  }
-  ctx.fillStyle = "#6b3a37";
-  ctx.fillRect(-52, -61, 104, 9);
-  ctx.fillStyle = "#8e5148";
-  ctx.fillRect(-48, -59, 96, 3);
-  ctx.fillStyle = "#151b19";
-  ctx.fillRect(-13, -30, 26, 24);
-  ctx.fillStyle = "#8f704b";
-  ctx.fillRect(-6, -25, 12, 12);
-
-  const lampOn = Math.sin(elapsed * 3.4) > -0.55;
-  ctx.fillStyle = lampOn ? "#b9544d" : "#5e302f";
-  ctx.fillRect(-83, -146, 12, 8);
-  ctx.fillRect(71, -146, 12, 8);
-  ctx.fillStyle = lampOn ? "#e98a69" : "#78423a";
-  ctx.fillRect(-80, -144, 6, 4);
-  ctx.fillRect(74, -144, 6, 4);
-
-  ctx.fillStyle = "#111817";
-  ctx.fillRect(-33, -158, 66, 20);
-  ctx.strokeStyle = "#6a7669";
-  ctx.lineWidth = 2;
-  ctx.strokeRect(-33, -158, 66, 20);
-  ctx.fillStyle = "#b1b69d";
-  ctx.font = "12px ArkPixel, monospace";
-  ctx.textAlign = "center";
-  ctx.fillText("EXIT", 0, -143);
 
   if (escapeGateDistance() < ESCAPE_GATE_DISCOVERY_DISTANCE) {
+    ctx.textAlign = "center";
     ctx.fillStyle = "rgba(3, 7, 7, .88)";
     ctx.fillRect(-63, 31, 126, 23);
     ctx.strokeStyle = "#7c4a43";

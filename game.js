@@ -34,16 +34,17 @@ const MIMIC_FRAME_SIZE = 32;
 const MIMIC_DEATH_DURATION = 0.72;
 const AUDIO_PAN_DISTANCE = 420;
 const BUILD_GRID_SIZE = TILE_SIZE;
-const RESCUE_BEACON_DURATION = 90;
-const RESCUE_BEACON_HEALTH = 360;
+const ESCAPE_GATE_MIN_DISTANCE = 7200;
+const ESCAPE_GATE_MAX_DISTANCE = 10800;
+const ESCAPE_GATE_DISCOVERY_DISTANCE = 550;
+const ESCAPE_GATE_INTERACT_DISTANCE = 120;
 const DEFENSE_COLLIDER = {
   wall: { length: 48, thickness: 15, edgeOffset: 16 },
   door: { length: 48, thickness: 9, edgeOffset: 16 }
 };
 const SOLID_BUILDING_COLLIDER = {
   chest: { width: 44, height: 42, offsetY: 2 },
-  workbench: { width: 44, height: 42, offsetY: 2 },
-  beacon: { width: 38, height: 44, offsetY: 0 }
+  workbench: { width: 44, height: 42, offsetY: 2 }
 };
 
 const titleScreen = document.getElementById("titleScreen");
@@ -167,14 +168,7 @@ const BUILD_TYPES = [
   { type: "floor", label: "木地板", cost: { wood: 2, stone: 0 } },
   { type: "chest", label: "储物箱", cost: { wood: 5, stone: 0 } },
   { type: "workbench", label: "工作台", cost: { wood: 6, stone: 2 } },
-  { type: "trap", label: "陷阱", cost: { wood: 2, stone: 1 }, uses: 3 },
-  {
-    type: "beacon",
-    label: "求救信标",
-    cost: { wood: 20, stone: 12 },
-    health: RESCUE_BEACON_HEALTH,
-    requiresWorkbench: true
-  }
+  { type: "trap", label: "陷阱", cost: { wood: 2, stone: 1 }, uses: 3 }
 ];
 const WEAPON_TYPES = [
   { type: "club", kind: "weapon", label: "木棒", cost: { wood: 4, stone: 0 }, damage: 25, range: 54, cooldown: 0.48 },
@@ -264,6 +258,7 @@ const buildings = [];
 const camera = { x: 0, y: 0 };
 const pointerAim = { x: W / 2, y: H / 2, active: false };
 const campfire = { ...CAMP_POSITION };
+const escapeGate = { x: 0, y: 0, discovered: false };
 
 function hash(index) {
   const value = Math.sin(index * 91.173 + 12.91) * 43758.5453;
@@ -272,6 +267,71 @@ function hash(index) {
 
 function gridHash(x, y, seed = 0) {
   return hash(x * 374761 + y * 668265 + seed * 69069);
+}
+
+function escapeGateGroundIsClear(x, y) {
+  const points = [
+    [-72, -48], [0, -48], [72, -48],
+    [-72, 0], [0, 0], [72, 0],
+    [-72, 48], [0, 48], [72, 48]
+  ];
+  return points.every(([offsetX, offsetY]) => (
+    terrainAtWorld(x + offsetX, y + offsetY) === TERRAIN_FRAME.grass
+  ));
+}
+
+function generateEscapeGate() {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const angle = Math.random() * Math.PI * 2;
+    const distance = ESCAPE_GATE_MIN_DISTANCE
+      + Math.random() * (ESCAPE_GATE_MAX_DISTANCE - ESCAPE_GATE_MIN_DISTANCE);
+    const x = Math.floor((CAMP_POSITION.x + Math.cos(angle) * distance) / TILE_SIZE) * TILE_SIZE + TILE_SIZE / 2;
+    const y = Math.floor((CAMP_POSITION.y + Math.sin(angle) * distance) / TILE_SIZE) * TILE_SIZE + TILE_SIZE / 2;
+    if (x < WORLD.margin + 180 || y < WORLD.margin + 220
+      || x > WORLD.width - WORLD.margin - 180 || y > WORLD.height - WORLD.margin - 180) continue;
+    if (!escapeGateGroundIsClear(x, y)) continue;
+    Object.assign(escapeGate, { x, y, discovered: false });
+    return;
+  }
+  Object.assign(escapeGate, {
+    x: CAMP_POSITION.x + ESCAPE_GATE_MIN_DISTANCE,
+    y: CAMP_POSITION.y,
+    discovered: false
+  });
+}
+
+function restoreEscapeGate(savedGate) {
+  const valid = Number.isFinite(savedGate?.x)
+    && Number.isFinite(savedGate?.y)
+    && savedGate.x > WORLD.margin
+    && savedGate.y > WORLD.margin
+    && savedGate.x < WORLD.width - WORLD.margin
+    && savedGate.y < WORLD.height - WORLD.margin;
+  if (!valid) {
+    generateEscapeGate();
+    return;
+  }
+  Object.assign(escapeGate, {
+    x: savedGate.x,
+    y: savedGate.y,
+    discovered: Boolean(savedGate.discovered)
+  });
+}
+
+function escapeGateDistance() {
+  return Math.hypot(player.x - escapeGate.x, player.y - escapeGate.y);
+}
+
+function escapeGateDirection() {
+  const angle = Math.atan2(escapeGate.y - player.y, escapeGate.x - player.x);
+  const directions = ["东", "东南", "南", "西南", "西", "西北", "北", "东北"];
+  const index = Math.round(angle / (Math.PI / 4));
+  return directions[(index + 8) % 8];
+}
+
+function resourceOverlapsEscapeGate(x, y, radius) {
+  return Math.abs(x - escapeGate.x) < 118 + radius
+    && Math.abs(y - escapeGate.y) < 105 + radius;
 }
 
 function resourceChunkKey(chunkX, chunkY) {
@@ -302,6 +362,7 @@ function generateResourceChunk(chunkX, chunkY) {
     const roll = gridHash(chunkX, chunkY, candidate * 4 + 3);
     const type = roll < 0.58 ? "tree" : roll < 0.82 ? "rock" : "berry";
     const radius = type === "tree" ? 24 : type === "rock" ? 15 : 18;
+    if (resourceOverlapsEscapeGate(x, y, radius)) continue;
     const treeFrame = type === "tree" && gridHash(chunkX, chunkY, candidate * 7 + 101) < 0.22 ? 1 : 0;
     if ((type === "tree" || type === "berry") && !canPlantGrowAt(x, y, radius)) continue;
     if (resources.some((item) => Math.hypot(x - item.x, y - item.y) < radius + item.radius + 22)) continue;
@@ -488,7 +549,8 @@ function saveGame(announce = true) {
     monsters,
     barricades,
     doors,
-    buildings
+    buildings,
+    escapeGate: { ...escapeGate }
   };
   try {
     window.localStorage?.setItem("guilin-save-v1", JSON.stringify(saveData));
@@ -828,6 +890,7 @@ function resetWorld() {
   barricadeId = 0;
   doorId = 0;
   buildingId = 0;
+  generateEscapeGate();
   updateResourceChunks(true);
 }
 
@@ -1000,8 +1063,11 @@ function continueGame() {
   restoreList(barricades, saved.barricades);
   restoreList(doors, saved.doors);
   restoreList(buildings, saved.buildings);
+  for (let index = buildings.length - 1; index >= 0; index -= 1) {
+    if (buildings[index]?.type === "beacon") buildings.splice(index, 1);
+  }
   buildings.filter((building) => building.type === "chest").forEach(normalizeChestStorage);
-  buildings.filter((building) => building.type === "beacon").forEach(normalizeRescueBeacon);
+  restoreEscapeGate(saved.escapeGate);
   BUILD_TYPES.forEach((recipe, buildIndex) => {
     const carried = [...inventoryItems, ...quickbarItems]
       .filter((item) => item?.kind === "building" && item.buildIndex === buildIndex)
@@ -1076,7 +1142,7 @@ function winGame() {
   setInventoryOpen(false);
   gameOverPanel.classList.add("hidden");
   if (victorySummary) {
-    victorySummary.textContent = `你在第 ${dayNumber} 天守住了信标，终于离开了森林。`;
+    victorySummary.textContent = `你在第 ${dayNumber} 天找到了逃生大门，终于离开了森林。`;
   }
   victoryPanel?.classList.remove("hidden");
   playTone({ frequency: 392, endFrequency: 784, type: "sine", duration: 0.7, volume: 0.08 });
@@ -1106,46 +1172,6 @@ function currentPhaseProgress() {
   return isNight() ? (cycle - DAY_LENGTH) / NIGHT_LENGTH : cycle / DAY_LENGTH;
 }
 
-function activeRescueBeacon() {
-  return buildings.find((building) => (
-    building.type === "beacon"
-    && building.health > 0
-    && Number(building.rescueTimer) > 0
-  )) || null;
-}
-
-function normalizeRescueBeacon(beacon) {
-  if (!beacon || beacon.type !== "beacon") return beacon;
-  beacon.maxHealth = Math.max(1, Number(beacon.maxHealth) || RESCUE_BEACON_HEALTH);
-  const savedHealth = Number(beacon.health);
-  beacon.health = Number.isFinite(savedHealth)
-    ? Math.max(0, Math.min(beacon.maxHealth, savedHealth))
-    : beacon.maxHealth;
-  beacon.rescueTimer = Math.max(0, Math.min(
-    RESCUE_BEACON_DURATION,
-    Number.isFinite(Number(beacon.rescueTimer)) ? Number(beacon.rescueTimer) : RESCUE_BEACON_DURATION
-  ));
-  beacon.warningStage = Math.max(0, Math.floor(Number(beacon.warningStage) || 0));
-  return beacon;
-}
-
-function updateRescueBeacon(delta) {
-  const beacon = activeRescueBeacon();
-  if (!beacon) return false;
-  beacon.rescueTimer = Math.max(0, Number(beacon.rescueTimer) - delta);
-  const warnings = [60, 30, 10];
-  beacon.warningStage = Math.max(0, Math.floor(Number(beacon.warningStage) || 0));
-  while (beacon.warningStage < warnings.length
-    && beacon.rescueTimer <= warnings[beacon.warningStage]) {
-    const seconds = warnings[beacon.warningStage];
-    beacon.warningStage += 1;
-    showMessage(`救援信号保持中：还剩 ${seconds} 秒`, 1.5);
-  }
-  if (beacon.rescueTimer > 0) return false;
-  winGame();
-  return true;
-}
-
 // 黄昏和黎明会慢慢变暗、变亮，避免画面突然跳黑。
 function nightIntensity() {
   const cycle = elapsed % CYCLE_LENGTH;
@@ -1159,6 +1185,13 @@ function nightIntensity() {
   const progress = (cycle - CYCLE_LENGTH + transition) / transition;
   const smooth = progress * progress * (3 - 2 * progress);
   return 1 - smooth;
+}
+
+function updateEscapeGateDiscovery() {
+  if (escapeGate.discovered || escapeGateDistance() > ESCAPE_GATE_DISCOVERY_DISTANCE) return;
+  escapeGate.discovered = true;
+  showMessage("你发现了逃生大门！靠近后按 E 离开森林", 2);
+  saveGame(false);
 }
 
 function update(delta) {
@@ -1176,18 +1209,15 @@ function update(delta) {
   }
 
   updatePlayer(delta);
+  updateEscapeGateDiscovery();
   updateDoors(delta);
   updateTraps(delta);
   updateMonsters(delta, night);
-  if (updateRescueBeacon(delta)) return;
   updateAudioAmbience(delta);
   spawnTimer -= delta;
-  const rescueBeacon = activeRescueBeacon();
-  if ((night || rescueBeacon) && spawnTimer <= 0) {
-    spawnMonster(rescueBeacon || player);
-    spawnTimer = rescueBeacon
-      ? Math.max(4, 8 - dayNumber * 0.2)
-      : Math.max(5, 15 - dayNumber * 0.8);
+  if (night && spawnTimer <= 0) {
+    spawnMonster();
+    spawnTimer = Math.max(5, 15 - dayNumber * 0.8);
   }
 
   if (messageTimer > 0) {
@@ -1254,7 +1284,17 @@ function getSolidBuildingCollider(building) {
   };
 }
 
+function getEscapeGateCollider() {
+  return {
+    x: escapeGate.x,
+    y: escapeGate.y + 7,
+    width: 188,
+    height: 36
+  };
+}
+
 function collides(x, y) {
+  if (circleHitsRectangle(x, y, player.radius, getEscapeGateCollider())) return true;
   for (const door of doors) {
     if (door.animation < 0.82 && circleHitsRectangle(x, y, player.radius, getDefenseCollider(door, "door"))) return true;
   }
@@ -1282,6 +1322,12 @@ function updateDoors(delta) {
 }
 
 function interact() {
+  if (escapeGateDistance() < ESCAPE_GATE_INTERACT_DISTANCE) {
+    escapeGate.discovered = true;
+    showMessage("逃生大门打开了", 1);
+    winGame();
+    return;
+  }
   const nearbyDoor = doors.find((door) => Math.hypot(player.x - door.x, player.y - door.y) < 72);
   if (nearbyDoor) {
     nearbyDoor.open = !nearbyDoor.open;
@@ -1514,22 +1560,11 @@ function renderCrafting() {
       || inventoryItems.some((item) => item === null)
       || quickbarItems.some((item) => item === null);
     const affordable = player.wood >= recipe.cost.wood && player.stone >= recipe.cost.stone;
-    const workbenchLocked = recipe.requiresWorkbench && !nearbyWorkbench();
-    const beaconExists = recipe.type === "beacon"
-      && (craftedCounts[buildIndex] > 0 || buildings.some((building) => building.type === "beacon"));
-    const ready = affordable && hasSpace && !workbenchLocked && !beaconExists;
-    button.disabled = !ready;
-    button.classList.toggle("craft-ready", ready);
-    button.classList.toggle("workbench-locked", Boolean(workbenchLocked));
-    button.title = beaconExists
-      ? "求救信标已经存在"
-      : workbenchLocked
-        ? "需要靠近已放置的工作台"
-        : !hasSpace
-          ? "背包和快捷栏都已满"
-          : affordable
-            ? `制作${recipe.label}：${recipeCostText(recipe.cost)}`
-            : `材料不足：${recipeCostText(recipe.cost)}`;
+    button.disabled = !affordable || !hasSpace;
+    button.classList.toggle("craft-ready", affordable && hasSpace);
+    button.title = !hasSpace
+      ? "背包和快捷栏都已满"
+      : affordable ? `制作${recipe.label}：${recipeCostText(recipe.cost)}` : `材料不足：${recipeCostText(recipe.cost)}`;
     const owned = button.querySelector?.(".craft-owned");
     if (owned) owned.textContent = String(craftedCounts[buildIndex]);
   });
@@ -1601,17 +1636,6 @@ function craftBuilding(buildIndex) {
   if (state !== "game" || !inventoryOpen) return;
   const recipe = BUILD_TYPES[buildIndex];
   if (!recipe) return;
-  if (recipe.requiresWorkbench && !nearbyWorkbench()) {
-    if (craftStatus) craftStatus.textContent = `需要靠近工作台才能制作${recipe.label}`;
-    renderCrafting();
-    return;
-  }
-  if (recipe.type === "beacon"
-    && (craftedCounts[buildIndex] > 0 || buildings.some((building) => building.type === "beacon"))) {
-    if (craftStatus) craftStatus.textContent = "求救信标已经存在，先守住当前信号";
-    renderCrafting();
-    return;
-  }
   const inventoryStack = craftedInventorySlot(buildIndex);
   const quickStack = craftedQuickSlot(buildIndex);
   const emptyInventory = inventoryItems.findIndex((item) => item === null);
@@ -1787,15 +1811,6 @@ function buildProp(type, cost, label, payCost = true) {
   // 陷阱像一只有三颗牙的夹子，命中三次后就会坏掉。
   if (type === "trap") Object.assign(building, { uses: 3, cooldown: 0 });
   if (type === "chest") building.items = Array(CHEST_SLOT_COUNT).fill(null);
-  if (type === "beacon") {
-    Object.assign(building, {
-      health: RESCUE_BEACON_HEALTH,
-      maxHealth: RESCUE_BEACON_HEALTH,
-      rescueTimer: RESCUE_BEACON_DURATION,
-      warningStage: 0
-    });
-    spawnTimer = Math.min(spawnTimer, 1.5);
-  }
   buildings.push(building);
   playBuildSound(placement.x);
   if (payCost) {
@@ -1804,8 +1819,6 @@ function buildProp(type, cost, label, payCost = true) {
   }
   if (type === "chest") {
     showMessage("建造了储物箱，靠近后按 E 打开");
-  } else if (type === "beacon") {
-    showMessage(`信标已启动！守住它 ${RESCUE_BEACON_DURATION} 秒`, 2);
   } else {
     showMessage(`建造了${label}`);
   }
@@ -1841,6 +1854,7 @@ function getBuildBlockReason(x, y) {
   const occupied = barricades.some((item) => Math.hypot(x - item.x, y - item.y) < 44)
     || doors.some((item) => Math.hypot(x - item.x, y - item.y) < 44)
     || buildings.some((item) => Math.hypot(x - item.x, y - item.y) < 38)
+    || (Math.abs(x - escapeGate.x) < 128 && Math.abs(y - escapeGate.y) < 112)
     || resources.some((item) => Math.hypot(x - item.x, y - item.y) < item.radius + 25)
     || monsters.some((item) => Math.hypot(x - item.x, y - item.y) < item.radius + 25)
     || Math.hypot(x - campfire.x, y - campfire.y) < 55;
@@ -1991,11 +2005,11 @@ function aimAtPointer(event) {
   updatePointerFacing();
 }
 
-function spawnMonster(origin = player) {
+function spawnMonster() {
   const angle = Math.random() * Math.PI * 2;
   const distance = 560 + Math.random() * 180;
-  const x = Math.max(WORLD.margin, Math.min(WORLD.width - WORLD.margin, origin.x + Math.cos(angle) * distance));
-  const y = Math.max(WORLD.margin, Math.min(WORLD.height - WORLD.margin, origin.y + Math.sin(angle) * distance));
+  const x = Math.max(WORLD.margin, Math.min(WORLD.width - WORLD.margin, player.x + Math.cos(angle) * distance));
+  const y = Math.max(WORLD.margin, Math.min(WORLD.height - WORLD.margin, player.y + Math.sin(angle) * distance));
   monsters.push({
     type: "mimic",
     name: "模仿者",
@@ -2093,8 +2107,7 @@ function updateMonsters(delta, night) {
     }
 
     monster.animation = (monster.animation || 0) + delta * (monster.alerted ? 7.5 : 2.2);
-    const rescueBeacon = activeRescueBeacon();
-    if (!night && !rescueBeacon) {
+    if (!night) {
       monster.alerted = false;
       const retreatX = monster.x - player.x;
       const retreatY = monster.y - player.y;
@@ -2108,9 +2121,7 @@ function updateMonsters(delta, night) {
     const dy = player.y - monster.y;
     const distance = Math.hypot(dx, dy) || 1;
 
-    if (rescueBeacon) {
-      monster.alerted = true;
-    } else if (!monster.alerted && monster.detectionCooldown <= 0 && distance <= MIMIC_DETECTION_DISTANCE) {
+    if (!monster.alerted && monster.detectionCooldown <= 0 && distance <= MIMIC_DETECTION_DISTANCE) {
       monster.alerted = true;
       playMimicDetected(monster);
       showMessage("附近传来模仿你的脚步声", 1.2);
@@ -2119,13 +2130,9 @@ function updateMonsters(delta, night) {
     }
 
     if (monster.alerted) {
-      const target = rescueBeacon && distance > 180 ? rescueBeacon : player;
-      const targetDx = target.x - monster.x;
-      const targetDy = target.y - monster.y;
-      const targetDistance = Math.hypot(targetDx, targetDy) || 1;
-      if (targetDistance > MIMIC_ATTACK_DISTANCE) {
-        const nextX = monster.x + (targetDx / targetDistance) * monster.speed * delta;
-        const nextY = monster.y + (targetDy / targetDistance) * monster.speed * delta;
+      if (distance > MIMIC_ATTACK_DISTANCE) {
+        const nextX = monster.x + (dx / distance) * monster.speed * delta;
+        const nextY = monster.y + (dy / distance) * monster.speed * delta;
         const defense = findBlockingDefense(nextX, nextY, monster.radius);
         if (defense) {
           attackDefense(monster, defense);
@@ -2137,8 +2144,6 @@ function updateMonsters(delta, night) {
             monster.footstepTimer = 0.32;
           }
         }
-      } else if (target === rescueBeacon) {
-        attackDefense(monster, { item: rescueBeacon, list: buildings, label: "求救信标" });
       } else {
         if (monster.attackCooldown <= 0 && player.hurtTimer <= 0) {
           player.health = Math.max(0, player.health - MIMIC_JUMPSCARE_DAMAGE);
@@ -2167,10 +2172,6 @@ function findBlockingDefense(x, y, radius) {
   if (wall) return { item: wall, list: barricades, label: "木墙" };
   const door = doors.find((item) => item.animation < 0.82 && circleHitsRectangle(x, y, radius, getDefenseCollider(item, "door")));
   if (door) return { item: door, list: doors, label: "木门" };
-  const beacon = activeRescueBeacon();
-  if (beacon && circleHitsRectangle(x, y, radius, getSolidBuildingCollider(beacon))) {
-    return { item: beacon, list: buildings, label: "求救信标" };
-  }
   return null;
 }
 
@@ -2181,11 +2182,7 @@ function attackDefense(monster, defense) {
   if (defense.item.health > 0) return;
   const index = defense.list.indexOf(defense.item);
   if (index >= 0) defense.list.splice(index, 1);
-  if (defense.item.type === "beacon") {
-    showMessage("求救信标被摧毁，救援倒计时中断！", 2);
-  } else {
-    showMessage(`${defense.label}被怪物破坏了！`, 1.4);
-  }
+  showMessage(`${defense.label}被怪物破坏了！`, 1.4);
 }
 
 function syncInventoryItems() {
@@ -2467,22 +2464,19 @@ function quickbarItemAmount(item) {
 
 function updateSurvivalReadout() {
   if (objectiveLabel) {
-    const beacon = activeRescueBeacon();
-    const beaconIndex = BUILD_TYPES.findIndex((recipe) => recipe.type === "beacon");
+    const gateDistance = escapeGateDistance();
     if (classSelectionOpen) {
       objectiveLabel.textContent = "选择职业后进入森林";
-    } else if (beacon) {
-      objectiveLabel.textContent = `守住信标：${Math.ceil(beacon.rescueTimer)} 秒 · 耐久 ${Math.ceil(beacon.health)}`;
-    } else if (beaconIndex >= 0 && craftedCounts[beaconIndex] > 0) {
-      objectiveLabel.textContent = "把求救信标放到空地，右键建造";
+    } else if (gateDistance < ESCAPE_GATE_INTERACT_DISTANCE * 1.4) {
+      objectiveLabel.textContent = "逃生大门就在前方 · 靠近按 E";
     } else if (player.health <= 30) {
       objectiveLabel.textContent = "寻找浆果，先处理伤势";
-    } else if (!buildings.some((building) => building.type === "workbench")) {
-      objectiveLabel.textContent = "最终目标：建造工作台与求救信标";
-    } else if (player.wood < 20 || player.stone < 12) {
-      objectiveLabel.textContent = "收集木材 20、石头 12 制作求救信标";
+    } else if (escapeGate.discovered) {
+      objectiveLabel.textContent = `返回逃生大门 · 大致在${escapeGateDirection()}方`;
+    } else if (isNight()) {
+      objectiveLabel.textContent = `活过夜晚 · 继续向${escapeGateDirection()}方搜索`;
     } else {
-      objectiveLabel.textContent = "靠近工作台，打开背包制作求救信标";
+      objectiveLabel.textContent = `寻找逃生大门 · 迹象指向${escapeGateDirection()}方`;
     }
   }
 
@@ -2586,6 +2580,7 @@ function render() {
   drawBarricades();
   drawDoors();
   drawResources();
+  drawEscapeGate();
   drawMonsters();
   drawBuildPreview();
   drawPlayer();
@@ -2681,9 +2676,7 @@ function drawBuildPreview() {
 
   ctx.save();
   ctx.globalAlpha = valid ? 0.62 : 0.3;
-  if (selected.type === "beacon") {
-    drawRescueBeacon(preview, true);
-  } else if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
+  if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
     if (selected.type === "wall") {
       drawRotatedBuildingFrame(BUILDING_FRAME.wall, preview);
     } else if (selected.type === "door") {
@@ -2795,52 +2788,94 @@ function drawTerrainTile(frame, x, y) {
   ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
 }
 
-function drawRescueBeacon(beacon, preview = false) {
+function drawEscapeGate() {
+  if (escapeGate.x < camera.x - 150 || escapeGate.x > camera.x + W + 150
+    || escapeGate.y < camera.y - 80 || escapeGate.y > camera.y + H + 230) return;
   ctx.save();
-  ctx.translate(beacon.x, beacon.y);
-  if (!preview) {
-    const pulse = 16 + ((elapsed * 34) % 38);
-    ctx.strokeStyle = `rgba(226, 86, 73, ${Math.max(0, 0.5 - pulse / 100)})`;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(0, -18, pulse, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-  ctx.fillStyle = "#26312c";
-  ctx.fillRect(-17, 12, 34, 9);
-  ctx.fillStyle = "#56645a";
-  ctx.fillRect(-13, 8, 26, 7);
-  ctx.fillStyle = "#8f9a88";
-  ctx.fillRect(-3, -22, 6, 31);
-  ctx.fillStyle = "#43312d";
-  ctx.fillRect(-9, -27, 18, 8);
-  const blink = preview || Math.sin(elapsed * 9) > -0.25;
-  ctx.fillStyle = blink ? "#ee6655" : "#743432";
-  ctx.fillRect(-6, -25, 12, 5);
-  ctx.fillStyle = blink ? "#ffd29a" : "#925b4d";
-  ctx.fillRect(-2, -24, 4, 3);
-  ctx.fillStyle = "#a5b49d";
-  ctx.fillRect(-12, 1, 6, 6);
-  ctx.fillRect(6, 1, 6, 6);
-  ctx.restore();
+  ctx.translate(escapeGate.x, escapeGate.y);
 
-  if (preview) return;
-  const healthRatio = Math.max(0, Math.min(1, beacon.health / beacon.maxHealth));
-  const rescueRatio = Math.max(0, Math.min(1, 1 - beacon.rescueTimer / RESCUE_BEACON_DURATION));
-  ctx.fillStyle = "rgba(2, 5, 5, .86)";
-  ctx.fillRect(beacon.x - 24, beacon.y - 42, 48, 9);
-  ctx.fillStyle = "#8a3434";
-  ctx.fillRect(beacon.x - 22, beacon.y - 40, 44 * healthRatio, 2);
-  ctx.fillStyle = "#d6c687";
-  ctx.fillRect(beacon.x - 22, beacon.y - 36, 44 * rescueRatio, 2);
+  ctx.fillStyle = "rgba(1, 4, 5, .48)";
+  ctx.beginPath();
+  ctx.ellipse(0, 18, 104, 23, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "#111817";
+  ctx.fillRect(-72, -146, 144, 154);
+  ctx.fillStyle = "#29342f";
+  ctx.fillRect(-96, -162, 192, 30);
+  ctx.fillStyle = "#465248";
+  ctx.fillRect(-88, -154, 176, 9);
+  ctx.fillStyle = "#1b2420";
+  ctx.fillRect(-72, -132, 144, 13);
+
+  for (const side of [-1, 1]) {
+    const x = side * 74 - 17;
+    ctx.fillStyle = "#313c35";
+    ctx.fillRect(x, -137, 34, 149);
+    ctx.fillStyle = "#566156";
+    ctx.fillRect(x + (side < 0 ? 5 : 0), -130, 8, 132);
+    ctx.fillStyle = "#202923";
+    for (let segment = 0; segment < 4; segment += 1) {
+      ctx.fillRect(x, -100 + segment * 34, 34, 4);
+    }
+    ctx.fillStyle = "#667065";
+    ctx.fillRect(x - 5, 5, 44, 15);
+  }
+
+  ctx.fillStyle = "#101615";
+  ctx.fillRect(-57, -119, 114, 127);
+  ctx.fillStyle = "#26332e";
+  ctx.fillRect(-52, -114, 50, 119);
+  ctx.fillRect(2, -114, 50, 119);
+  ctx.fillStyle = "#4a5a50";
+  ctx.fillRect(-4, -114, 8, 119);
+  for (let bar = -43; bar <= 43; bar += 22) {
+    ctx.fillStyle = "#58645b";
+    ctx.fillRect(bar - 3, -107, 6, 104);
+    ctx.fillStyle = "#252e29";
+    ctx.fillRect(bar + 3, -107, 3, 104);
+  }
+  ctx.fillStyle = "#6b3a37";
+  ctx.fillRect(-52, -61, 104, 9);
+  ctx.fillStyle = "#8e5148";
+  ctx.fillRect(-48, -59, 96, 3);
+  ctx.fillStyle = "#151b19";
+  ctx.fillRect(-13, -30, 26, 24);
+  ctx.fillStyle = "#8f704b";
+  ctx.fillRect(-6, -25, 12, 12);
+
+  const lampOn = Math.sin(elapsed * 3.4) > -0.55;
+  ctx.fillStyle = lampOn ? "#b9544d" : "#5e302f";
+  ctx.fillRect(-83, -146, 12, 8);
+  ctx.fillRect(71, -146, 12, 8);
+  ctx.fillStyle = lampOn ? "#e98a69" : "#78423a";
+  ctx.fillRect(-80, -144, 6, 4);
+  ctx.fillRect(74, -144, 6, 4);
+
+  ctx.fillStyle = "#111817";
+  ctx.fillRect(-33, -158, 66, 20);
+  ctx.strokeStyle = "#6a7669";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(-33, -158, 66, 20);
+  ctx.fillStyle = "#b1b69d";
+  ctx.font = "12px ArkPixel, monospace";
+  ctx.textAlign = "center";
+  ctx.fillText("EXIT", 0, -143);
+
+  if (escapeGateDistance() < ESCAPE_GATE_DISCOVERY_DISTANCE) {
+    ctx.fillStyle = "rgba(3, 7, 7, .88)";
+    ctx.fillRect(-63, 31, 126, 23);
+    ctx.strokeStyle = "#7c4a43";
+    ctx.strokeRect(-63, 31, 126, 23);
+    ctx.fillStyle = "#ded7bd";
+    ctx.font = "10px ArkPixel, monospace";
+    ctx.fillText("靠近按 E 逃离森林", 0, 47);
+  }
+  ctx.restore();
 }
 
 function drawBuildings() {
   for (const building of buildings) {
-    if (building.type === "beacon") {
-      drawRescueBeacon(building);
-      continue;
-    }
     if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
       const frame = BUILDING_FRAME[building.type];
       ctx.drawImage(worldSprite, frame * 16, BUILDING_ROW * 16, 16, 16, building.x - 24, building.y - 24, 48, 48);

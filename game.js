@@ -127,7 +127,7 @@ const PORTABLE_ITEMS = [
   { type: "strength_potion", kind: "consumable", label: "力量药水" }
 ];
 const PISTOL_MAGAZINE_SIZE = 7;
-const PISTOL_BULLET_SPEED = 760;
+const PISTOL_BULLET_SPEED = 1600;
 const PISTOL_BULLET_WIDTH = 10;
 const CLASS_NAMES = ["枪手", "护士", "伐木工", "守望者", "棒球女", "科学家"];
 const CLASS_SKILLS = [
@@ -261,7 +261,7 @@ const WEAPON_TYPES = [
     label: "手枪",
     cost: { wood: 0, stone: 0 },
     damage: 32,
-    range: 310,
+    range: 720,
     cooldown: 0.42,
     magazineSize: PISTOL_MAGAZINE_SIZE
   }
@@ -2213,7 +2213,7 @@ function firePistol(weapon) {
   weapon.loadedAmmo = loadedAmmo - 1;
   player.attackCooldown = weaponAttackCooldown(weapon);
   player.attackTimer = 0.12;
-  const range = weapon.range || 310;
+  const range = weapon.range || 720;
   const directionLength = Math.hypot(player.dirX, player.dirY) || 1;
   const directionX = player.dirX / directionLength;
   const directionY = player.dirY / directionLength;

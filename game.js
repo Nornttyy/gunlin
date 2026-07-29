@@ -121,6 +121,71 @@ const RESOURCE_ITEMS = [
   { type: "berry", kind: "food", label: "浆果" }
 ];
 const CLASS_NAMES = ["枪手", "护士", "伐木工", "守望者", "棒球女", "科学家"];
+const CLASS_SKILLS = [
+  { name: "精准射击", description: "武器伤害 +25%，攻击速度 +15%" },
+  { name: "急救护理", description: "浆果恢复的生命翻倍" },
+  { name: "熟练采伐", description: "少砍树 1 次，并获得更多木材" },
+  { name: "远光观察", description: "手电筒照得更远、更宽" },
+  { name: "强力挥击", description: "击退更远，木棒额外造成 20 伤害" },
+  { name: "陷阱改良", description: "陷阱范围、伤害和使用次数提升" }
+];
+const CLASS_STARTING_LOADOUTS = [
+  { label: "石斧", items: [{ type: "axe", count: 1 }] },
+  { label: "浆果 ×3", items: [{ type: "berry", count: 3 }] },
+  { label: "石斧", items: [{ type: "axe", count: 1 }] },
+  { label: "浆果 ×2、陷阱 ×1", items: [{ type: "berry", count: 2 }, { type: "trap", count: 1 }] },
+  { label: "木棒", items: [{ type: "club", count: 1 }] },
+  { label: "陷阱 ×2", items: [{ type: "trap", count: 2 }] }
+];
+
+function hasClassSkill(classIndex) {
+  return selectedClass === classIndex;
+}
+
+function berryHealAmount() {
+  return hasClassSkill(1) ? 24 : 12;
+}
+
+function resourceHarvestHits(type) {
+  const baseHits = RESOURCE_HARVEST_HITS[type] || 1;
+  return type === "tree" && hasClassSkill(2) ? Math.max(1, baseHits - 1) : baseHits;
+}
+
+function resourceHarvestYield(type) {
+  if (type === "tree") return hasClassSkill(2) ? 5 : 3;
+  if (type === "rock") return 2;
+  return 1;
+}
+
+function flashlightBeamRadius() {
+  return hasClassSkill(3) ? 302 : 232;
+}
+
+function flashlightBeamHalfAngle() {
+  return hasClassSkill(3) ? 0.5 : 0.39;
+}
+
+function weaponDamage(weapon) {
+  let damage = weapon?.damage || 35;
+  if (hasClassSkill(0)) damage = Math.round(damage * 1.25);
+  if (hasClassSkill(4) && weapon?.type === "club") damage += 20;
+  return damage;
+}
+
+function weaponAttackCooldown(weapon) {
+  const cooldown = weapon?.cooldown || 0.38;
+  return hasClassSkill(0) ? cooldown * 0.85 : cooldown;
+}
+
+function weaponKnockback() {
+  return hasClassSkill(4) ? 48 : 24;
+}
+
+function trapStats() {
+  return hasClassSkill(5)
+    ? { uses: 5, range: 48, damage: 70 }
+    : { uses: 3, range: 35, damage: 45 };
+}
 
 const ASSET_VERSION = "20260728-assets2";
 const PLAYER_ASSET_VERSION = "20260728-player-redraw1";
@@ -1403,6 +1468,28 @@ function normalizePortableItem(item, fallbackCount = 1) {
   return null;
 }
 
+function giveClassStartingItems(classIndex) {
+  const loadout = CLASS_STARTING_LOADOUTS[classIndex];
+  if (!loadout) return "";
+  for (const definition of loadout.items) {
+    const amount = Math.max(1, Math.floor(Number(definition.count) || 1));
+    if (resourceItemDefinition(definition.type)) {
+      addResource(definition.type, amount);
+      continue;
+    }
+    const item = normalizePortableItem(definition, amount);
+    if (!item) continue;
+    item.count = amount;
+    if (item.kind === "building") craftedCounts[item.buildIndex] += amount;
+    const quickIndex = quickbarItems.findIndex((slot) => slot === null);
+    const inventoryIndex = inventoryItems.findIndex((slot) => slot === null);
+    if (quickIndex >= 0) quickbarItems[quickIndex] = item;
+    else if (inventoryIndex >= 0) inventoryItems[inventoryIndex] = item;
+  }
+  selectedQuickSlot = -1;
+  return loadout.label;
+}
+
 function isStackableItem(item) {
   return Boolean(item) && item.kind !== "weapon";
 }
@@ -1521,7 +1608,7 @@ function collectResource() {
 
   player.gatherCooldown = 0.24;
   playGatherSound(target.type === "tree" ? "wood" : target.type === "rock" ? "stone" : "berry", target.x);
-  const requiredHits = RESOURCE_HARVEST_HITS[target.type] || 1;
+  const requiredHits = resourceHarvestHits(target.type);
   target.harvestHits = Math.min(requiredHits, (target.harvestHits || 0) + 1);
   if (target.harvestHits < requiredHits) {
     const action = target.type === "tree" ? "砍伐" : target.type === "rock" ? "敲击" : "采摘";
@@ -1534,8 +1621,9 @@ function collectResource() {
   resources.splice(index, 1);
   if (target.spawnKey) harvestedResourceKeys.add(target.spawnKey);
   if (target.type === "tree") {
-    addResource("wood", 3);
-    showMessage("获得木材 ×3");
+    const amount = resourceHarvestYield("tree");
+    addResource("wood", amount);
+    showMessage(`获得木材 ×${amount}`);
   } else if (target.type === "rock") {
     addResource("stone", 2);
     showMessage("获得石头 ×2");
@@ -1753,9 +1841,10 @@ function useBerry() {
     return;
   }
   spendResource("berry", 1);
-  player.health = Math.min(100, player.health + 12);
+  const healing = berryHealAmount();
+  player.health = Math.min(100, player.health + healing);
   playTone({ frequency: 420, endFrequency: 690, type: "sine", duration: 0.18, volume: 0.035 });
-  showMessage("吃下浆果，恢复 12 点生命", 1.2);
+  showMessage(`吃下浆果，恢复 ${healing} 点生命`, 1.2);
   updateHud();
 }
 
@@ -1820,8 +1909,7 @@ function buildProp(type, cost, label, payCost = true) {
   const placement = getBuildPlacement();
   if (!canBuildAt(placement.x, placement.y)) return false;
   const building = { id: buildingId++, type, x: placement.x, y: placement.y };
-  // 陷阱像一只有三颗牙的夹子，命中三次后就会坏掉。
-  if (type === "trap") Object.assign(building, { uses: 3, cooldown: 0 });
+  if (type === "trap") Object.assign(building, { uses: trapStats().uses, cooldown: 0 });
   if (type === "chest") building.items = Array(CHEST_SLOT_COUNT).fill(null);
   buildings.push(building);
   playBuildSound(placement.x);
@@ -1972,9 +2060,10 @@ function usePrimaryAction() {
 function attack() {
   if (player.attackCooldown > 0) return;
   const weapon = quickbarItems[selectedQuickSlot];
-  const damage = weapon?.damage || 35;
+  const damage = weaponDamage(weapon);
   const range = weapon?.range || 58;
-  player.attackCooldown = weapon?.cooldown || 0.38;
+  const knockback = weaponKnockback();
+  player.attackCooldown = weaponAttackCooldown(weapon);
   player.attackTimer = 0.16;
   let hit = false;
   let soundX = player.x + player.dirX * 52;
@@ -1985,8 +2074,8 @@ function attack() {
     if (Math.hypot(dx, dy) < range) {
       monster.health -= damage;
       monster.hurtTimer = 0.18;
-      monster.x += (dx / (Math.hypot(dx, dy) || 1)) * 24;
-      monster.y += (dy / (Math.hypot(dx, dy) || 1)) * 24;
+      monster.x += (dx / (Math.hypot(dx, dy) || 1)) * knockback;
+      monster.y += (dy / (Math.hypot(dx, dy) || 1)) * knockback;
       hit = true;
       soundX = monster.x;
     }
@@ -2074,14 +2163,16 @@ function teleportMimicAway(monster) {
 }
 
 function updateTraps(delta) {
+  const stats = trapStats();
   for (let i = buildings.length - 1; i >= 0; i -= 1) {
     const trap = buildings[i];
     if (trap.type !== "trap") continue;
     trap.cooldown = Math.max(0, trap.cooldown - delta);
     if (trap.cooldown > 0) continue;
-    const monster = monsters.find((item) => !item.dead && Math.hypot(item.x - trap.x, item.y - trap.y) < 35);
+    const monster = monsters.find((item) => !item.dead
+      && Math.hypot(item.x - trap.x, item.y - trap.y) < stats.range);
     if (!monster) continue;
-    monster.health -= 45;
+    monster.health -= stats.damage;
     monster.hurtTimer = 0.25;
     trap.uses -= 1;
     trap.cooldown = 0.65;
@@ -2528,6 +2619,9 @@ function updateHud() {
   }
   if (classLabel) {
     classLabel.textContent = selectedClass >= 0 ? CLASS_NAMES[selectedClass] : "未选择";
+    classLabel.title = selectedClass >= 0
+      ? `${CLASS_SKILLS[selectedClass].name}：${CLASS_SKILLS[selectedClass].description}`
+      : "进入游戏后选择职业";
   }
   healthLabel.classList.toggle("danger", player.health <= 30);
   resourceLabel.textContent = `木材 ${player.wood}　石头 ${player.stone}　浆果 ${player.berry}`;
@@ -3133,8 +3227,8 @@ function drawNightCurtain(darkness) {
   const fireX = campfire.x - camera.x;
   const fireY = campfire.y - camera.y - 18;
   const angle = Math.atan2(player.dirY, player.dirX);
-  const beamRadius = 232;
-  const beamHalfAngle = 0.39;
+  const beamRadius = flashlightBeamRadius();
+  const beamHalfAngle = flashlightBeamHalfAngle();
   const mask = getNightMaskContext();
 
   mask.clearRect(0, 0, W, H);
@@ -3189,7 +3283,8 @@ function drawFlashlightGlow(darkness) {
   const px = player.x - camera.x;
   const py = player.y - camera.y - 12;
   const angle = Math.atan2(player.dirY, player.dirX);
-  const radius = 238;
+  const radius = flashlightBeamRadius() + 6;
+  const halfAngle = flashlightBeamHalfAngle();
   const stutter = darkness > 0.55 && Math.sin(elapsed * 0.73) > 0.985 ? 0.42 : 1;
   const flicker = (0.89 + Math.sin(elapsed * 21) * 0.055 + Math.sin(elapsed * 7.7) * 0.035) * stutter;
 
@@ -3199,7 +3294,7 @@ function drawFlashlightGlow(darkness) {
   ctx.rotate(angle);
   ctx.beginPath();
   ctx.moveTo(0, 0);
-  ctx.arc(0, 0, radius, -0.39, 0.39);
+  ctx.arc(0, 0, radius, -halfAngle, halfAngle);
   ctx.closePath();
   ctx.clip();
   const beam = ctx.createRadialGradient(0, 0, 14, 0, 0, radius);
@@ -3632,7 +3727,9 @@ classButtons.forEach((button) => {
     inventoryButton.disabled = false;
     keys.clear();
     lastTime = performance.now();
-    showMessage(`已选择职业：${CLASS_NAMES[selectedClass]}`, 1.6);
+    const skill = CLASS_SKILLS[selectedClass];
+    const startingItems = giveClassStartingItems(selectedClass);
+    showMessage(`${CLASS_NAMES[selectedClass]} · ${skill.name}已生效；获得${startingItems}`, 2.6);
     updateHud();
     saveGame(false);
   });

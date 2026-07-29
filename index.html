@@ -11,7 +11,7 @@
   <link rel="preload" href="assets/escape-gate.png?v=20260729-gate-drawn1" as="image" />
   <link rel="preload" href="assets/forest-assets.png?v=20260728-assets2" as="image" />
   <link rel="preload" href="assets/ark-pixel-12px-zh_cn.woff2?v=20260728-assets2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=20260729-gateart1" />
+  <link rel="stylesheet" href="styles.css?v=20260729-skills1" />
 </head>
 <body>
   <main id="app">
@@ -43,14 +43,14 @@
         <div class="class-select-card">
           <p class="eyebrow">IDENTITY REQUIRED</p>
           <h2 id="classSelectTitle">选择职业</h2>
-          <p class="class-select-note">森林会记住你的选择 · 本局无法更换</p>
+          <p class="class-select-note">森林会记住你的选择 · 职业技能会立刻生效 · 本局无法更换</p>
           <div class="class-buttons">
-            <button type="button" class="class-button" data-class="0"><span class="class-portrait" aria-hidden="true"></span><span>枪手</span></button>
-            <button type="button" class="class-button" data-class="1"><span class="class-portrait" aria-hidden="true"></span><span>护士</span></button>
-            <button type="button" class="class-button" data-class="2"><span class="class-portrait" aria-hidden="true"></span><span>伐木工</span></button>
-            <button type="button" class="class-button" data-class="3"><span class="class-portrait" aria-hidden="true"></span><span>守望者</span></button>
-            <button type="button" class="class-button" data-class="4"><span class="class-portrait" aria-hidden="true"></span><span>棒球女</span></button>
-            <button type="button" class="class-button" data-class="5"><span class="class-portrait" aria-hidden="true"></span><span>科学家</span></button>
+            <button type="button" class="class-button" data-class="0"><span class="class-portrait" aria-hidden="true"></span><span class="class-copy"><strong>枪手</strong><small>精准射击 · 武器伤害 +25%，攻击更快<br><b>初始：石斧</b></small></span></button>
+            <button type="button" class="class-button" data-class="1"><span class="class-portrait" aria-hidden="true"></span><span class="class-copy"><strong>护士</strong><small>急救护理 · 浆果治疗量翻倍<br><b>初始：浆果 ×3</b></small></span></button>
+            <button type="button" class="class-button" data-class="2"><span class="class-portrait" aria-hidden="true"></span><span class="class-copy"><strong>伐木工</strong><small>熟练采伐 · 砍树更快，木材更多<br><b>初始：石斧</b></small></span></button>
+            <button type="button" class="class-button" data-class="3"><span class="class-portrait" aria-hidden="true"></span><span class="class-copy"><strong>守望者</strong><small>远光观察 · 手电筒更远、更宽<br><b>初始：浆果 ×2、陷阱 ×1</b></small></span></button>
+            <button type="button" class="class-button" data-class="4"><span class="class-portrait" aria-hidden="true"></span><span class="class-copy"><strong>棒球女</strong><small>强力挥击 · 击退增强，木棒增伤<br><b>初始：木棒</b></small></span></button>
+            <button type="button" class="class-button" data-class="5"><span class="class-portrait" aria-hidden="true"></span><span class="class-copy"><strong>科学家</strong><small>陷阱改良 · 范围、伤害、耐久提升<br><b>初始：陷阱 ×2</b></small></span></button>
           </div>
         </div>
       </section>
@@ -261,6 +261,6 @@
       <p class="settings-tip">设置会自动保存在这个浏览器中</p>
     </section>
   </main>
-  <script type="module" src="game.js?v=20260729-gateart1"></script>
+  <script type="module" src="game.js?v=20260729-skills1"></script>
 </body>
 </html>

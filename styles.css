@@ -1140,9 +1140,38 @@ h1 {
   display: grid;
   grid-template-columns: 48px 1fr;
   align-items: center;
-  min-height: 65px;
+  min-height: 94px;
   padding: 7px 10px 7px 7px;
   text-align: left;
+}
+
+.class-copy {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.class-copy strong {
+  color: #d8d4c3;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: .1em;
+}
+
+.class-copy small {
+  color: #878d86;
+  font-size: 8px;
+  line-height: 1.55;
+}
+
+.class-copy small b {
+  color: #9f6d61;
+  font-weight: 400;
+}
+
+.class-button:hover .class-copy small,
+.class-button.selected .class-copy small {
+  color: #bbb6a7;
 }
 
 .class-portrait {

@@ -83,6 +83,8 @@ const saveButton = document.getElementById("saveButton");
 const pauseSettingsButton = document.getElementById("pauseSettingsButton");
 const exitToTitleButton = document.getElementById("exitToTitleButton");
 const saveStatus = document.getElementById("saveStatus");
+const emotePanel = document.getElementById("emotePanel");
+const emoteButtons = [...document.querySelectorAll(".emote-button")];
 const messageElement = document.getElementById("message");
 const classButtons = [...document.querySelectorAll(".class-button")];
 const classSelectPanel = document.getElementById("classSelectPanel");
@@ -129,6 +131,11 @@ const PORTABLE_ITEMS = [
 const PISTOL_MAGAZINE_SIZE = 7;
 const PISTOL_BULLET_SPEED = 1600;
 const PISTOL_BULLET_WIDTH = 10;
+const EMOTES = {
+  thunder_spin: { label: "雷霆旋转", kind: "dance", duration: 0 },
+  de_dance: { label: "德舞", kind: "dance", duration: 0 },
+  wave: { label: "挥手", kind: "action", duration: 2.3 }
+};
 const CLASS_NAMES = ["枪手", "护士", "伐木工", "守望者", "棒球女", "科学家"];
 const CLASS_SKILLS = [
   { name: "精准射击", description: "武器伤害 +25%，攻击速度 +15%" },
@@ -295,6 +302,9 @@ let classSelectionOpen = false;
 let inventoryOpen = false;
 let settingsOpen = false;
 let pauseOpen = false;
+let emoteOpen = false;
+let activeEmote = null;
+let emoteStartedAt = 0;
 let settingsReturnTarget = "title";
 let autosaveTimer = 20;
 let activeChestId = null;
@@ -1066,6 +1076,8 @@ function startGame() {
   setPauseOpen(false);
   setSettingsOpen(false);
   setInventoryOpen(false);
+  setEmoteOpen(false);
+  stopEmote();
   inventoryButton.disabled = true;
   classButtons.forEach((button) => button.classList.remove("selected"));
   classSelectPanel.classList.remove("hidden");
@@ -1101,6 +1113,8 @@ function continueGame() {
   inventoryOpen = false;
   settingsOpen = false;
   pauseOpen = false;
+  emoteOpen = false;
+  activeEmote = null;
   activeChestId = null;
   inventoryWorkspace?.classList.add("hidden");
   inventoryWorkspace?.classList.remove("chest-open");
@@ -1110,6 +1124,8 @@ function continueGame() {
   inventoryPanel.classList.add("hidden");
   settingsPanel?.classList.add("hidden");
   pausePanel?.classList.add("hidden");
+  emotePanel?.classList.add("hidden");
+  gameScreen.dataset.emote = "";
   inventoryButton.disabled = false;
   inventoryButton.classList.remove("active");
   inventoryButton.setAttribute("aria-expanded", "false");
@@ -1228,6 +1244,8 @@ function returnToTitle() {
   inventoryOpen = false;
   settingsOpen = false;
   pauseOpen = false;
+  emoteOpen = false;
+  activeEmote = null;
   activeChestId = null;
   classSelectionOpen = false;
   inventoryWorkspace?.classList.add("hidden");
@@ -1235,6 +1253,8 @@ function returnToTitle() {
   inventoryPanel.classList.add("hidden");
   settingsPanel?.classList.add("hidden");
   pausePanel?.classList.add("hidden");
+  emotePanel?.classList.add("hidden");
+  gameScreen.dataset.emote = "";
   classSelectPanel.classList.add("hidden");
   gameOverPanel.classList.add("hidden");
   victoryPanel?.classList.add("hidden");
@@ -1250,6 +1270,8 @@ function endGame() {
   setPauseOpen(false);
   setSettingsOpen(false);
   setInventoryOpen(false);
+  setEmoteOpen(false);
+  stopEmote();
   victoryPanel?.classList.add("hidden");
   gameOverPanel.classList.remove("hidden");
 }
@@ -1263,6 +1285,8 @@ function winGame() {
   setPauseOpen(false);
   setSettingsOpen(false);
   setInventoryOpen(false);
+  setEmoteOpen(false);
+  stopEmote();
   gameOverPanel.classList.add("hidden");
   if (victorySummary) {
     victorySummary.textContent = `你在第 ${dayNumber} 天找到了逃生大门，终于离开了森林。`;
@@ -1284,6 +1308,53 @@ function winGame() {
 function showMessage(text, duration = 2.4) {
   messageElement.textContent = text;
   messageTimer = duration;
+}
+
+function stopEmote(showStoppedMessage = false) {
+  if (!activeEmote) return;
+  activeEmote = null;
+  gameScreen.dataset.emote = "";
+  if (showStoppedMessage) showMessage("动作已停止", 0.7);
+}
+
+function setEmoteOpen(open) {
+  const shouldOpen = Boolean(open)
+    && state === "game"
+    && !classSelectionOpen
+    && !inventoryOpen
+    && !settingsOpen
+    && !pauseOpen;
+  emoteOpen = shouldOpen;
+  emotePanel?.classList.toggle("hidden", !emoteOpen);
+  keys.clear();
+  if (!emoteOpen) lastTime = performance.now();
+}
+
+function startEmote(type) {
+  const emote = EMOTES[type];
+  if (!emote || state !== "game" || classSelectionOpen) return;
+  activeEmote = type;
+  emoteStartedAt = elapsed;
+  player.moving = false;
+  gameScreen.dataset.emote = type;
+  setEmoteOpen(false);
+  showMessage(`${emote.kind === "dance" ? "开始跳" : "做出动作"}：${emote.label}`, 1);
+}
+
+function updateEmote() {
+  if (!activeEmote) return;
+  const emote = EMOTES[activeEmote];
+  if (!emote) {
+    stopEmote();
+    return;
+  }
+  if (player.hurtTimer > 0 || (emote.duration > 0 && elapsed - emoteStartedAt >= emote.duration)) {
+    stopEmote();
+  }
+}
+
+function activeEmoteTime() {
+  return activeEmote ? Math.max(0, elapsed - emoteStartedAt) : 0;
 }
 
 function isNight() {
@@ -1337,6 +1408,7 @@ function update(delta) {
   updateProjectiles(delta);
   updateTraps(delta);
   updateMonsters(delta, night);
+  updateEmote();
   updateAudioAmbience(delta);
   spawnTimer -= delta;
   if (night && spawnTimer <= 0) {
@@ -1370,6 +1442,7 @@ function updatePlayer(delta) {
   y /= length;
   player.moving = Math.abs(x) + Math.abs(y) > 0;
   if (player.moving) {
+    stopEmote();
     player.animation += delta * (keys.has("ShiftLeft") || keys.has("ShiftRight") ? 11 : 8);
   }
 
@@ -2194,6 +2267,7 @@ function isWeaponEquipped() {
 }
 
 function usePrimaryAction() {
+  stopEmote();
   if (isWeaponEquipped()) {
     attack();
   } else {
@@ -3484,12 +3558,106 @@ function drawHeldWeapon(weapon) {
   ctx.restore();
 }
 
+function playerEmotePose(type = activeEmote, time = activeEmoteTime()) {
+  const pose = {
+    offsetX: 0,
+    offsetY: 0,
+    rotation: 0,
+    scaleX: 1,
+    scaleY: 1
+  };
+  if (type === "thunder_spin") {
+    const turn = Math.cos(time * 9.2);
+    pose.scaleX = Math.sign(turn || 1) * Math.max(0.16, Math.abs(turn));
+    pose.offsetY = -Math.abs(Math.sin(time * 9.2)) * 2;
+    pose.rotation = Math.sin(time * 18.4) * 0.025;
+  } else if (type === "de_dance") {
+    const beat = time * 7.4;
+    pose.offsetX = Math.sin(beat) * 4;
+    pose.offsetY = -Math.abs(Math.sin(beat * 0.5)) * 3;
+    pose.rotation = Math.sin(beat) * 0.1;
+    pose.scaleX = 1 + Math.cos(beat * 2) * 0.045;
+    pose.scaleY = 1 - Math.cos(beat * 2) * 0.035;
+  } else if (type === "wave") {
+    pose.offsetY = -Math.abs(Math.sin(time * 3.6)) * 1.5;
+    pose.rotation = Math.sin(time * 4.2) * 0.025;
+  }
+  return pose;
+}
+
+function drawEmoteGesture(type, time) {
+  if (type === "de_dance") {
+    const beat = Math.sin(time * 7.4);
+    ctx.save();
+    ctx.strokeStyle = "#cbbf92";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(player.x - 8, player.y - 25);
+    ctx.lineTo(player.x - 18, player.y - 30 - beat * 7);
+    ctx.moveTo(player.x + 8, player.y - 25);
+    ctx.lineTo(player.x + 18, player.y - 30 + beat * 7);
+    ctx.stroke();
+    ctx.fillStyle = "#e4d7aa";
+    ctx.fillRect(player.x - 21, player.y - 34 - beat * 7, 6, 6);
+    ctx.fillRect(player.x + 15, player.y - 34 + beat * 7, 6, 6);
+    ctx.restore();
+    return;
+  }
+  if (type !== "wave") return;
+  const facing = player.dirX < -0.1 ? -1 : 1;
+  const swing = Math.sin(time * 12) * 0.55;
+  ctx.save();
+  ctx.translate(player.x + facing * 10, player.y - 27);
+  ctx.rotate(facing * (0.65 + swing));
+  ctx.fillStyle = "#9b895f";
+  ctx.fillRect(-2, -13, 5, 14);
+  ctx.fillStyle = "#e4d7aa";
+  ctx.fillRect(-3, -18, 7, 7);
+  ctx.restore();
+}
+
+function drawThunderSpinEffect(time) {
+  ctx.save();
+  ctx.translate(player.x, player.y - 17);
+  ctx.rotate(time * 4.8);
+  ctx.globalAlpha = 0.62 + Math.sin(time * 18) * 0.18;
+  ctx.strokeStyle = "#8ed4ff";
+  ctx.shadowColor = "#5ab7ff";
+  ctx.shadowBlur = 10;
+  ctx.lineWidth = 2;
+  for (let bolt = 0; bolt < 3; bolt += 1) {
+    const angle = bolt * Math.PI * 2 / 3;
+    ctx.save();
+    ctx.rotate(angle);
+    ctx.beginPath();
+    ctx.moveTo(14, -2);
+    ctx.lineTo(22, 3);
+    ctx.lineTo(18, 8);
+    ctx.lineTo(29, 12);
+    ctx.stroke();
+    ctx.restore();
+  }
+  ctx.fillStyle = "#d8f2ff";
+  ctx.fillRect(-25, -3, 4, 4);
+  ctx.fillRect(21, 6, 3, 3);
+  ctx.fillRect(-2, -29, 3, 3);
+  ctx.restore();
+}
+
 function drawPlayer() {
-  const heldWeapon = quickbarItems[selectedQuickSlot]?.kind === "weapon"
+  const heldWeapon = !activeEmote && quickbarItems[selectedQuickSlot]?.kind === "weapon"
     ? quickbarItems[selectedQuickSlot]
     : null;
   const drawX = player.x - 24;
   const drawY = player.y - 37;
+  const emoteTime = activeEmoteTime();
+  const emotePose = playerEmotePose(activeEmote, emoteTime);
+  ctx.save();
+  ctx.translate(player.x, player.y);
+  ctx.translate(emotePose.offsetX, emotePose.offsetY);
+  ctx.rotate(emotePose.rotation);
+  ctx.scale(emotePose.scaleX, emotePose.scaleY);
+  ctx.translate(-player.x, -player.y);
   if (heldWeapon && player.dirY < -0.28) drawHeldWeapon(heldWeapon);
   if (sprite.complete && sprite.naturalWidth >= 128 && sprite.naturalHeight >= 96) {
     ctx.save();
@@ -3508,6 +3676,7 @@ function drawPlayer() {
     ctx.fillStyle = player.hurtTimer > 0 ? "#f08f7b" : "#c6e7b8";
     ctx.fillRect(player.x - 10, player.y - 24, 20, 24);
   }
+  drawEmoteGesture(activeEmote, emoteTime);
   if (heldWeapon && player.dirY >= -0.28) drawHeldWeapon(heldWeapon);
   if (player.attackTimer > 0 && heldWeapon?.type !== "pistol") {
     const attackAngle = Math.atan2(player.dirY, player.dirX);
@@ -3521,6 +3690,8 @@ function drawPlayer() {
     ctx.stroke();
     ctx.restore();
   }
+  ctx.restore();
+  if (activeEmote === "thunder_spin") drawThunderSpinEffect(emoteTime);
 }
 
 function drawAtmosphere() {
@@ -3796,7 +3967,7 @@ function loop(now) {
   const delta = Math.min(0.04, Math.max(0, (now - lastTime) / 1000));
   lastTime = now;
   // 打开物品栏、设置或暂停菜单时只画画面，不推进时间、玩家或怪物。
-  if (!inventoryOpen && !settingsOpen && !pauseOpen && !classSelectionOpen) update(delta);
+  if (!inventoryOpen && !settingsOpen && !pauseOpen && !classSelectionOpen && !emoteOpen) update(delta);
   render();
   requestAnimationFrame(loop);
 }
@@ -3811,8 +3982,13 @@ window.addEventListener("keydown", (event) => {
   if (classSelectionOpen) return;
   if (event.code === "Escape") {
     if (event.repeat) return;
-    if (inventoryOpen) setInventoryOpen(false);
+    if (emoteOpen) setEmoteOpen(false);
+    else if (inventoryOpen) setInventoryOpen(false);
     else setPauseOpen(!pauseOpen);
+    return;
+  }
+  if (emoteOpen) {
+    if (event.code === "KeyY" && !event.repeat) setEmoteOpen(false);
     return;
   }
   if (pauseOpen) return;
@@ -3825,6 +4001,10 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   if (inventoryOpen) return;
+  if (event.code === "KeyY") {
+    if (!event.repeat) setEmoteOpen(true);
+    return;
+  }
   keys.add(event.code);
   if (event.code.startsWith("Digit")) {
     activateQuickSlot(Number(event.code.slice(5)) - 1);
@@ -3848,7 +4028,7 @@ window.addEventListener("keydown", (event) => {
 });
 
 canvas.addEventListener("pointerdown", (event) => {
-  if (state !== "game" || inventoryOpen || settingsOpen || pauseOpen || classSelectionOpen) return;
+  if (state !== "game" || inventoryOpen || settingsOpen || pauseOpen || classSelectionOpen || emoteOpen) return;
   if (event.button !== 0 && event.button !== 2) return;
   event.preventDefault();
   aimAtPointer(event);
@@ -3857,7 +4037,7 @@ canvas.addEventListener("pointerdown", (event) => {
 });
 
 canvas.addEventListener("pointermove", (event) => {
-  if (state !== "game" || inventoryOpen || settingsOpen || pauseOpen || classSelectionOpen) return;
+  if (state !== "game" || inventoryOpen || settingsOpen || pauseOpen || classSelectionOpen || emoteOpen) return;
   aimAtPointer(event);
 });
 
@@ -3873,6 +4053,9 @@ restartButton.addEventListener("click", startGame);
 victoryTitleButton?.addEventListener("click", returnToTitle);
 inventoryButton.addEventListener("click", () => {
   if (!pauseOpen && !settingsOpen) setInventoryOpen(!inventoryOpen);
+});
+emoteButtons.forEach((button) => {
+  button.addEventListener("click", () => startEmote(button.dataset.emote));
 });
 audioButton?.addEventListener("click", () => setAudioEnabled(!audioEnabled));
 resumeButton?.addEventListener("click", () => setPauseOpen(false));

@@ -11,7 +11,7 @@
   <link rel="preload" href="assets/escape-gate.png?v=20260729-gate-drawn1" as="image" />
   <link rel="preload" href="assets/forest-assets.png?v=20260728-assets2" as="image" />
   <link rel="preload" href="assets/ark-pixel-12px-zh_cn.woff2?v=20260728-assets2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=20260729-projectile2" />
+  <link rel="stylesheet" href="styles.css?v=20260729-emote1" />
 </head>
 <body>
   <main id="app">
@@ -53,6 +53,31 @@
             <button type="button" class="class-button" data-class="5"><span class="class-portrait" aria-hidden="true"></span><span class="class-copy"><strong>科学家</strong><small>陷阱改良 · 范围、伤害、耐久提升<br><b>初始：治疗药水＋力量药水</b></small></span></button>
           </div>
         </div>
+      </section>
+      <section id="emotePanel" class="emote-panel hidden" role="dialog" aria-modal="true" aria-labelledby="emoteTitle">
+        <div class="emote-header">
+          <span>动作菜单</span>
+          <b>[Y]</b>
+        </div>
+        <h2 id="emoteTitle">选择舞蹈或动作</h2>
+        <div class="emote-options">
+          <button type="button" class="emote-button" data-emote="thunder_spin">
+            <span class="emote-icon thunder-icon" aria-hidden="true">↻</span>
+            <strong>雷霆旋转</strong>
+            <small>持续舞蹈</small>
+          </button>
+          <button type="button" class="emote-button" data-emote="de_dance">
+            <span class="emote-icon dance-icon" aria-hidden="true">♪</span>
+            <strong>德舞</strong>
+            <small>持续舞蹈</small>
+          </button>
+          <button type="button" class="emote-button" data-emote="wave">
+            <span class="emote-icon wave-icon" aria-hidden="true">⌁</span>
+            <strong>挥手</strong>
+            <small>播放一次</small>
+          </button>
+        </div>
+        <p>移动、攻击或受伤会停止动作</p>
       </section>
       <div class="hud">
         <div class="hud-stamp">REC // FOREST SIGNAL</div>
@@ -197,7 +222,7 @@
           <span class="quick-key">9</span><span class="item-sprite"></span><span class="quick-name">空</span>
         </button>
       </nav>
-      <div class="controls">WASD 移动　/　左键 攻击或采集　/　R 手枪换弹　/　右键 建造　/　E 互动　/　F 手电筒　/　I 背包　/　M 声音　/　ESC 暂停</div>
+      <div class="controls">WASD 移动　/　左键 攻击或采集　/　R 手枪换弹　/　右键 建造　/　E 互动　/　F 手电筒　/　Y 动作　/　I 背包　/　M 声音　/　ESC 暂停</div>
       <section id="pausePanel" class="pause-panel hidden" role="dialog" aria-modal="true" aria-labelledby="pauseTitle">
         <small>GAME PAUSED // 07</small>
         <h2 id="pauseTitle">游戏暂停</h2>
@@ -261,6 +286,6 @@
       <p class="settings-tip">设置会自动保存在这个浏览器中</p>
     </section>
   </main>
-  <script type="module" src="game.js?v=20260729-projectile2"></script>
+  <script type="module" src="game.js?v=20260729-emote1"></script>
 </body>
 </html>

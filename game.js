@@ -328,10 +328,10 @@ const PROP_FRAME = {
 const BUILD_TYPES = [
   { type: "wall", label: "木墙", cost: { wood: 3, stone: 1 }, health: 120, requiresWorkbench: true },
   { type: "door", label: "木门", cost: { wood: 4, stone: 1 }, health: 90, requiresWorkbench: true },
-  { type: "floor", label: "木地板", cost: { wood: 2, stone: 0 }, requiresWorkbench: true },
-  { type: "chest", label: "储物箱", cost: { wood: 5, stone: 0 }, requiresWorkbench: true },
-  { type: "workbench", label: "工作台", cost: { wood: 6, stone: 2 }, requiresWorkbench: false },
-  { type: "trap", label: "陷阱", cost: { wood: 2, stone: 1 }, uses: 3, requiresWorkbench: true }
+  { type: "floor", label: "木地板", cost: { wood: 2, stone: 0 }, health: 50, requiresWorkbench: true },
+  { type: "chest", label: "储物箱", cost: { wood: 5, stone: 0 }, health: 110, requiresWorkbench: true },
+  { type: "workbench", label: "工作台", cost: { wood: 6, stone: 2 }, health: 150, requiresWorkbench: false },
+  { type: "trap", label: "陷阱", cost: { wood: 2, stone: 1 }, health: 40, uses: 3, requiresWorkbench: true }
 ];
 const WEAPON_TYPES = [
   {
@@ -1952,6 +1952,9 @@ function continueGame() {
   restoreList(barricades, saved.barricades);
   restoreList(doors, saved.doors);
   restoreList(buildings, saved.buildings);
+  barricades.forEach((building) => normalizePlayerBuildingHealth(building, "wall"));
+  doors.forEach((building) => normalizePlayerBuildingHealth(building, "door"));
+  buildings.forEach((building) => normalizePlayerBuildingHealth(building, building.type));
   for (let index = buildings.length - 1; index >= 0; index -= 1) {
     if (buildings[index]?.type === "beacon") buildings.splice(index, 1);
   }
@@ -2490,6 +2493,20 @@ function getSolidBuildingCollider(building) {
     width: shape.width,
     height: shape.height
   };
+}
+
+function playerBuildingDefinition(type) {
+  return BUILD_TYPES.find((definition) => definition.type === type) || null;
+}
+
+function normalizePlayerBuildingHealth(building, type = building?.type) {
+  if (!building) return building;
+  const maximum = Math.max(1, Number(playerBuildingDefinition(type)?.health) || 60);
+  building.maxHealth = Math.max(1, Number(building.maxHealth) || maximum);
+  building.health = Number.isFinite(Number(building.health))
+    ? Math.max(0, Math.min(building.maxHealth, Number(building.health)))
+    : building.maxHealth;
+  return building;
 }
 
 function getEscapeGateCollider() {
@@ -3559,7 +3576,15 @@ function buildProp(type, cost, label, payCost = true) {
   }
   const placement = getBuildPlacement();
   if (!canBuildAt(placement.x, placement.y)) return false;
-  const building = { id: buildingId++, type, x: placement.x, y: placement.y };
+  const maximumHealth = Math.max(1, Number(playerBuildingDefinition(type)?.health) || 60);
+  const building = {
+    id: buildingId++,
+    type,
+    x: placement.x,
+    y: placement.y,
+    health: maximumHealth,
+    maxHealth: maximumHealth
+  };
   if (type === "trap") Object.assign(building, { uses: trapStats().uses, cooldown: 0 });
   if (type === "chest") building.items = Array(CHEST_SLOT_COUNT).fill(null);
   buildings.push(building);
@@ -3723,6 +3748,10 @@ function usePrimaryAction() {
     attack();
     return;
   }
+  if (findPlayerBuildingTarget(heldItem.range || 58)) {
+    attack();
+    return;
+  }
   const target = findGatherTarget();
   if (target) collectResource(target);
   else attack();
@@ -3807,6 +3836,112 @@ function segmentDistanceToPoint(startX, startY, endX, endY, pointX, pointY) {
   );
 }
 
+function playerBuildingTargets() {
+  return [
+    ...barricades.map((building) => ({ building, collection: barricades, type: "wall" })),
+    ...doors.map((building) => ({ building, collection: doors, type: "door" })),
+    ...buildings.map((building) => ({ building, collection: buildings, type: building.type }))
+  ];
+}
+
+function playerBuildingTargetCenter(target) {
+  if (target.type === "wall" || target.type === "door") {
+    const collider = getDefenseCollider(target.building, target.type);
+    return { x: collider.x, y: collider.y };
+  }
+  return { x: target.building.x, y: target.building.y };
+}
+
+function playerBuildingTargetRadius(target) {
+  if (target.type === "door") return 22;
+  if (target.type === "wall" || target.type === "floor") return 26;
+  return 24;
+}
+
+function findPlayerBuildingTarget(range = 58) {
+  const directionLength = Math.hypot(player.dirX, player.dirY) || 1;
+  const directionX = player.dirX / directionLength;
+  const directionY = player.dirY / directionLength;
+  const reach = Math.max(30, range) + 28;
+  const endX = player.x + directionX * reach;
+  const endY = player.y + directionY * reach;
+  return playerBuildingTargets()
+    .map((target) => {
+      const center = playerBuildingTargetCenter(target);
+      const distance = Math.hypot(center.x - player.x, center.y - player.y);
+      const lineDistance = segmentDistanceToPoint(
+        player.x,
+        player.y,
+        endX,
+        endY,
+        center.x,
+        center.y
+      );
+      return {
+        ...target,
+        center,
+        distance,
+        lineDistance,
+        aimDistance: Math.hypot(center.x - endX, center.y - endY)
+      };
+    })
+    .filter((target) => (
+      target.distance <= reach
+      && target.lineDistance <= playerBuildingTargetRadius(target)
+    ))
+    .sort((left, right) => left.aimDistance - right.aimDistance)[0] || null;
+}
+
+function findPlayerBuildingSegmentTarget(startX, startY, endX, endY) {
+  const segmentX = endX - startX;
+  const segmentY = endY - startY;
+  const lengthSquared = segmentX * segmentX + segmentY * segmentY;
+  return playerBuildingTargets()
+    .map((target) => {
+      const center = playerBuildingTargetCenter(target);
+      return {
+        ...target,
+        center,
+        distance: Math.hypot(center.x - startX, center.y - startY),
+        projection: lengthSquared <= 0.0001
+          ? -1
+          : ((center.x - startX) * segmentX + (center.y - startY) * segmentY) / lengthSquared,
+        lineDistance: segmentDistanceToPoint(startX, startY, endX, endY, center.x, center.y)
+      };
+    })
+    .filter((target) => (
+      target.projection >= 0
+      && target.projection <= 1
+      && target.lineDistance <= playerBuildingTargetRadius(target)
+    ))
+    .sort((left, right) => left.distance - right.distance)[0] || null;
+}
+
+function damagePlayerBuilding(target, damage, angle = 0) {
+  if (!target?.building) return { hit: false, destroyed: false, blocked: false };
+  const building = target.building;
+  if (target.type === "chest" && normalizeChestStorage(building).some(Boolean)) {
+    showMessage("先清空储物箱，避免里面的物品丢失", 1.1);
+    return { hit: false, destroyed: false, blocked: true };
+  }
+
+  normalizePlayerBuildingHealth(building, target.type);
+  building.health = Math.max(0, building.health - Math.max(1, Math.round(damage)));
+  building.hitUntil = elapsed + 0.14;
+  const center = target.center || playerBuildingTargetCenter(target);
+  spawnActionImpact("wood", center.x, center.y - 5, angle);
+  if (building.health > 0) {
+    return { hit: true, destroyed: false, blocked: false };
+  }
+
+  const index = target.collection.indexOf(building);
+  if (index >= 0) target.collection.splice(index, 1);
+  if (activeChestId === building.id) activeChestId = null;
+  saveGame(false);
+  updateHud();
+  return { hit: true, destroyed: true, blocked: false };
+}
+
 function updateProjectiles(delta) {
   for (let index = projectiles.length - 1; index >= 0; index -= 1) {
     const bullet = projectiles[index];
@@ -3838,6 +3973,18 @@ function updateProjectiles(delta) {
       spawnActionImpact("monster", target.x, target.y - 7, bullet.angle);
       playBulletImpact(target.x, target.y);
       showMessage(`${bullet.sourceLabel || "子弹"}命中怪物`, 0.65);
+      projectiles.splice(index, 1);
+      continue;
+    }
+    const buildingTarget = findPlayerBuildingSegmentTarget(
+      bullet.previousX,
+      bullet.previousY,
+      bullet.x,
+      bullet.y
+    );
+    if (buildingTarget) {
+      damagePlayerBuilding(buildingTarget, bullet.damage, bullet.angle);
+      playBulletImpact(buildingTarget.center.x, buildingTarget.center.y);
       projectiles.splice(index, 1);
       continue;
     }
@@ -3886,8 +4033,24 @@ function attack() {
       soundY = monster.y;
     }
   }
+  if (!hit) {
+    const buildingTarget = findPlayerBuildingTarget(range);
+    if (buildingTarget) {
+      const result = damagePlayerBuilding(
+        buildingTarget,
+        damage,
+        Math.atan2(
+          buildingTarget.center.y - player.y,
+          buildingTarget.center.x - player.x
+        )
+      );
+      hit = result.hit || result.blocked;
+      soundX = buildingTarget.center.x;
+      soundY = buildingTarget.center.y;
+    }
+  }
   playWeaponSound(soundX, soundY, hit);
-  showMessage(hit ? "击中了怪物" : "攻击落空", 0.7);
+  showMessage(hit ? "攻击命中" : "攻击落空", 0.7);
 }
 
 function updatePointerFacing() {
@@ -4874,13 +5037,17 @@ function drawEscapeGate() {
 
 function drawBuildings() {
   for (const building of buildings) {
+    ctx.save();
+    if ((building.hitUntil || 0) > elapsed) ctx.filter = "brightness(1.9)";
     if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
       const frame = BUILDING_FRAME[building.type];
       ctx.drawImage(worldSprite, frame * 16, BUILDING_ROW * 16, 16, 16, building.x - 24, building.y - 24, 48, 48);
-      continue;
+    } else {
+      ctx.fillStyle = building.type === "floor" ? "#76543a" : "#67432d";
+      ctx.fillRect(building.x - 22, building.y - 22, 44, 44);
     }
-    ctx.fillStyle = building.type === "floor" ? "#76543a" : "#67432d";
-    ctx.fillRect(building.x - 22, building.y - 22, 44, 44);
+    ctx.restore();
+    drawDefenseHealth(building);
   }
 }
 
@@ -5047,6 +5214,8 @@ function drawHarvestProgress(resource) {
 
 function drawBarricades() {
   for (const barricade of barricades) {
+    ctx.save();
+    if ((barricade.hitUntil || 0) > elapsed) ctx.filter = "brightness(1.9)";
     if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
       drawRotatedBuildingFrame(BUILDING_FRAME.wall, barricade);
     } else {
@@ -5060,12 +5229,15 @@ function drawBarricades() {
         ctx.fillRect(collider.x - collider.width / 2, collider.y - 2, collider.width, 4);
       }
     }
+    ctx.restore();
     drawDefenseHealth(barricade);
   }
 }
 
 function drawDoors() {
   for (const door of doors) {
+    ctx.save();
+    if ((door.hitUntil || 0) > elapsed) ctx.filter = "brightness(1.9)";
     const frame = door.animation > 0.5 ? BUILDING_FRAME.doorOpen : BUILDING_FRAME.doorClosed;
     if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
       drawRotatedBuildingFrame(frame, door);
@@ -5080,6 +5252,7 @@ function drawDoors() {
         ctx.fillRect(collider.x - collider.width / 2 + 4, collider.y - 2, collider.width - 8, 4);
       }
     }
+    ctx.restore();
     drawDefenseHealth(door);
   }
 }
@@ -5093,6 +5266,7 @@ function drawRotatedBuildingFrame(frame, item) {
 }
 
 function drawDefenseHealth(defense) {
+  if (!Number.isFinite(defense.health) || !Number.isFinite(defense.maxHealth)) return;
   if (defense.health >= defense.maxHealth) return;
   const width = 42;
   const ratio = Math.max(0, defense.health / defense.maxHealth);

@@ -11,7 +11,7 @@
   <link rel="preload" href="assets/escape-gate.png?v=20260729-gate-drawn1" as="image" />
   <link rel="preload" href="assets/forest-assets.png?v=20260730-bottles1" as="image" />
   <link rel="preload" href="assets/ark-pixel-12px-zh_cn.woff2?v=20260728-assets2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=20260730-gameplay1" />
+  <link rel="stylesheet" href="styles.css?v=20260730-feedback1" />
 </head>
 <body>
   <main id="app">
@@ -294,7 +294,7 @@
           </div>
         </section>
       </div>
-      <div id="message" class="message" aria-live="polite"></div>
+      <div id="message" class="message game-feedback-disabled" aria-hidden="true" hidden></div>
       <nav id="quickbar" class="quickbar" aria-label="快捷栏">
         <button class="quick-slot quick-empty slot-empty" data-quick-slot="0" data-item-kind="empty" title="空快捷格">
           <span class="quick-key">1</span><span class="item-sprite quick-wall"></span><span class="quick-name">木墙</span>

@@ -2143,6 +2143,11 @@ h1 {
   color: #b9564f;
 }
 
+/* 局内不显示采集、攻击、材料不足等文字弹窗，避免打断画面。 */
+.message.game-feedback-disabled {
+  display: none !important;
+}
+
 @keyframes terminal-scan {
   from { background-position: 0 -30px; }
   to { background-position: 0 190px; }

@@ -2204,26 +2204,37 @@ function openChest(chest) {
 
 function ensureInventoryResource(type) {
   const definition = resourceItemDefinition(type);
-  if (!definition || inventoryItems.some((item) => item?.type === type)) return;
+  if (!definition || player[type] <= 0 || [...quickbarItems, ...inventoryItems].some((item) => (
+    item?.type === type
+  ))) return;
   const emptyIndex = inventoryItems.findIndex((item) => item === null);
   if (emptyIndex >= 0) {
     inventoryItems[emptyIndex] = {
       ...definition,
       count: Math.max(0, Math.floor(Number(player[type]) || 0)),
-      source: "inventory"
+      source: "carried"
     };
   }
 }
 
-function ensureQuickbarResource(type) {
-  const definition = resourceItemDefinition(type);
-  if (!definition || quickbarItems.some((item) => (
-    item?.source === "inventory" && item.type === type
-  ))) return;
-  const emptyIndex = quickbarItems.findIndex((item) => item === null);
-  if (emptyIndex >= 0) {
-    quickbarItems[emptyIndex] = { ...definition, source: "inventory" };
+function carriedItem(type) {
+  return quickbarItems.find((item) => item?.type === type)
+    || inventoryItems.find((item) => item?.type === type)
+    || null;
+}
+
+function addToFirstCarriedSlot(item) {
+  const quickIndex = quickbarItems.findIndex((slot) => slot === null);
+  if (quickIndex >= 0) {
+    quickbarItems[quickIndex] = item;
+    return { collection: "quickbar", index: quickIndex };
   }
+  const inventoryIndex = inventoryItems.findIndex((slot) => slot === null);
+  if (inventoryIndex >= 0) {
+    inventoryItems[inventoryIndex] = item;
+    return { collection: "inventory", index: inventoryIndex };
+  }
+  return null;
 }
 
 // 资源第一次到手时进入最前面的空格，所以顺序取决于实际采集先后。
@@ -2231,30 +2242,33 @@ function addResource(type, amount) {
   const definition = resourceItemDefinition(type);
   if (!definition || amount <= 0) return;
   player[type] += amount;
-  const existing = inventoryItems.find((item) => item?.type === type);
+  const existing = carriedItem(type);
   if (existing) {
     existing.count = Math.max(0, Math.floor(Number(existing.count) || 0)) + amount;
   } else {
-    const emptyIndex = inventoryItems.findIndex((item) => item === null);
-    if (emptyIndex >= 0) {
-      inventoryItems[emptyIndex] = { ...definition, count: amount, source: "inventory" };
-    }
+    addToFirstCarriedSlot({ ...definition, count: amount, source: "carried" });
   }
-  ensureQuickbarResource(type);
 }
 
 function spendResource(type, amount) {
   if (!resourceItemDefinition(type) || amount <= 0 || player[type] < amount) return false;
   syncInventoryItems();
   let remaining = amount;
-  for (let index = 0; index < inventoryItems.length && remaining > 0; index += 1) {
-    const item = inventoryItems[index];
-    if (item?.type !== type) continue;
-    const available = Math.max(0, Math.floor(Number(item.count) || 0));
-    const used = Math.min(available, remaining);
-    item.count = available - used;
-    remaining -= used;
-    if (item.count <= 0) inventoryItems[index] = null;
+  for (const collection of [quickbarItems, inventoryItems]) {
+    for (let index = 0; index < collection.length && remaining > 0; index += 1) {
+      const item = collection[index];
+      if (item?.type !== type) continue;
+      const available = Math.max(0, Math.floor(Number(item.count) || 0));
+      const used = Math.min(available, remaining);
+      item.count = available - used;
+      remaining -= used;
+      if (item.count <= 0) {
+        collection[index] = null;
+        if (collection === quickbarItems && selectedQuickSlot === index) {
+          selectedQuickSlot = -1;
+        }
+      }
+    }
   }
   player[type] -= amount;
   return true;
@@ -2504,13 +2518,13 @@ function craftWeapon(weaponIndex) {
   const source = needsWorkbench ? "workbench" : "handcrafted";
   const weapon = { ...recipe, cost: { ...recipe.cost }, count: 1, source };
   if (weapon.magazineSize) weapon.loadedAmmo = 0;
-  if (inventoryIndex >= 0) inventoryItems[inventoryIndex] = weapon;
-  else quickbarItems[quickIndex] = weapon;
+  if (quickIndex >= 0) quickbarItems[quickIndex] = weapon;
+  else inventoryItems[inventoryIndex] = weapon;
   playBuildSound(player.x, player.y);
   if (craftStatus) {
-    craftStatus.textContent = inventoryIndex >= 0
-      ? `已制作${recipe.label}，放入背包 ${inventoryIndex + 1}`
-      : `背包已满，${recipe.label}放入快捷栏 ${quickIndex + 1}`;
+    craftStatus.textContent = quickIndex >= 0
+      ? `已制作${recipe.label}，放入快捷栏 ${quickIndex + 1}`
+      : `快捷栏已满，${recipe.label}放入背包 ${inventoryIndex + 1}`;
   }
   updateHud();
 }
@@ -2554,12 +2568,12 @@ function craftBuilding(buildIndex) {
       count: 1,
       source: "crafted"
     };
-    if (emptyInventory >= 0) {
-      inventoryItems[emptyInventory] = item;
-      destination = `背包 ${emptyInventory + 1}`;
-    } else {
+    if (emptyQuick >= 0) {
       quickbarItems[emptyQuick] = item;
       destination = `快捷栏 ${emptyQuick + 1}`;
+    } else {
+      inventoryItems[emptyInventory] = item;
+      destination = `背包 ${emptyInventory + 1}`;
     }
   }
   if (craftStatus) craftStatus.textContent = `已制作${recipe.label}，放入${destination}`;
@@ -2625,12 +2639,12 @@ function craftSupply(recipeIndex) {
     destination = `快捷栏 ${quickStack + 1}`;
   } else {
     const item = normalizePortableItem({ type: recipe.type, count: 1, source: "workbench" });
-    if (emptyInventory >= 0) {
-      inventoryItems[emptyInventory] = item;
-      destination = `背包 ${emptyInventory + 1}`;
-    } else {
+    if (emptyQuick >= 0) {
       quickbarItems[emptyQuick] = item;
       destination = `快捷栏 ${emptyQuick + 1}`;
+    } else {
+      inventoryItems[emptyInventory] = item;
+      destination = `背包 ${emptyInventory + 1}`;
     }
   }
   playBuildSound(player.x, player.y);
@@ -2654,7 +2668,7 @@ function setInventoryOpen(open) {
   inventoryButtonLabel.textContent = inventoryOpen ? (chest ? "关闭箱子" : "关闭") : "背包";
   if (inventoryOpen) {
     keys.clear();
-    if (craftStatus && !chest) craftStatus.textContent = "选择配方制作，成品会优先进入背包";
+    if (craftStatus && !chest) craftStatus.textContent = "选择配方制作，成品会优先进入快捷栏";
   }
   updateHud();
 }
@@ -2726,19 +2740,14 @@ function addPortableItem(type, amount = 1, source = "pickup") {
   const definition = portableItemDefinition(type);
   const count = Math.max(1, Math.floor(Number(amount) || 1));
   if (!definition || !canAddPortableItem(type)) return false;
-  const existing = inventoryItems.find((item) => item?.type === type)
-    || quickbarItems.find((item) => item?.type === type);
+  const existing = quickbarItems.find((item) => item?.type === type)
+    || inventoryItems.find((item) => item?.type === type);
   if (existing) {
     existing.count = Math.max(0, Math.floor(Number(existing.count) || 0)) + count;
     return true;
   }
-  const inventoryIndex = inventoryItems.findIndex((item) => item === null);
-  const quickIndex = quickbarItems.findIndex((item) => item === null);
   const item = normalizePortableItem({ type, count, source }, count);
-  if (inventoryIndex >= 0) inventoryItems[inventoryIndex] = item;
-  else if (quickIndex >= 0) quickbarItems[quickIndex] = item;
-  else return false;
-  return true;
+  return Boolean(addToFirstCarriedSlot(item));
 }
 
 function convertPortableItem(inputType, outputType) {
@@ -2780,13 +2789,13 @@ function convertPortableItem(inputType, outputType) {
     });
     return true;
   }
-  const inventoryIndex = inventoryItems.findIndex((item) => item === null);
   const quickIndex = quickbarItems.findIndex((item) => item === null);
+  const inventoryIndex = inventoryItems.findIndex((item) => item === null);
   if (inventoryIndex < 0 && quickIndex < 0) return false;
   input.count -= 1;
   const output = normalizePortableItem({ type: outputType, count: 1, source: "filled" });
-  if (inventoryIndex >= 0) inventoryItems[inventoryIndex] = output;
-  else quickbarItems[quickIndex] = output;
+  if (quickIndex >= 0) quickbarItems[quickIndex] = output;
+  else inventoryItems[inventoryIndex] = output;
   return true;
 }
 
@@ -3491,8 +3500,12 @@ function attackDefense(monster, defense) {
 function syncInventoryItems() {
   for (const definition of RESOURCE_ITEMS) {
     const total = Math.max(0, Math.floor(Number(player[definition.type]) || 0));
+    const quickIndexes = [];
     const matchingIndexes = [];
     let stacked = 0;
+    quickbarItems.forEach((item, index) => {
+      if (item?.type === definition.type) quickIndexes.push(index);
+    });
     inventoryItems.forEach((item, index) => {
       if (item?.type !== definition.type) return;
       item.count = Math.max(0, Math.floor(Number(item.count) || 0));
@@ -3504,11 +3517,36 @@ function syncInventoryItems() {
       stacked += item.count;
     });
     if (total <= 0) {
+      quickIndexes.forEach((index) => {
+        quickbarItems[index] = null;
+        if (selectedQuickSlot === index) selectedQuickSlot = -1;
+      });
+      matchingIndexes.forEach((index) => { inventoryItems[index] = null; });
+      continue;
+    }
+    // 旧存档曾把背包资源复制成快捷栏“镜像”。只要快捷栏中已有这种
+    // 资源，就把总数合并为一个真实堆叠，并清掉背包中的镜像来源。
+    if (quickIndexes.length > 0) {
+      const keepIndex = quickIndexes[0];
+      quickbarItems[keepIndex] = {
+        ...definition,
+        count: total,
+        source: "carried"
+      };
+      quickIndexes.slice(1).forEach((index) => {
+        quickbarItems[index] = null;
+        if (selectedQuickSlot === index) selectedQuickSlot = keepIndex;
+      });
       matchingIndexes.forEach((index) => { inventoryItems[index] = null; });
       continue;
     }
     if (matchingIndexes.length === 0) {
-      ensureInventoryResource(definition.type);
+      const placed = addToFirstCarriedSlot({
+        ...definition,
+        count: total,
+        source: "carried"
+      });
+      if (!placed) ensureInventoryResource(definition.type);
       continue;
     }
     const difference = total - stacked;
@@ -3630,7 +3668,6 @@ function moveChestToInventory(chestIndex, inventoryIndex) {
   }
   if (resourceItemDefinition(carried.type)) {
     player[carried.type] += item.count;
-    ensureQuickbarResource(carried.type);
   }
   const amount = item.count;
   items[chestIndex] = null;
@@ -3698,6 +3735,7 @@ function splitChestStack(index) {
 }
 
 function moveInventoryToQuickbar(inventoryIndex, quickIndex) {
+  syncInventoryItems();
   const item = inventoryItems[inventoryIndex];
   const carried = normalizePortableItem(item);
   const target = quickbarItems[quickIndex];
@@ -3707,7 +3745,19 @@ function moveInventoryToQuickbar(inventoryIndex, quickIndex) {
       showMessage("请拖到空的快捷格", 0.9);
       return false;
     }
-    quickbarItems[quickIndex] = { ...resourceItemDefinition(carried.type), source: "inventory" };
+    quickbarItems.forEach((entry, index) => {
+      if (entry?.type !== carried.type || index === quickIndex) return;
+      quickbarItems[index] = null;
+      if (selectedQuickSlot === index) selectedQuickSlot = quickIndex;
+    });
+    inventoryItems.forEach((entry, index) => {
+      if (entry?.type === carried.type) inventoryItems[index] = null;
+    });
+    quickbarItems[quickIndex] = {
+      ...resourceItemDefinition(carried.type),
+      count: Math.max(0, Math.floor(Number(player[carried.type]) || 0)),
+      source: "carried"
+    };
     finishStorageMove(`${carried.label}已放入快捷栏 ${quickIndex + 1}`);
     return true;
   }
@@ -3723,15 +3773,10 @@ function moveInventoryToQuickbar(inventoryIndex, quickIndex) {
 }
 
 function moveQuickbarToInventory(quickIndex, inventoryIndex) {
+  syncInventoryItems();
   const item = quickbarItems[quickIndex];
   const carried = normalizePortableItem(item);
   if (!carried) return false;
-  if (resourceItemDefinition(carried.type)) {
-    quickbarItems[quickIndex] = null;
-    if (selectedQuickSlot === quickIndex) selectedQuickSlot = -1;
-    finishStorageMove(`${carried.label}已从快捷栏移除`);
-    return true;
-  }
   const target = inventoryItems[inventoryIndex];
   if (target && (target.type !== carried.type || !isStackableItem(carried))) {
     showMessage("请拖到背包空格或相同物品上", 1);
@@ -3757,20 +3802,11 @@ function moveQuickbarItem(sourceIndex, targetIndex) {
   return true;
 }
 
-function syncResourceQuickbar() {
-  quickbarItems.forEach((item, index) => {
-    if (item?.source === "inventory" && player[item.type] <= 0) {
-      quickbarItems[index] = null;
-      if (selectedQuickSlot === index) selectedQuickSlot = -1;
-    }
-  });
-}
-
 function quickbarItemAmount(item) {
   if (!item) return null;
   if (item.magazineSize) return Math.max(0, Number(item.loadedAmmo) || 0);
   if (item.kind === "building") return Math.max(0, Number(item.count) || 0);
-  if (resourceItemDefinition(item.type)) return player[item.type];
+  if (resourceItemDefinition(item.type)) return Math.max(0, Number(item.count) || 0);
   if (portableItemDefinition(item.type)) return Math.max(0, Number(item.count) || 0);
   return null;
 }
@@ -3840,7 +3876,6 @@ function updateHud() {
   const selected = BUILD_TYPES[selectedBuild];
   renderInventory();
   renderChestStorage();
-  syncResourceQuickbar();
   renderCrafting();
   renderWeaponCrafting();
   renderSupplyCrafting();

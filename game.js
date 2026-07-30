@@ -128,7 +128,9 @@ const PORTABLE_ITEMS = [
   { type: "ammo_box", kind: "ammo", label: "弹药箱" },
   { type: "medkit", kind: "consumable", label: "医疗包" },
   { type: "healing_potion", kind: "consumable", label: "治疗药水" },
-  { type: "strength_potion", kind: "consumable", label: "力量药水" }
+  { type: "strength_potion", kind: "consumable", label: "力量药水" },
+  { type: "glass_bottle", kind: "container", label: "空玻璃瓶" },
+  { type: "water_bottle", kind: "container", label: "水瓶" }
 ];
 const PISTOL_MAGAZINE_SIZE = 7;
 const SHOTGUN_MAGAZINE_SIZE = 2;
@@ -307,12 +309,26 @@ const WEAPON_TYPES = [
 const SUPPLY_RECIPES = [
   { type: "ammo_box", label: "弹药箱", cost: { stone: 1, scrap: 3 }, requiresWorkbench: true },
   { type: "medkit", label: "医疗包", cost: { berry: 4, scrap: 1 }, requiresWorkbench: true },
-  { type: "healing_potion", label: "治疗药水", cost: { berry: 5, scrap: 2 }, requiresWorkbench: true },
-  { type: "strength_potion", label: "力量药水", cost: { berry: 6, scrap: 3 }, requiresWorkbench: true }
+  { type: "healing_potion", label: "治疗药水", cost: { berry: 3, water_bottle: 1 }, requiresWorkbench: true },
+  { type: "strength_potion", label: "力量药水", cost: { berry: 5, water_bottle: 1 }, requiresWorkbench: true }
 ];
-const RESOURCE_HARVEST_HITS = { tree: 7, rock: 6, berry: 3, branch: 1, pebble: 1, scrap: 2 };
+const RESOURCE_HARVEST_HITS = {
+  tree: 7,
+  rock: 6,
+  berry: 3,
+  branch: 1,
+  pebble: 1,
+  scrap: 2,
+  glass_bottle: 1
+};
 const RESOURCE_GATHER_COOLDOWN = {
-  tree: 0.42, rock: 0.46, berry: 0.3, branch: 0.16, pebble: 0.18, scrap: 0.28
+  tree: 0.42,
+  rock: 0.46,
+  berry: 0.3,
+  branch: 0.16,
+  pebble: 0.18,
+  scrap: 0.28,
+  glass_bottle: 0.16
 };
 const craftedCounts = Array(BUILD_TYPES.length).fill(0);
 const DEFAULT_GAME_SETTINGS = {
@@ -418,7 +434,9 @@ const STARTER_RESOURCES = [
   { type: "pebble", offsetX: 94, offsetY: 164 },
   { type: "scrap", offsetX: -154, offsetY: 132 },
   { type: "scrap", offsetX: 154, offsetY: 138 },
-  { type: "scrap", offsetX: 18, offsetY: 188 }
+  { type: "scrap", offsetX: 18, offsetY: 188 },
+  { type: "glass_bottle", offsetX: -188, offsetY: 74 },
+  { type: "glass_bottle", offsetX: 188, offsetY: 78 }
 ];
 let activeResourceChunk = "";
 const monsters = [];
@@ -545,23 +563,29 @@ function generateResourceChunk(chunkX, chunkY) {
     if (Math.hypot(x - campfire.x, y - campfire.y) < 230) continue;
     if (isInsideSpawnCorridor(x, y)) continue;
     const roll = gridHash(chunkX, chunkY, candidate * 4 + 3);
-    const type = roll < 0.44
+    const type = roll < 0.42
       ? "tree"
-      : roll < 0.62
+      : roll < 0.60
         ? "rock"
-        : roll < 0.75
+        : roll < 0.73
           ? "berry"
-          : roll < 0.84
+          : roll < 0.82
             ? "branch"
-            : roll < 0.91 ? "pebble" : "scrap";
+            : roll < 0.89
+              ? "pebble"
+              : roll < 0.96 ? "scrap" : "glass_bottle";
     const radius = type === "tree"
       ? 24
-      : type === "rock" ? 15 : type === "berry" ? 18 : type === "scrap" ? 9 : 8;
+      : type === "rock"
+        ? 15
+        : type === "berry" ? 18 : type === "scrap" ? 9 : 8;
     if (resourceOverlapsEscapeGate(x, y, radius)) continue;
     const treeFrame = type === "tree" && gridHash(chunkX, chunkY, candidate * 7 + 101) < 0.22 ? 1 : 0;
     if ((type === "tree" || type === "berry") && !canPlantGrowAt(x, y, radius)) continue;
+    if (type === "rock" && !canResourceRestOnDryGround(x, y, radius)) continue;
     if ((type === "branch" || type === "pebble" || type === "scrap")
       && terrainAtWorld(x, y) !== TERRAIN_FRAME.grass) continue;
+    if (type === "glass_bottle" && terrainAtWorld(x, y) === TERRAIN_FRAME.water) continue;
     if (resources.some((item) => Math.hypot(x - item.x, y - item.y) < radius + item.radius + 22)) continue;
     resources.push({
       id: resourceId++,
@@ -1593,6 +1617,11 @@ function continueGame() {
     gatherCooldown: 0,
     hurtTimer: 0
   });
+  if (playerTouchesWater(player.x, player.y)) {
+    const dryPosition = nearestDryPlayerPosition(player.x, player.y);
+    player.x = dryPosition.x;
+    player.y = dryPosition.y;
+  }
 
   restoreFixedList(inventoryItems, saved.inventoryItems);
   restoreFixedList(quickbarItems, saved.quickbarItems);
@@ -1930,7 +1959,64 @@ function getEscapeGateCollider() {
   };
 }
 
+function playerTouchesWater(x, y, radius = player.radius) {
+  const edge = Math.max(4, radius - 2);
+  const diagonal = edge * 0.7;
+  const points = [
+    [0, 0],
+    [-edge, 0],
+    [edge, 0],
+    [0, -edge],
+    [0, edge],
+    [-diagonal, -diagonal],
+    [diagonal, -diagonal],
+    [-diagonal, diagonal],
+    [diagonal, diagonal]
+  ];
+  return points.some(([offsetX, offsetY]) => (
+    terrainAtWorld(x + offsetX, y + offsetY) === TERRAIN_FRAME.water
+  ));
+}
+
+function isNearWaterShore(x = player.x, y = player.y, maximumDistance = 62) {
+  const centerTileX = Math.floor(x / TILE_SIZE);
+  const centerTileY = Math.floor(y / TILE_SIZE);
+  const tileRadius = Math.ceil(maximumDistance / TILE_SIZE) + 1;
+  for (let tileY = centerTileY - tileRadius; tileY <= centerTileY + tileRadius; tileY += 1) {
+    for (let tileX = centerTileX - tileRadius; tileX <= centerTileX + tileRadius; tileX += 1) {
+      if (!isWaterTile(tileX, tileY)) continue;
+      const left = tileX * TILE_SIZE;
+      const top = tileY * TILE_SIZE;
+      const closestX = Math.max(left, Math.min(x, left + TILE_SIZE));
+      const closestY = Math.max(top, Math.min(y, top + TILE_SIZE));
+      if (Math.hypot(x - closestX, y - closestY) <= maximumDistance) return true;
+    }
+  }
+  return false;
+}
+
+function nearestDryPlayerPosition(x, y) {
+  const originTileX = Math.floor(x / TILE_SIZE);
+  const originTileY = Math.floor(y / TILE_SIZE);
+  for (let ring = 0; ring <= 12; ring += 1) {
+    for (let offsetY = -ring; offsetY <= ring; offsetY += 1) {
+      for (let offsetX = -ring; offsetX <= ring; offsetX += 1) {
+        if (ring > 0 && Math.abs(offsetX) !== ring && Math.abs(offsetY) !== ring) continue;
+        const candidateX = (originTileX + offsetX) * TILE_SIZE + TILE_SIZE / 2;
+        const candidateY = (originTileY + offsetY) * TILE_SIZE + TILE_SIZE / 2;
+        if (candidateX < WORLD.margin || candidateY < WORLD.margin
+          || candidateX > WORLD.width - WORLD.margin || candidateY > WORLD.height - WORLD.margin) continue;
+        if (!playerTouchesWater(candidateX, candidateY)) {
+          return { x: candidateX, y: candidateY };
+        }
+      }
+    }
+  }
+  return { x: PLAYER_START.x, y: PLAYER_START.y };
+}
+
 function collides(x, y) {
+  if (playerTouchesWater(x, y)) return true;
   if (circleHitsRectangle(x, y, player.radius, getEscapeGateCollider())) return true;
   for (const door of doors) {
     if (door.animation < 0.82 && circleHitsRectangle(x, y, player.radius, getDefenseCollider(door, "door"))) return true;
@@ -1944,7 +2030,8 @@ function collides(x, y) {
   }
   for (const resource of resources) {
     if (resource.type === "berry" || resource.type === "branch"
-      || resource.type === "pebble" || resource.type === "scrap") continue;
+      || resource.type === "pebble" || resource.type === "scrap"
+      || resource.type === "glass_bottle") continue;
     if (Math.hypot(x - resource.x, y - resource.y) < resource.radius + player.radius - 2) return true;
   }
   return false;
@@ -1982,6 +2069,10 @@ function interact() {
     setInventoryOpen(true);
     if (craftStatus) craftStatus.textContent = "工作台已连接：选择一种武器制作";
     showMessage("打开工作台", 1);
+    return;
+  }
+  if (isNearWaterShore()) {
+    fillGlassBottle();
     return;
   }
   if (Math.hypot(player.x - campfire.x, player.y - campfire.y) < 72) {
@@ -2210,20 +2301,28 @@ function collectResource(target = findGatherTarget()) {
     showMessage(`${action}需要先装备${requiredTool.label}`, 1.2);
     return;
   }
+  if (target.type === "glass_bottle" && !canAddPortableItem("glass_bottle")) {
+    showMessage("背包和快捷栏都满了，先腾出一个位置", 1.2);
+    return;
+  }
 
   player.gatherCooldown = RESOURCE_GATHER_COOLDOWN[target.type] || 0.32;
   const gatheredType = target.type === "tree" || target.type === "branch"
     ? "wood"
     : target.type === "rock" || target.type === "pebble"
       ? "stone"
-      : target.type === "scrap" ? "scrap" : "berry";
+      : target.type === "scrap"
+        ? "scrap"
+        : target.type === "glass_bottle" ? "glass" : "berry";
   playGatherSound(gatheredType, target.x, target.y);
   const requiredHits = resourceHarvestHits(target.type);
   target.harvestHits = Math.min(requiredHits, (target.harvestHits || 0) + 1);
   if (target.harvestHits < requiredHits) {
     const action = target.type === "tree"
       ? "砍伐"
-      : target.type === "rock" ? "敲击" : target.type === "scrap" ? "拆解" : "采摘";
+      : target.type === "rock"
+        ? "敲击"
+        : target.type === "scrap" ? "拆解" : target.type === "glass_bottle" ? "拾取" : "采摘";
     showMessage(`${action}中 ${target.harvestHits}/${requiredHits}`, 0.6);
     updateHud();
     return;
@@ -2249,6 +2348,9 @@ function collectResource(target = findGatherTarget()) {
   } else if (target.type === "scrap") {
     addResource("scrap", 2);
     showMessage("拆出废铁 ×2");
+  } else if (target.type === "glass_bottle") {
+    addPortableItem("glass_bottle", 1, "pickup");
+    showMessage("捡到空玻璃瓶，靠近水边按 E 装水", 1.5);
   } else {
     addResource("berry", 1);
     showMessage("浆果已放进物品栏");
@@ -2269,24 +2371,52 @@ function craftedInventorySlot(buildIndex) {
 }
 
 function recipeCostText(cost) {
-  const labels = { wood: "木材", stone: "石头", berry: "浆果", scrap: "废铁" };
-  return ["wood", "stone", "berry", "scrap"]
+  const labels = {
+    wood: "木材",
+    stone: "石头",
+    berry: "浆果",
+    scrap: "废铁",
+    glass_bottle: "空玻璃瓶",
+    water_bottle: "水瓶"
+  };
+  return ["wood", "stone", "berry", "scrap", "glass_bottle", "water_bottle"]
     .filter((type) => Math.max(0, Number(cost?.[type]) || 0) > 0)
     .map((type) => `${labels[type]} ${Math.max(0, Number(cost[type]) || 0)}`)
     .join(" · ");
 }
 
 function canAffordRecipe(cost) {
-  return ["wood", "stone", "berry", "scrap"].every((type) => (
-    player[type] >= Math.max(0, Number(cost?.[type]) || 0)
+  return ["wood", "stone", "berry", "scrap", "glass_bottle", "water_bottle"].every((type) => (
+    (resourceItemDefinition(type) ? player[type] : portableItemCount(type))
+      >= Math.max(0, Number(cost?.[type]) || 0)
   ));
 }
 
 function spendRecipeCost(cost) {
-  for (const type of ["wood", "stone", "berry", "scrap"]) {
+  for (const type of ["wood", "stone", "berry", "scrap", "glass_bottle", "water_bottle"]) {
     const amount = Math.max(0, Number(cost?.[type]) || 0);
-    if (amount > 0) spendResource(type, amount);
+    if (amount <= 0) continue;
+    if (resourceItemDefinition(type)) spendResource(type, amount);
+    else spendPortableItem(type, amount);
   }
+}
+
+function recipeCostWillFreePortableSlot(cost) {
+  const remaining = {};
+  for (const type of ["glass_bottle", "water_bottle"]) {
+    remaining[type] = Math.max(0, Number(cost?.[type]) || 0);
+  }
+  for (const collection of [quickbarItems, inventoryItems]) {
+    for (const item of collection) {
+      if (!item || !Object.prototype.hasOwnProperty.call(remaining, item.type)
+        || remaining[item.type] <= 0) continue;
+      const count = Math.max(1, Math.floor(Number(item.count) || 1));
+      const used = Math.min(count, remaining[item.type]);
+      if (used >= count) return true;
+      remaining[item.type] -= used;
+    }
+  }
+  return false;
 }
 
 function renderCrafting() {
@@ -2441,7 +2571,8 @@ function renderSupplyCrafting() {
       || quickbarItems.some((item) => item?.type === recipe.type);
     const hasSpace = existingSlot
       || inventoryItems.some((item) => item === null)
-      || quickbarItems.some((item) => item === null);
+      || quickbarItems.some((item) => item === null)
+      || recipeCostWillFreePortableSlot(recipe.cost);
     const affordable = canAffordRecipe(recipe.cost);
     button.disabled = !hasWorkbench || !affordable || !hasSpace;
     button.classList.toggle("supply-ready", hasWorkbench && affordable && hasSpace);
@@ -2467,9 +2598,10 @@ function craftSupply(recipeIndex) {
   }
   const inventoryStack = inventoryItems.findIndex((item) => item?.type === recipe.type);
   const quickStack = quickbarItems.findIndex((item) => item?.type === recipe.type);
-  const emptyInventory = inventoryItems.findIndex((item) => item === null);
-  const emptyQuick = quickbarItems.findIndex((item) => item === null);
-  if (inventoryStack < 0 && quickStack < 0 && emptyInventory < 0 && emptyQuick < 0) {
+  let emptyInventory = inventoryItems.findIndex((item) => item === null);
+  let emptyQuick = quickbarItems.findIndex((item) => item === null);
+  if (inventoryStack < 0 && quickStack < 0 && emptyInventory < 0 && emptyQuick < 0
+    && !recipeCostWillFreePortableSlot(recipe.cost)) {
     if (craftStatus) craftStatus.textContent = "背包和快捷栏都满了，先腾出一个位置";
     return;
   }
@@ -2478,6 +2610,8 @@ function craftSupply(recipeIndex) {
     return;
   }
   spendRecipeCost(recipe.cost);
+  emptyInventory = inventoryItems.findIndex((item) => item === null);
+  emptyQuick = quickbarItems.findIndex((item) => item === null);
   let destination = "";
   if (inventoryStack >= 0) {
     inventoryItems[inventoryStack].count = Math.max(0, Number(inventoryItems[inventoryStack].count) || 0) + 1;
@@ -2578,11 +2712,121 @@ function spendPortableItem(type, amount = 1) {
   return remaining === 0;
 }
 
+function canAddPortableItem(type) {
+  return portableItemCount(type) > 0
+    || inventoryItems.some((item) => item === null)
+    || quickbarItems.some((item) => item === null);
+}
+
+function addPortableItem(type, amount = 1, source = "pickup") {
+  const definition = portableItemDefinition(type);
+  const count = Math.max(1, Math.floor(Number(amount) || 1));
+  if (!definition || !canAddPortableItem(type)) return false;
+  const existing = inventoryItems.find((item) => item?.type === type)
+    || quickbarItems.find((item) => item?.type === type);
+  if (existing) {
+    existing.count = Math.max(0, Math.floor(Number(existing.count) || 0)) + count;
+    return true;
+  }
+  const inventoryIndex = inventoryItems.findIndex((item) => item === null);
+  const quickIndex = quickbarItems.findIndex((item) => item === null);
+  const item = normalizePortableItem({ type, count, source }, count);
+  if (inventoryIndex >= 0) inventoryItems[inventoryIndex] = item;
+  else if (quickIndex >= 0) quickbarItems[quickIndex] = item;
+  else return false;
+  return true;
+}
+
+function convertPortableItem(inputType, outputType) {
+  const outputDefinition = portableItemDefinition(outputType);
+  if (!outputDefinition) return false;
+  const locations = [];
+  if (selectedQuickSlot >= 0 && quickbarItems[selectedQuickSlot]?.type === inputType) {
+    locations.push({ collection: quickbarItems, index: selectedQuickSlot });
+  }
+  inventoryItems.forEach((item, index) => {
+    if (item?.type === inputType) locations.push({ collection: inventoryItems, index });
+  });
+  quickbarItems.forEach((item, index) => {
+    if (index !== selectedQuickSlot && item?.type === inputType) {
+      locations.push({ collection: quickbarItems, index });
+    }
+  });
+  const inputLocation = locations[0];
+  if (!inputLocation) return false;
+  const input = inputLocation.collection[inputLocation.index];
+  const existingOutput = inventoryItems.find((item) => item?.type === outputType)
+    || quickbarItems.find((item) => item?.type === outputType);
+  if (existingOutput) {
+    input.count -= 1;
+    existingOutput.count = Math.max(0, Math.floor(Number(existingOutput.count) || 0)) + 1;
+    if (input.count <= 0) {
+      inputLocation.collection[inputLocation.index] = null;
+      if (inputLocation.collection === quickbarItems && selectedQuickSlot === inputLocation.index) {
+        selectedQuickSlot = -1;
+      }
+    }
+    return true;
+  }
+  if (input.count <= 1) {
+    inputLocation.collection[inputLocation.index] = normalizePortableItem({
+      type: outputType,
+      count: 1,
+      source: "filled"
+    });
+    return true;
+  }
+  const inventoryIndex = inventoryItems.findIndex((item) => item === null);
+  const quickIndex = quickbarItems.findIndex((item) => item === null);
+  if (inventoryIndex < 0 && quickIndex < 0) return false;
+  input.count -= 1;
+  const output = normalizePortableItem({ type: outputType, count: 1, source: "filled" });
+  if (inventoryIndex >= 0) inventoryItems[inventoryIndex] = output;
+  else quickbarItems[quickIndex] = output;
+  return true;
+}
+
+function fillGlassBottle() {
+  if (!isNearWaterShore()) {
+    showMessage("要靠近水边才能装水", 1.1);
+    return false;
+  }
+  if (portableItemCount("glass_bottle") <= 0) {
+    showMessage("需要先捡到一个空玻璃瓶", 1.2);
+    return false;
+  }
+  if (!convertPortableItem("glass_bottle", "water_bottle")) {
+    showMessage("背包没有空间放水瓶", 1.1);
+    return false;
+  }
+  playNoise({
+    duration: 0.2,
+    volume: 0.024,
+    frequency: 520,
+    filterType: "lowpass",
+    attack: 0.008
+  });
+  playTone({
+    frequency: 310,
+    endFrequency: 410,
+    type: "sine",
+    duration: 0.16,
+    volume: 0.018,
+    attack: 0.006
+  });
+  showMessage("装满了一瓶水", 1.1);
+  updateHud();
+  return true;
+}
+
 function useConsumable(type) {
   const item = portableItemDefinition(type);
   if (!item || item.kind !== "consumable" || portableItemCount(type) <= 0) return false;
   if (type === "strength_potion") {
-    spendPortableItem(type, 1);
+    if (!convertPortableItem(type, "glass_bottle")) {
+      showMessage("背包没有空间留下空玻璃瓶", 1.2);
+      return false;
+    }
     player.strengthTimer = Math.min(120, player.strengthTimer + 60);
     playTone({ frequency: 180, endFrequency: 420, type: "triangle", duration: 0.32, volume: 0.032 });
     showMessage("喝下力量药水：60 秒内武器伤害 +50%", 1.8);
@@ -2595,7 +2839,14 @@ function useConsumable(type) {
   }
   const baseHealing = type === "medkit" ? 35 : 50;
   const healing = type === "medkit" && hasClassSkill(1) ? 50 : baseHealing;
-  spendPortableItem(type, 1);
+  if (type === "healing_potion") {
+    if (!convertPortableItem(type, "glass_bottle")) {
+      showMessage("背包没有空间留下空玻璃瓶", 1.2);
+      return false;
+    }
+  } else {
+    spendPortableItem(type, 1);
+  }
   player.health = Math.min(100, player.health + healing);
   playTone({ frequency: 390, endFrequency: 760, type: "sine", duration: 0.22, volume: 0.04 });
   showMessage(`使用${item.label}，恢复 ${healing} 点生命`, 1.4);
@@ -2837,6 +3088,10 @@ function activateQuickSlot(index) {
     useBerry();
   } else if (item.kind === "consumable") {
     useConsumable(item.type);
+  } else if (item.type === "glass_bottle") {
+    showMessage("拿起空玻璃瓶，靠近水边按 E 装水", 1.4);
+  } else if (item.type === "water_bottle") {
+    showMessage("水瓶可以在工作台制作药水", 1.2);
   } else {
     showMessage(`拿起了${item.label || "物品"}`, 1);
   }
@@ -3286,7 +3541,9 @@ function renderInventory() {
     slot.draggable = Boolean(item);
     const useTip = item?.type === "berry"
       ? "，点击食用"
-      : item?.kind === "consumable" ? "，点击使用" : "";
+      : item?.kind === "consumable"
+        ? "，点击使用"
+        : item?.type === "glass_bottle" ? "，靠近水边按 E 装水" : "";
     const firearmTip = item?.magazineSize
       ? `，弹药 ${item.loadedAmmo}/${item.magazineSize}`
       : "";
@@ -3598,7 +3855,9 @@ function updateHud() {
     slot.title = item
       ? item.magazineSize
         ? `${item.label} · 弹药 ${amount}/${item.magazineSize} · R 换弹`
-        : `${item.label}${amount === null ? "" : ` ×${amount}`}`
+        : `${item.label}${amount === null ? "" : ` ×${amount}`}${
+          item.type === "glass_bottle" ? " · 靠近水边按 E 装水" : ""
+        }`
       : "空快捷格";
     slot.setAttribute("aria-pressed", String(selectedSlot));
   });
@@ -3844,6 +4103,20 @@ function canPlantGrowAt(x, y, radius) {
   ));
 }
 
+function canResourceRestOnDryGround(x, y, radius) {
+  const footprint = Math.max(8, radius * 0.72);
+  const points = [
+    [0, 0],
+    [-footprint, 0],
+    [footprint, 0],
+    [0, -footprint],
+    [0, footprint]
+  ];
+  return points.every(([offsetX, offsetY]) => (
+    terrainAtWorld(x + offsetX, y + offsetY) !== TERRAIN_FRAME.water
+  ));
+}
+
 function drawTerrainTile(frame, x, y) {
   if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
     ctx.drawImage(worldSprite, frame * 16, 0, 16, 16, x, y, TILE_SIZE, TILE_SIZE);
@@ -3937,7 +4210,7 @@ function drawCampfire() {
   }
 }
 
-const GROUND_RESOURCE_TYPES = new Set(["branch", "pebble", "scrap"]);
+const GROUND_RESOURCE_TYPES = new Set(["branch", "pebble", "scrap", "glass_bottle"]);
 
 function resourceRenderLayer(resource) {
   if (GROUND_RESOURCE_TYPES.has(resource.type)) return "back";
@@ -4020,6 +4293,23 @@ function drawResources(layer = "all") {
       ctx.fillRect(resource.x - 11, resource.y - 5, 9, 6);
       ctx.fillRect(resource.x + 1, resource.y - 9, 8, 13);
       ctx.fillRect(resource.x - 4, resource.y + 4, 12, 5);
+    } else if (resource.type === "glass_bottle") {
+      ctx.save();
+      ctx.fillStyle = "rgba(3, 7, 7, .35)";
+      ctx.beginPath();
+      ctx.ellipse(resource.x, resource.y + 8, 10, 4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#263536";
+      ctx.fillRect(resource.x - 4, resource.y - 10, 8, 4);
+      ctx.fillRect(resource.x - 7, resource.y - 6, 14, 13);
+      ctx.fillStyle = "#d9ebe4";
+      ctx.fillRect(resource.x - 2, resource.y - 9, 4, 4);
+      ctx.fillRect(resource.x - 5, resource.y - 4, 10, 9);
+      ctx.fillStyle = "rgba(113, 168, 169, .5)";
+      ctx.fillRect(resource.x - 3, resource.y - 2, 3, 5);
+      ctx.fillStyle = "rgba(244, 255, 247, .85)";
+      ctx.fillRect(resource.x + 2, resource.y - 3, 2, 4);
+      ctx.restore();
     } else {
       if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
         ctx.drawImage(worldSprite, PROP_FRAME.berryBush * 16, 16, 16, 16, resource.x - 24, resource.y - 24, 48, 48);

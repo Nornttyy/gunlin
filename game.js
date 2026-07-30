@@ -32,6 +32,12 @@ const MIMIC_TELEPORT_MIN_DISTANCE = 650;
 const MIMIC_TELEPORT_MAX_DISTANCE = 860;
 const MIMIC_FRAME_SIZE = 32;
 const MIMIC_DEATH_DURATION = 0.72;
+const ZOMBIE_DETECTION_DISTANCE = 420;
+const ZOMBIE_LOSE_DISTANCE = 620;
+const ZOMBIE_ATTACK_DISTANCE = 25;
+const ZOMBIE_ATTACK_DAMAGE = 18;
+const ZOMBIE_FRAME_SIZE = 16;
+const ZOMBIE_DEATH_DURATION = 0.72;
 const AUDIO_PAN_DISTANCE = 420;
 const BUILD_GRID_SIZE = TILE_SIZE;
 const ESCAPE_GATE_MIN_DISTANCE = 600 * TILE_SIZE;
@@ -219,17 +225,20 @@ const ASSET_VERSION = "20260730-bottles1";
 const PLAYER_ASSET_VERSION = "20260728-player-redraw1";
 const TREE_ASSET_VERSION = "20260728-tree-visible2";
 const MIMIC_ASSET_VERSION = "20260728-mimic-drawn1";
+const ZOMBIE_ASSET_VERSION = "20260730-zombie1";
 const ESCAPE_GATE_ASSET_VERSION = "20260729-gate-drawn1";
 const HELD_WEAPON_FRAME = { club: 0, axe: 1, knife: 2, pistol: 3, shotgun: 4, pickaxe: 5 };
 const sprite = new Image();
 const worldSprite = new Image();
 const treeSprite = new Image();
 const mimicSprite = new Image();
+const zombieSprite = new Image();
 const escapeGateSprite = new Image();
 sprite.decoding = "async";
 worldSprite.decoding = "async";
 treeSprite.decoding = "async";
 mimicSprite.decoding = "async";
+zombieSprite.decoding = "async";
 escapeGateSprite.decoding = "async";
 
 // 建筑素材在 128×96 图集的第 4 行（每格 16×16）。
@@ -691,7 +700,9 @@ function assetUrl(path, retry = 0) {
       ? TREE_ASSET_VERSION
       : path === "assets/mimic.png"
         ? MIMIC_ASSET_VERSION
-        : path === "assets/escape-gate.png" ? ESCAPE_GATE_ASSET_VERSION : ASSET_VERSION;
+        : path === "assets/zombie.png"
+          ? ZOMBIE_ASSET_VERSION
+          : path === "assets/escape-gate.png" ? ESCAPE_GATE_ASSET_VERSION : ASSET_VERSION;
   return `${path}?v=${version}${retryText}`;
 }
 
@@ -1287,6 +1298,36 @@ function playMimicFootstep(monster) {
   });
 }
 
+function playZombieDetected(monster) {
+  playNoise({
+    duration: 0.38, volume: 0.062, frequency: 330, filterType: "lowpass",
+    resonance: 0.5, worldX: monster.x, worldY: monster.y, range: ZOMBIE_LOSE_DISTANCE
+  });
+  playTone({
+    frequency: 96, endFrequency: 58, type: "triangle", duration: 0.34,
+    volume: 0.04, worldX: monster.x, worldY: monster.y, range: ZOMBIE_LOSE_DISTANCE
+  });
+}
+
+function playZombieFootstep(monster) {
+  const pitchJitter = 0.9 + Math.random() * 0.16;
+  playNoise({
+    duration: 0.09, volume: 0.075, frequency: 190 * pitchJitter, filterType: "lowpass",
+    attack: 0.004, worldX: monster.x, worldY: monster.y, range: ZOMBIE_LOSE_DISTANCE
+  });
+}
+
+function playZombieAttack(monster) {
+  playNoise({
+    duration: 0.14, volume: 0.08, frequency: 410, filterType: "lowpass",
+    attack: 0.004, worldX: monster.x, worldY: monster.y, range: 260
+  });
+  playTone({
+    frequency: 104, endFrequency: 62, type: "triangle", duration: 0.16,
+    volume: 0.038, worldX: monster.x, worldY: monster.y, range: 260
+  });
+}
+
 function playMimicJumpscare(worldX) {
   playNoise({
     duration: 0.46, volume: 0.1, frequency: 820, filterType: "lowpass",
@@ -1417,17 +1458,17 @@ async function loadGameAssets() {
   if (continueButton) continueButton.disabled = true;
   retryAssetsButton.classList.add("hidden");
   loadingStatus.classList.remove("ready", "failed");
-  showLoadingProgress(0, 6, "正在准备像素素材…");
-
   let loaded = 0;
   const jobs = [
     ["玩家图", () => loadImageWithRetry(sprite, "assets/player.png")],
     ["场景图", () => loadImageWithRetry(worldSprite, "assets/forest-assets.png")],
     ["树木图", () => loadImageWithRetry(treeSprite, "assets/tree-sprites.png")],
     ["模仿者", () => loadImageWithRetry(mimicSprite, "assets/mimic.png")],
+    ["僵尸", () => loadImageWithRetry(zombieSprite, "assets/zombie.png")],
     ["逃生大门", () => loadImageWithRetry(escapeGateSprite, "assets/escape-gate.png")],
     ["像素字体", loadFontWithRetry]
   ];
+  showLoadingProgress(0, jobs.length, "正在准备像素素材…");
   const results = await Promise.allSettled(jobs.map(async ([label, load]) => {
     const result = await load();
     loaded += 1;
@@ -3318,24 +3359,29 @@ function aimAtPointer(event) {
   updatePointerFacing();
 }
 
-function spawnMonster() {
+function spawnMonster(forcedType = null) {
+  const type = forcedType === "zombie" || forcedType === "mimic"
+    ? forcedType
+    : Math.random() < 0.65 ? "zombie" : "mimic";
+  const isZombie = type === "zombie";
   const angle = Math.random() * Math.PI * 2;
-  const distance = 560 + Math.random() * 180;
+  const distance = (isZombie ? 480 : 560) + Math.random() * 180;
   const x = Math.max(WORLD.margin, Math.min(WORLD.width - WORLD.margin, player.x + Math.cos(angle) * distance));
   const y = Math.max(WORLD.margin, Math.min(WORLD.height - WORLD.margin, player.y + Math.sin(angle) * distance));
   monsters.push({
-    type: "mimic",
-    name: "模仿者",
+    type,
+    name: isZombie ? "僵尸" : "模仿者",
     x,
     y,
-    radius: 13,
-    health: 70 + dayNumber * 7,
-    speed: 37 + dayNumber * 3,
+    radius: isZombie ? 10 : 13,
+    health: isZombie ? 48 + dayNumber * 6 : 70 + dayNumber * 7,
+    speed: isZombie ? 31 + dayNumber * 1.8 : 37 + dayNumber * 3,
     alerted: false,
     detectionCooldown: 0,
     attackCooldown: 0,
     hurtTimer: 0,
     footstepTimer: 0,
+    dirX: 1,
     animation: Math.random() * 2,
     dead: false,
     deathTimer: 0
@@ -3400,6 +3446,11 @@ function updateTraps(delta) {
 function updateMonsters(delta, night) {
   for (let i = monsters.length - 1; i >= 0; i -= 1) {
     const monster = monsters[i];
+    const isZombie = monster.type === "zombie";
+    const deathDuration = isZombie ? ZOMBIE_DEATH_DURATION : MIMIC_DEATH_DURATION;
+    const detectionDistance = isZombie ? ZOMBIE_DETECTION_DISTANCE : MIMIC_DETECTION_DISTANCE;
+    const loseDistance = isZombie ? ZOMBIE_LOSE_DISTANCE : MIMIC_LOSE_DISTANCE;
+    const attackDistance = isZombie ? ZOMBIE_ATTACK_DISTANCE : MIMIC_ATTACK_DISTANCE;
     monster.attackCooldown = Math.max(0, (monster.attackCooldown || 0) - delta);
     monster.detectionCooldown = Math.max(0, (monster.detectionCooldown || 0) - delta);
     monster.footstepTimer = Math.max(0, (monster.footstepTimer || 0) - delta);
@@ -3407,17 +3458,21 @@ function updateMonsters(delta, night) {
 
     if (monster.dead) {
       monster.deathTimer = (monster.deathTimer || 0) + delta;
-      if (monster.deathTimer >= MIMIC_DEATH_DURATION) {
+      if (monster.deathTimer >= deathDuration) {
         monsters.splice(i, 1);
         const dropRoll = Math.random();
-        if (dropRoll < 0.55) {
-          addResource("scrap", 1);
-          showMessage("模仿者留下了废铁 ×1");
-        } else if (dropRoll < 0.8) {
-          addResource("wood", 1);
-          showMessage("模仿者留下了木材 ×1");
+        if (isZombie) {
+          if (dropRoll < 0.42) addResource("scrap", 1);
         } else {
-          showMessage("模仿者倒下了");
+          if (dropRoll < 0.55) {
+            addResource("scrap", 1);
+            showMessage("模仿者留下了废铁 ×1");
+          } else if (dropRoll < 0.8) {
+            addResource("wood", 1);
+            showMessage("模仿者留下了木材 ×1");
+          } else {
+            showMessage("模仿者倒下了");
+          }
         }
       }
       continue;
@@ -3429,12 +3484,14 @@ function updateMonsters(delta, night) {
       continue;
     }
 
-    monster.animation = (monster.animation || 0) + delta * (monster.alerted ? 7.5 : 2.2);
+    monster.animation = (monster.animation || 0)
+      + delta * (monster.alerted ? (isZombie ? 6 : 7.5) : (isZombie ? 1.8 : 2.2));
     if (!night) {
       monster.alerted = false;
       const retreatX = monster.x - player.x;
       const retreatY = monster.y - player.y;
       const retreatDistance = Math.hypot(retreatX, retreatY) || 1;
+      monster.dirX = retreatX / retreatDistance;
       monster.x += (retreatX / retreatDistance) * 28 * delta;
       monster.y += (retreatY / retreatDistance) * 28 * delta;
       if (retreatDistance > 980) monsters.splice(i, 1);
@@ -3444,16 +3501,20 @@ function updateMonsters(delta, night) {
     const dy = player.y - monster.y;
     const distance = Math.hypot(dx, dy) || 1;
 
-    if (!monster.alerted && monster.detectionCooldown <= 0 && distance <= MIMIC_DETECTION_DISTANCE) {
+    if (!monster.alerted && monster.detectionCooldown <= 0 && distance <= detectionDistance) {
       monster.alerted = true;
-      playMimicDetected(monster);
-      showMessage("附近传来模仿你的脚步声", 1.2);
-    } else if (monster.alerted && distance > MIMIC_LOSE_DISTANCE) {
+      if (isZombie) playZombieDetected(monster);
+      else {
+        playMimicDetected(monster);
+        showMessage("附近传来模仿你的脚步声", 1.2);
+      }
+    } else if (monster.alerted && distance > loseDistance) {
       monster.alerted = false;
     }
 
     if (monster.alerted) {
-      if (distance > MIMIC_ATTACK_DISTANCE) {
+      if (distance > attackDistance) {
+        monster.dirX = dx / distance;
         const nextX = monster.x + (dx / distance) * monster.speed * delta;
         const nextY = monster.y + (dy / distance) * monster.speed * delta;
         const defense = findBlockingDefense(nextX, nextY, monster.radius);
@@ -3463,20 +3524,28 @@ function updateMonsters(delta, night) {
           monster.x = nextX;
           monster.y = nextY;
           if (monster.footstepTimer <= 0) {
-            playMimicFootstep(monster);
-            monster.footstepTimer = 0.32;
+            if (isZombie) playZombieFootstep(monster);
+            else playMimicFootstep(monster);
+            monster.footstepTimer = isZombie ? 0.44 : 0.32;
           }
         }
       } else {
         if (monster.attackCooldown <= 0 && player.hurtTimer <= 0) {
-          player.health = Math.max(0, player.health - MIMIC_JUMPSCARE_DAMAGE);
-          player.hurtTimer = 0.9;
-          monster.attackCooldown = 2.2;
-          monster.alerted = false;
-          monster.detectionCooldown = 1.4;
-          triggerMimicJumpscare(monster.x);
-          teleportMimicAway(monster);
-          showMessage("模仿者扑到了你脸上！生命 -50", 1.25);
+          if (isZombie) {
+            player.health = Math.max(0, player.health - ZOMBIE_ATTACK_DAMAGE);
+            player.hurtTimer = 0.62;
+            monster.attackCooldown = 1.15;
+            playZombieAttack(monster);
+          } else {
+            player.health = Math.max(0, player.health - MIMIC_JUMPSCARE_DAMAGE);
+            player.hurtTimer = 0.9;
+            monster.attackCooldown = 2.2;
+            monster.alerted = false;
+            monster.detectionCooldown = 1.4;
+            triggerMimicJumpscare(monster.x);
+            teleportMimicAway(monster);
+            showMessage("模仿者扑到了你脸上！生命 -50", 1.25);
+          }
         }
       }
     }
@@ -3500,8 +3569,8 @@ function findBlockingDefense(x, y, radius) {
 
 function attackDefense(monster, defense) {
   if (monster.attackCooldown > 0) return;
-  defense.item.health -= 12 + dayNumber * 2;
-  monster.attackCooldown = 0.8;
+  defense.item.health -= monster.type === "zombie" ? 9 + dayNumber : 12 + dayNumber * 2;
+  monster.attackCooldown = monster.type === "zombie" ? 1.1 : 0.8;
   if (defense.item.health > 0) return;
   const index = defense.list.indexOf(defense.item);
   if (index >= 0) defense.list.splice(index, 1);
@@ -4453,6 +4522,7 @@ function drawDefenseHealth(defense) {
 
 function drawMonsters() {
   for (const monster of monsters) {
+    const isZombie = monster.type === "zombie";
     const bob = monster.dead
       ? 0
       : Math.sin(elapsed * (monster.alerted ? 8 : 3.5) + monster.x * 0.025) * (monster.alerted ? 2 : 1);
@@ -4462,7 +4532,34 @@ function drawMonsters() {
     ctx.ellipse(monster.x, monster.y + 15, monster.dead ? 17 : 20, monster.dead ? 5 : 7, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    if (mimicSprite.complete && mimicSprite.naturalWidth >= 384 && mimicSprite.naturalHeight >= 32) {
+    if (isZombie && zombieSprite.complete
+      && zombieSprite.naturalWidth >= 176 && zombieSprite.naturalHeight >= 16) {
+      const frame = getZombieFrame(monster);
+      ctx.save();
+      ctx.translate(monster.x, 0);
+      if ((monster.dirX || 1) < 0) ctx.scale(-1, 1);
+      if (monster.hurtTimer > 0 && !monster.dead) {
+        // 僵尸没有额外受击帧，命中时直接把当前帧闪成白色。
+        ctx.filter = "brightness(0) invert(1)";
+      }
+      ctx.drawImage(
+        zombieSprite,
+        frame * ZOMBIE_FRAME_SIZE,
+        0,
+        ZOMBIE_FRAME_SIZE,
+        ZOMBIE_FRAME_SIZE,
+        -24,
+        monster.y - 37 + bob,
+        48,
+        48
+      );
+      ctx.restore();
+      ctx.restore();
+      continue;
+    }
+
+    if (!isZombie && mimicSprite.complete
+      && mimicSprite.naturalWidth >= 384 && mimicSprite.naturalHeight >= 32) {
       const frame = getMimicFrame(monster);
       ctx.drawImage(
         mimicSprite,
@@ -4481,7 +4578,7 @@ function drawMonsters() {
 
     ctx.globalAlpha = monster.hurtTimer > 0 ? .5 : 1;
     ctx.translate(monster.x, monster.y + bob);
-    ctx.fillStyle = "#0a0e12";
+    ctx.fillStyle = isZombie ? "#4f6b39" : "#0a0e12";
     ctx.beginPath();
     ctx.moveTo(-13, 12);
     ctx.quadraticCurveTo(-20, -6, -10, -17);
@@ -4492,14 +4589,23 @@ function drawMonsters() {
     ctx.quadraticCurveTo(-9, 10, -13, 12);
     ctx.fill();
 
-    ctx.shadowColor = "#a82f32";
+    ctx.shadowColor = isZombie ? "#9dc56c" : "#a82f32";
     ctx.shadowBlur = 9;
-    ctx.fillStyle = "#d85150";
+    ctx.fillStyle = isZombie ? "#d8ef9b" : "#d85150";
     ctx.fillRect(-9, -5, 5, 3);
     ctx.fillRect(4, -5, 5, 3);
     ctx.shadowBlur = 0;
     ctx.restore();
   }
+}
+
+function getZombieFrame(monster) {
+  if (monster.dead) {
+    const progress = Math.max(0, Math.min(0.999, (monster.deathTimer || 0) / ZOMBIE_DEATH_DURATION));
+    return 7 + Math.floor(progress * 4);
+  }
+  if (monster.alerted) return 2 + (Math.floor(monster.animation || 0) % 5);
+  return Math.floor(monster.animation || 0) % 2;
 }
 
 function getMimicFrame(monster) {

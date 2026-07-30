@@ -3644,11 +3644,12 @@ function render() {
   drawCampfire();
   drawBarricades();
   drawDoors();
-  drawResources();
+  drawResources("back");
   drawEscapeGate();
   drawMonsters();
   drawBuildPreview();
   drawPlayer();
+  drawResources("front");
   ctx.restore();
 
   drawAtmosphere();
@@ -3936,10 +3937,33 @@ function drawCampfire() {
   }
 }
 
-function drawResources() {
-  for (const resource of resources) {
-    if (resource.x < camera.x - 100 || resource.x > camera.x + W + 100
-      || resource.y < camera.y - 90 || resource.y > camera.y + H + 180) continue;
+const GROUND_RESOURCE_TYPES = new Set(["branch", "pebble", "scrap"]);
+
+function resourceRenderLayer(resource) {
+  if (GROUND_RESOURCE_TYPES.has(resource.type)) return "back";
+  return resource.y > player.y ? "front" : "back";
+}
+
+function resourceIsVisible(resource) {
+  return resource.x >= camera.x - 100
+    && resource.x <= camera.x + W + 100
+    && resource.y >= camera.y - 90
+    && resource.y <= camera.y + H + 180;
+}
+
+function drawResources(layer = "all") {
+  const visibleResources = resources
+    .filter((resource) => (
+      resourceIsVisible(resource)
+      && (layer === "all" || resourceRenderLayer(resource) === layer)
+    ))
+    .sort((left, right) => (
+      left.y - right.y
+      || left.x - right.x
+      || (left.id || 0) - (right.id || 0)
+    ));
+
+  for (const resource of visibleResources) {
     if (resource.type === "tree") {
       if (treeSprite.complete && treeSprite.naturalWidth >= 64 && treeSprite.naturalHeight >= 64) {
         const frame = resource.treeFrame === 1 ? 1 : 0;

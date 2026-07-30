@@ -2226,23 +2226,6 @@ h1 {
   }
 }
 
-.tier-badge {
-  display: inline-grid;
-  place-items: center;
-  min-width: 18px;
-  height: 15px;
-  margin-right: 4px;
-  border: 1px solid currentColor;
-  font-style: normal;
-  font-size: 8px;
-  line-height: 1;
-  vertical-align: 1px;
-}
-
-.tier-wood { color: #bf8b55; }
-.tier-stone { color: #aeb7ae; }
-.tier-iron { color: #d6e6e4; text-shadow: 0 0 5px rgba(180, 221, 217, .4); }
-
 .inventory-slot[data-item-tier="wood"],
 .quick-slot[data-item-tier="wood"],
 .weapon-craft-button[data-item-tier="wood"] {

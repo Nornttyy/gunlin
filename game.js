@@ -163,9 +163,9 @@ const PISTOL_BULLET_SPEED = 1600;
 const PISTOL_BULLET_WIDTH = 10;
 const SHOTGUN_PELLET_COUNT = 5;
 const EQUIPMENT_TIERS = {
-  wood: { label: "木级", shortLabel: "木", harvestHitModifier: 2 },
-  stone: { label: "石级", shortLabel: "石", harvestHitModifier: 0 },
-  iron: { label: "铁级", shortLabel: "铁", harvestHitModifier: -2 }
+  wood: { harvestHitModifier: 2 },
+  stone: { harvestHitModifier: 0 },
+  iron: { harvestHitModifier: -2 }
 };
 const EMOTES = {
   thunder_spin: { label: "雷霆旋转", kind: "dance", duration: 0 },
@@ -205,12 +205,8 @@ function equipmentTierDefinition(item) {
   return EQUIPMENT_TIERS[item?.tier] || null;
 }
 
-function equipmentDisplayLabel(item, compact = false) {
-  const tier = equipmentTierDefinition(item);
-  if (!tier) return item?.label || "";
-  return compact
-    ? `${tier.shortLabel}·${item.label}`
-    : `${tier.label} · ${item.label}`;
+function equipmentDisplayLabel(item) {
+  return item?.label || "";
 }
 
 function isHarvestTool(item) {
@@ -2626,7 +2622,7 @@ function interact() {
   }
   if (nearbyWorkbench()) {
     setInventoryOpen(true);
-    if (craftStatus) craftStatus.textContent = "工作台已连接：选择木、石或铁级工具与武器";
+    if (craftStatus) craftStatus.textContent = "工作台已连接：选择要制作的工具或武器";
     showMessage("打开工作台", 1);
     return;
   }
@@ -3067,7 +3063,7 @@ function nearbyWorkbench() {
 function renderWeaponCrafting() {
   const hasWorkbench = Boolean(nearbyWorkbench());
   if (workbenchStatus) {
-    workbenchStatus.textContent = hasWorkbench ? "木 / 石 / 铁三级已解锁" : "靠近工作台后解锁";
+    workbenchStatus.textContent = hasWorkbench ? "工具与武器已解锁" : "靠近工作台后解锁";
   }
   weaponCraftButtons.forEach((button) => {
     const recipe = WEAPON_TYPES[Number(button.dataset.weaponRecipe)];

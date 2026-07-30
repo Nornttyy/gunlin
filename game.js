@@ -241,6 +241,9 @@ const MIMIC_ASSET_VERSION = "20260728-mimic-drawn1";
 const ZOMBIE_ASSET_VERSION = "20260730-zombie1";
 const ESCAPE_GATE_ASSET_VERSION = "20260729-gate-drawn1";
 const HELD_WEAPON_FRAME = { club: 0, axe: 1, knife: 2, pistol: 3, shotgun: 4, pickaxe: 5 };
+const MELEE_SWING_DURATION = 0.28;
+const TOOL_SWING_DURATION = 0.34;
+const ACTION_IMPACT_DURATION = 0.36;
 const sprite = new Image();
 const worldSprite = new Image();
 const treeSprite = new Image();
@@ -423,6 +426,7 @@ const weather = {
 let bloodMoonActive = false;
 let bloodMoonNightNumber = 0;
 let bloodMoonPulse = 0;
+let actionEffectId = 0;
 
 const player = {
   x: PLAYER_START.x,
@@ -441,6 +445,9 @@ const player = {
   dirY: -1,
   animation: 0,
   attackTimer: 0,
+  toolSwingTimer: 0,
+  toolSwingType: "",
+  toolSwingAngle: 0,
   attackCooldown: 0,
   gatherCooldown: 0,
   hurtTimer: 0,
@@ -482,6 +489,7 @@ const STARTER_RESOURCES = [
 let activeResourceChunk = "";
 const monsters = [];
 const projectiles = [];
+const actionImpacts = [];
 const barricades = [];
 const doors = [];
 const buildings = [];
@@ -489,6 +497,8 @@ const camera = { x: 0, y: 0 };
 const pointerAim = { x: W / 2, y: H / 2, active: false };
 const pistolShot = {
   timer: 0,
+  duration: 0.12,
+  weaponType: "pistol",
   startX: 0,
   startY: 0,
   endX: 0,
@@ -1655,6 +1665,7 @@ function resetWorld() {
   activeResourceChunk = "";
   monsters.length = 0;
   projectiles.length = 0;
+  actionImpacts.length = 0;
   barricades.length = 0;
   doors.length = 0;
   buildings.length = 0;
@@ -1662,6 +1673,7 @@ function resetWorld() {
   barricadeId = 0;
   doorId = 0;
   buildingId = 0;
+  actionEffectId = 0;
   generateEscapeGate();
   updateResourceChunks(true);
   generateStarterResources();
@@ -1718,6 +1730,9 @@ function startGame() {
     flashlight: true,
     classRow: 0,
     attackTimer: 0,
+    toolSwingTimer: 0,
+    toolSwingType: "",
+    toolSwingAngle: 0,
     attackCooldown: 0,
     gatherCooldown: 0,
     strengthTimer: 0
@@ -1765,6 +1780,7 @@ function continueGame() {
   classSelectionOpen = false;
   pistolShot.timer = 0;
   projectiles.length = 0;
+  actionImpacts.length = 0;
   inventoryOpen = false;
   settingsOpen = false;
   pauseOpen = false;
@@ -1819,6 +1835,9 @@ function continueGame() {
     dirY: Number.isFinite(saved.player.dirY) ? saved.player.dirY : -1,
     animation: 0,
     attackTimer: 0,
+    toolSwingTimer: 0,
+    toolSwingType: "",
+    toolSwingAngle: 0,
     attackCooldown: 0,
     gatherCooldown: 0,
     hurtTimer: 0
@@ -2264,6 +2283,7 @@ function update(delta) {
   updateEscapeGateDiscovery();
   updateDoors(delta);
   updateProjectiles(delta);
+  updateActionImpacts(delta);
   updateTraps(delta);
   updateMonsters(delta, night);
   updateEmote();
@@ -2280,6 +2300,8 @@ function update(delta) {
   }
 
   player.attackTimer = Math.max(0, player.attackTimer - delta);
+  player.toolSwingTimer = Math.max(0, player.toolSwingTimer - delta);
+  if (player.toolSwingTimer <= 0) player.toolSwingType = "";
   player.attackCooldown = Math.max(0, player.attackCooldown - delta);
   player.gatherCooldown = Math.max(0, player.gatherCooldown - delta);
   player.hurtTimer = Math.max(0, player.hurtTimer - delta);
@@ -2701,6 +2723,37 @@ function equippedQuickbarItem() {
   return quickbarItems[selectedQuickSlot];
 }
 
+function beginToolSwing(tool, target) {
+  if (!tool || !target) return;
+  player.attackTimer = 0;
+  player.toolSwingTimer = TOOL_SWING_DURATION;
+  player.toolSwingType = tool.type;
+  player.toolSwingAngle = Math.atan2(
+    target.y - (player.y - 15),
+    target.x - player.x
+  );
+}
+
+function spawnActionImpact(type, x, y, angle = 0) {
+  actionImpacts.push({
+    id: actionEffectId++,
+    type,
+    x,
+    y,
+    angle,
+    timer: ACTION_IMPACT_DURATION,
+    duration: ACTION_IMPACT_DURATION
+  });
+  if (actionImpacts.length > 80) actionImpacts.splice(0, actionImpacts.length - 80);
+}
+
+function updateActionImpacts(delta) {
+  for (let index = actionImpacts.length - 1; index >= 0; index -= 1) {
+    actionImpacts[index].timer -= delta;
+    if (actionImpacts[index].timer <= 0) actionImpacts.splice(index, 1);
+  }
+}
+
 function collectResource(target = findGatherTarget()) {
   if (player.gatherCooldown > 0) return;
   if (!target) {
@@ -2721,6 +2774,7 @@ function collectResource(target = findGatherTarget()) {
   }
 
   player.gatherCooldown = RESOURCE_GATHER_COOLDOWN[target.type] || 0.32;
+  if (requiredTool) beginToolSwing(heldItem, target);
   const gatheredType = target.type === "tree" || target.type === "branch"
     ? "wood"
     : target.type === "rock" || target.type === "pebble"
@@ -2728,6 +2782,14 @@ function collectResource(target = findGatherTarget()) {
       : target.type === "scrap"
         ? "scrap"
         : target.type === "glass_bottle" ? "glass" : "berry";
+  if (requiredTool) {
+    spawnActionImpact(
+      gatheredType,
+      target.x,
+      target.type === "tree" ? target.y - 28 : target.y - 4,
+      player.toolSwingAngle
+    );
+  }
   playGatherSound(gatheredType, target.x, target.y);
   const requiredHits = resourceHarvestHits(target.type);
   target.harvestHits = Math.min(requiredHits, (target.harvestHits || 0) + 1);
@@ -3553,7 +3615,9 @@ function fireFirearm(weapon) {
 
   weapon.loadedAmmo = loadedAmmo - 1;
   player.attackCooldown = weaponAttackCooldown(weapon);
-  player.attackTimer = weapon.type === "shotgun" ? 0.18 : 0.12;
+  player.toolSwingTimer = 0;
+  player.toolSwingType = "";
+  player.attackTimer = weapon.type === "shotgun" ? 0.2 : 0.14;
   const range = weapon.range || 720;
   const directionLength = Math.hypot(player.dirX, player.dirY) || 1;
   const baseDirectionX = player.dirX / directionLength;
@@ -3562,6 +3626,8 @@ function fireFirearm(weapon) {
   const startY = player.y - 15 + baseDirectionY * 5;
   Object.assign(pistolShot, {
     timer: weapon.type === "shotgun" ? 0.18 : 0.12,
+    duration: weapon.type === "shotgun" ? 0.18 : 0.12,
+    weaponType: weapon.type,
     startX,
     startY,
     endX: startX,
@@ -3642,6 +3708,7 @@ function updateProjectiles(delta) {
       target.x += bullet.directionX * bulletKnockback;
       target.y += bullet.directionY * bulletKnockback;
       pistolShot.hit = true;
+      spawnActionImpact("monster", target.x, target.y - 7, bullet.angle);
       playBulletImpact(target.x, target.y);
       showMessage(`${bullet.sourceLabel || "子弹"}命中怪物`, 0.65);
       projectiles.splice(index, 1);
@@ -3666,7 +3733,9 @@ function attack() {
   const range = weapon?.range || 58;
   const knockback = weaponKnockback();
   player.attackCooldown = weaponAttackCooldown(weapon);
-  player.attackTimer = 0.16;
+  player.toolSwingTimer = 0;
+  player.toolSwingType = "";
+  player.attackTimer = MELEE_SWING_DURATION;
   let hit = false;
   let soundX = player.x + player.dirX * 52;
   let soundY = player.y + player.dirY * 52;
@@ -3679,6 +3748,12 @@ function attack() {
       monster.hurtTimer = 0.18;
       monster.x += (dx / (Math.hypot(dx, dy) || 1)) * knockback;
       monster.y += (dy / (Math.hypot(dx, dy) || 1)) * knockback;
+      spawnActionImpact(
+        "monster",
+        monster.x,
+        monster.y - 8,
+        Math.atan2(dy, dx)
+      );
       hit = true;
       soundX = monster.x;
       soundY = monster.y;
@@ -4396,6 +4471,7 @@ function render() {
   drawBuildPreview();
   drawPlayer();
   drawResources("front");
+  drawActionImpacts();
   ctx.restore();
 
   drawAtmosphere();
@@ -5000,6 +5076,51 @@ function getMimicFrame(monster) {
   return Math.floor(monster.animation || 0) % 2;
 }
 
+function actionImpactPalette(type) {
+  if (type === "wood") return ["#f1c97a", "#b7753c", "#72472d"];
+  if (type === "stone") return ["#d2d4c8", "#8f948f", "#565d61"];
+  if (type === "scrap") return ["#e7a65a", "#9aa0a0", "#5d6263"];
+  return ["#fff3dc", "#d96052", "#7d1f29"];
+}
+
+function drawActionImpacts() {
+  for (const effect of actionImpacts) {
+    const remaining = Math.max(0, Math.min(1, effect.timer / effect.duration));
+    const progress = 1 - remaining;
+    const palette = actionImpactPalette(effect.type);
+    ctx.save();
+    ctx.translate(effect.x, effect.y);
+    ctx.rotate(effect.angle);
+    ctx.globalAlpha = Math.min(1, remaining * 1.6);
+    ctx.fillStyle = palette[0];
+    ctx.fillRect(-7 - progress * 4, -1, 14 + progress * 8, 2);
+    ctx.restore();
+
+    for (let particle = 0; particle < 7; particle += 1) {
+      const seed = effect.id * 17 + particle * 31;
+      const spread = (hash(seed + 3) - 0.5) * 2.8;
+      const angle = effect.angle + Math.PI + spread;
+      const distance = progress * (10 + hash(seed + 9) * 18);
+      const gravity = progress * progress * (9 + hash(seed + 15) * 8);
+      const size = 2 + Math.floor(hash(seed + 21) * 3);
+      ctx.save();
+      ctx.globalAlpha = remaining;
+      ctx.fillStyle = palette[particle % palette.length];
+      if (effect.type === "monster" && particle < 3) {
+        ctx.shadowColor = "#c93835";
+        ctx.shadowBlur = 5;
+      }
+      ctx.translate(
+        effect.x + Math.cos(angle) * distance,
+        effect.y + Math.sin(angle) * distance - progress * 7 + gravity
+      );
+      ctx.rotate(angle + progress * (particle % 2 === 0 ? 2.4 : -2.4));
+      ctx.fillRect(-size / 2, -1, size + 2, 2);
+      ctx.restore();
+    }
+  }
+}
+
 function drawProjectiles() {
   ctx.save();
   ctx.globalCompositeOperation = "screen";
@@ -5037,20 +5158,106 @@ function drawProjectiles() {
   ctx.restore();
 }
 
+function heldWeaponAction(weapon) {
+  if (!weapon) return null;
+  if (!weapon?.magazineSize
+    && player.toolSwingTimer > 0
+    && player.toolSwingType === weapon?.type) {
+    const progress = Math.max(0, Math.min(
+      1,
+      1 - player.toolSwingTimer / TOOL_SWING_DURATION
+    ));
+    return {
+      kind: "tool",
+      baseAngle: player.toolSwingAngle,
+      progress
+    };
+  }
+  if (!weapon?.magazineSize && player.attackTimer > 0) {
+    const progress = Math.max(0, Math.min(
+      1,
+      1 - player.attackTimer / MELEE_SWING_DURATION
+    ));
+    return {
+      kind: "melee",
+      baseAngle: Math.atan2(player.dirY, player.dirX),
+      progress
+    };
+  }
+  return null;
+}
+
+function weaponSwingPose(action) {
+  if (!action) return { offset: 0, side: 1, eased: 0 };
+  const side = Math.cos(action.baseAngle) < -0.08 ? -1 : 1;
+  const eased = 1 - Math.pow(1 - action.progress, 3);
+  const start = action.kind === "tool" ? -1.34 : -1.02;
+  const end = action.kind === "tool" ? 0.82 : 0.92;
+  return {
+    side,
+    eased,
+    offset: side * (start + (end - start) * eased)
+  };
+}
+
+function drawWeaponActionTrail(weapon) {
+  const action = heldWeaponAction(weapon);
+  if (!action) return;
+  const pose = weaponSwingPose(action);
+  const radius = action.kind === "tool" ? 34 : 31;
+  const tail = action.kind === "tool" ? 0.82 : 0.68;
+  const fade = Math.sin(Math.min(1, action.progress) * Math.PI);
+  ctx.save();
+  ctx.translate(player.x, player.y - 14);
+  ctx.rotate(action.baseAngle);
+  ctx.globalAlpha = 0.18 + fade * 0.58;
+  ctx.strokeStyle = weapon.type === "pickaxe"
+    ? "#c7d5d5"
+    : weapon.type === "axe"
+      ? "#e0b56c"
+      : weapon.type === "knife" ? "#e5edf0" : "#d2a56a";
+  ctx.shadowColor = ctx.strokeStyle;
+  ctx.shadowBlur = 7;
+  ctx.lineWidth = action.kind === "tool" ? 5 : 4;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.arc(
+    0,
+    0,
+    radius,
+    pose.offset - pose.side * tail,
+    pose.offset + pose.side * 0.1,
+    pose.side < 0
+  );
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawHeldWeapon(weapon) {
   const frame = HELD_WEAPON_FRAME[weapon?.type];
   if (!Number.isInteger(frame)) return;
-  const angle = Math.atan2(player.dirY, player.dirX);
+  const action = heldWeaponAction(weapon);
+  const actionPose = weaponSwingPose(action);
+  const angle = action?.baseAngle ?? Math.atan2(player.dirY, player.dirX);
+  const aimX = Math.cos(angle);
+  const aimY = Math.sin(angle);
   const firing = Boolean(weapon.magazineSize) && pistolShot.timer > 0;
-  const recoilScale = weapon.type === "shotgun" ? 6 : 3;
-  const recoil = firing ? -recoilScale * Math.min(1, pistolShot.timer / 0.12) : 0;
+  const shotDuration = weapon.type === "shotgun" ? 0.18 : 0.12;
+  const recoilStrength = firing
+    ? Math.sin(Math.min(1, pistolShot.timer / shotDuration) * Math.PI / 2)
+    : 0;
+  const recoilScale = weapon.type === "shotgun" ? 9 : 5;
+  const recoil = -recoilScale * recoilStrength;
+  const recoilRotation = firing
+    ? (aimX < 0 ? -1 : 1) * -0.075 * recoilStrength
+    : 0;
   ctx.save();
   ctx.translate(
-    player.x + player.dirX * 5,
-    player.y - 15 + player.dirY * 3
+    player.x + aimX * 5,
+    player.y - 15 + aimY * 3
   );
-  ctx.rotate(angle);
-  if (player.dirX < 0) ctx.scale(1, -1);
+  ctx.rotate(angle + actionPose.offset + recoilRotation);
+  if (aimX < 0) ctx.scale(1, -1);
   if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
     ctx.drawImage(worldSprite, frame * 16, 64, 16, 16, -3 + recoil, -16, 32, 32);
   } else {
@@ -5064,6 +5271,26 @@ function drawHeldWeapon(weapon) {
     ctx.fillRect(31 + recoil, -2, 8, 4);
   }
   ctx.restore();
+}
+
+function playerWeaponActionPose(weapon) {
+  const pose = { offsetX: 0, offsetY: 0, rotation: 0 };
+  if (!weapon) return pose;
+  if (weapon.magazineSize && pistolShot.timer > 0) {
+    const shotDuration = weapon.type === "shotgun" ? 0.18 : 0.12;
+    const recoil = Math.sin(Math.min(1, pistolShot.timer / shotDuration) * Math.PI / 2);
+    pose.offsetX = -player.dirX * recoil * (weapon.type === "shotgun" ? 2.6 : 1.4);
+    pose.offsetY = -player.dirY * recoil * (weapon.type === "shotgun" ? 2.6 : 1.4);
+    pose.rotation = (player.dirX < 0 ? -1 : 1) * -0.035 * recoil;
+    return pose;
+  }
+  const action = heldWeaponAction(weapon);
+  if (!action) return pose;
+  const swing = Math.sin(action.progress * Math.PI);
+  const side = Math.cos(action.baseAngle) < -0.08 ? -1 : 1;
+  pose.offsetY = swing * 1.5;
+  pose.rotation = side * swing * (action.kind === "tool" ? 0.055 : 0.04);
+  return pose;
 }
 
 function playerEmotePose(type = activeEmote, time = activeEmoteTime()) {
@@ -5160,12 +5387,17 @@ function drawPlayer() {
   const drawY = player.y - 37;
   const emoteTime = activeEmoteTime();
   const emotePose = playerEmotePose(activeEmote, emoteTime);
+  const actionPose = playerWeaponActionPose(heldWeapon);
   ctx.save();
   ctx.translate(player.x, player.y);
-  ctx.translate(emotePose.offsetX, emotePose.offsetY);
-  ctx.rotate(emotePose.rotation);
+  ctx.translate(
+    emotePose.offsetX + actionPose.offsetX,
+    emotePose.offsetY + actionPose.offsetY
+  );
+  ctx.rotate(emotePose.rotation + actionPose.rotation);
   ctx.scale(emotePose.scaleX, emotePose.scaleY);
   ctx.translate(-player.x, -player.y);
+  drawWeaponActionTrail(heldWeapon);
   if (heldWeapon && player.dirY < -0.28) drawHeldWeapon(heldWeapon);
   if (sprite.complete && sprite.naturalWidth >= 128 && sprite.naturalHeight >= 96) {
     ctx.save();
@@ -5186,18 +5418,6 @@ function drawPlayer() {
   }
   drawEmoteGesture(activeEmote, emoteTime);
   if (heldWeapon && player.dirY >= -0.28) drawHeldWeapon(heldWeapon);
-  if (player.attackTimer > 0 && !heldWeapon?.magazineSize) {
-    const attackAngle = Math.atan2(player.dirY, player.dirX);
-    ctx.save();
-    ctx.translate(player.x, player.y);
-    ctx.rotate(attackAngle);
-    ctx.strokeStyle = "#f2d596";
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.arc(20, 0, 23, -0.8, 0.8);
-    ctx.stroke();
-    ctx.restore();
-  }
   ctx.restore();
   if (activeEmote === "thunder_spin") drawThunderSpinEffect(emoteTime);
 }

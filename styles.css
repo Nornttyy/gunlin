@@ -1654,11 +1654,16 @@ h1 {
 .quick-slot[data-item-type="workbench"] .item-sprite { background-position: -192px -96px; }
 .quick-slot[data-item-type="trap"] .item-sprite { background-position: -224px -96px; }
 .quick-slot[data-item-type="club"] .item-sprite { background-position: 0 -128px; }
+.quick-slot[data-item-type="stone_hammer"] .item-sprite { background-position: 0 -128px; }
+.quick-slot[data-item-type="wood_axe"] .item-sprite,
 .quick-slot[data-item-type="axe"] .item-sprite { background-position: -32px -128px; }
+.quick-slot[data-item-type="iron_axe"] .item-sprite { background-position: -32px -128px; }
 .quick-slot[data-item-type="knife"] .item-sprite { background-position: -64px -128px; }
 .quick-slot[data-item-type="pistol"] .item-sprite { background-position: -96px -128px; }
 .quick-slot[data-item-type="shotgun"] .item-sprite { background-position: -128px -128px; }
+.quick-slot[data-item-type="wood_pickaxe"] .item-sprite,
 .quick-slot[data-item-type="pickaxe"] .item-sprite { background-position: -160px -128px; }
+.quick-slot[data-item-type="iron_pickaxe"] .item-sprite { background-position: -160px -128px; }
 
 @keyframes vital-panic {
   50% { opacity: .38; }
@@ -2219,6 +2224,53 @@ h1 {
   .inventory-workspace::before {
     top: 48px;
   }
+}
+
+.tier-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 15px;
+  margin-right: 4px;
+  border: 1px solid currentColor;
+  font-style: normal;
+  font-size: 8px;
+  line-height: 1;
+  vertical-align: 1px;
+}
+
+.tier-wood { color: #bf8b55; }
+.tier-stone { color: #aeb7ae; }
+.tier-iron { color: #d6e6e4; text-shadow: 0 0 5px rgba(180, 221, 217, .4); }
+
+.inventory-slot[data-item-tier="wood"],
+.quick-slot[data-item-tier="wood"],
+.weapon-craft-button[data-item-tier="wood"] {
+  border-top-color: #9a6539;
+}
+
+.inventory-slot[data-item-tier="stone"],
+.quick-slot[data-item-tier="stone"],
+.weapon-craft-button[data-item-tier="stone"] {
+  border-top-color: #899087;
+}
+
+.inventory-slot[data-item-tier="iron"],
+.quick-slot[data-item-tier="iron"],
+.weapon-craft-button[data-item-tier="iron"] {
+  border-top-color: #b9cfcc;
+}
+
+[data-item-tier="wood"] .item-sprite {
+  filter: sepia(.52) saturate(.9) brightness(.9) drop-shadow(2px 3px 0 rgba(0, 0, 0, .42)) !important;
+}
+
+[data-item-tier="stone"] .item-sprite {
+  filter: grayscale(.48) saturate(.62) brightness(1.04) drop-shadow(2px 3px 0 rgba(0, 0, 0, .42)) !important;
+}
+
+[data-item-tier="iron"] .item-sprite {
+  filter: saturate(.58) brightness(1.18) drop-shadow(2px 3px 0 rgba(0, 0, 0, .42)) !important;
 }
 
 .settings-button {
@@ -3209,10 +3261,15 @@ h1 {
 .inventory-slot[data-item-type="workbench"] .item-sprite { background-position: -192px -96px; }
 .inventory-slot[data-item-type="trap"] .item-sprite { background-position: -224px -96px; }
 .inventory-slot[data-item-type="club"] .item-sprite { background-position: 0 -128px; }
+.inventory-slot[data-item-type="stone_hammer"] .item-sprite { background-position: 0 -128px; }
+.inventory-slot[data-item-type="wood_axe"] .item-sprite,
 .inventory-slot[data-item-type="axe"] .item-sprite { background-position: -32px -128px; }
+.inventory-slot[data-item-type="iron_axe"] .item-sprite { background-position: -32px -128px; }
 .inventory-slot[data-item-type="knife"] .item-sprite { background-position: -64px -128px; }
 .inventory-slot[data-item-type="shotgun"] .item-sprite { background-position: -128px -128px; }
+.inventory-slot[data-item-type="wood_pickaxe"] .item-sprite,
 .inventory-slot[data-item-type="pickaxe"] .item-sprite { background-position: -160px -128px; }
+.inventory-slot[data-item-type="iron_pickaxe"] .item-sprite { background-position: -160px -128px; }
 .inventory-slot[data-item-type="pistol"] .item-sprite,
 .quick-slot[data-item-type="pistol"] .item-sprite { background-position: -96px -128px; }
 .inventory-slot[data-item-type="ammo_box"] .item-sprite,

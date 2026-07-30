@@ -162,6 +162,11 @@ const SHOTGUN_MAGAZINE_SIZE = 2;
 const PISTOL_BULLET_SPEED = 1600;
 const PISTOL_BULLET_WIDTH = 10;
 const SHOTGUN_PELLET_COUNT = 5;
+const EQUIPMENT_TIERS = {
+  wood: { label: "木级", shortLabel: "木", harvestHitModifier: 2 },
+  stone: { label: "石级", shortLabel: "石", harvestHitModifier: 0 },
+  iron: { label: "铁级", shortLabel: "铁", harvestHitModifier: -2 }
+};
 const EMOTES = {
   thunder_spin: { label: "雷霆旋转", kind: "dance", duration: 0 },
   de_dance: { label: "德舞", kind: "dance", duration: 0 },
@@ -196,9 +201,31 @@ function berryHealAmount() {
   return hasClassSkill(1) ? 24 : 12;
 }
 
-function resourceHarvestHits(type) {
-  const baseHits = RESOURCE_HARVEST_HITS[type] || 1;
-  return type === "tree" && hasClassSkill(2) ? Math.max(1, baseHits - 1) : baseHits;
+function equipmentTierDefinition(item) {
+  return EQUIPMENT_TIERS[item?.tier] || null;
+}
+
+function equipmentDisplayLabel(item, compact = false) {
+  const tier = equipmentTierDefinition(item);
+  if (!tier) return item?.label || "";
+  return compact
+    ? `${tier.shortLabel}·${item.label}`
+    : `${tier.label} · ${item.label}`;
+}
+
+function isHarvestTool(item) {
+  return item?.equipmentClass === "tool"
+    && (item.toolType === "axe" || item.toolType === "pickaxe");
+}
+
+function resourceHarvestHits(type, tool = null) {
+  let hits = RESOURCE_HARVEST_HITS[type] || 1;
+  if (type === "tree" && hasClassSkill(2)) hits -= 1;
+  const requiredToolType = type === "tree" ? "axe" : type === "rock" ? "pickaxe" : "";
+  if (requiredToolType && tool?.toolType === requiredToolType) {
+    hits += equipmentTierDefinition(tool)?.harvestHitModifier || 0;
+  }
+  return Math.max(1, hits);
 }
 
 function resourceHarvestYield(type) {
@@ -244,7 +271,19 @@ const TREE_ASSET_VERSION = "20260728-tree-visible2";
 const MIMIC_ASSET_VERSION = "20260728-mimic-drawn1";
 const ZOMBIE_ASSET_VERSION = "20260730-zombie1";
 const ESCAPE_GATE_ASSET_VERSION = "20260729-gate-drawn1";
-const HELD_WEAPON_FRAME = { club: 0, axe: 1, knife: 2, pistol: 3, shotgun: 4, pickaxe: 5 };
+const HELD_WEAPON_FRAME = {
+  club: 0,
+  stone_hammer: 0,
+  wood_axe: 1,
+  axe: 1,
+  iron_axe: 1,
+  knife: 2,
+  pistol: 3,
+  shotgun: 4,
+  wood_pickaxe: 5,
+  pickaxe: 5,
+  iron_pickaxe: 5
+};
 const MELEE_SWING_DURATION = 0.36;
 const TOOL_SWING_DURATION = 0.44;
 const PISTOL_RECOIL_DURATION = 0.18;
@@ -300,24 +339,30 @@ const BUILD_TYPES = [
 ];
 const WEAPON_TYPES = [
   {
-    type: "club", kind: "weapon", label: "木棒", cost: { wood: 4, stone: 0 },
+    type: "club", kind: "weapon", equipmentClass: "weapon", tier: "wood",
+    label: "木棒", cost: { wood: 4, stone: 0 },
     damage: 25, range: 54, cooldown: 0.48, requiresWorkbench: true
   },
   {
-    type: "axe", kind: "weapon", label: "石斧", cost: { wood: 2, stone: 1 },
+    type: "axe", kind: "weapon", equipmentClass: "tool", toolType: "axe", tier: "stone",
+    label: "石斧", cost: { wood: 2, stone: 1 },
     damage: 45, range: 62, cooldown: 0.62, requiresWorkbench: true
   },
   {
-    type: "pickaxe", kind: "weapon", label: "石镐", cost: { wood: 2, stone: 2 },
+    type: "pickaxe", kind: "weapon", equipmentClass: "tool", toolType: "pickaxe", tier: "stone",
+    label: "石镐", cost: { wood: 2, stone: 2 },
     damage: 38, range: 60, cooldown: 0.64, requiresWorkbench: true
   },
   {
-    type: "knife", kind: "weapon", label: "小刀", cost: { wood: 1, scrap: 2 },
-    damage: 32, range: 50, cooldown: 0.27, requiresWorkbench: true
+    type: "knife", kind: "weapon", equipmentClass: "weapon", tier: "iron",
+    label: "铁刀", cost: { wood: 1, scrap: 2 },
+    damage: 42, range: 50, cooldown: 0.27, requiresWorkbench: true
   },
   {
     type: "pistol",
     kind: "weapon",
+    equipmentClass: "weapon",
+    tier: "iron",
     label: "手枪",
     cost: { wood: 2, scrap: 8 },
     damage: 32,
@@ -329,6 +374,8 @@ const WEAPON_TYPES = [
   {
     type: "shotgun",
     kind: "weapon",
+    equipmentClass: "weapon",
+    tier: "iron",
     label: "霰弹枪",
     cost: { wood: 4, scrap: 12 },
     damage: 16,
@@ -337,6 +384,31 @@ const WEAPON_TYPES = [
     requiresWorkbench: true,
     magazineSize: SHOTGUN_MAGAZINE_SIZE,
     pellets: SHOTGUN_PELLET_COUNT
+  },
+  {
+    type: "wood_axe", kind: "weapon", equipmentClass: "tool", toolType: "axe", tier: "wood",
+    label: "木斧", cost: { wood: 3 },
+    damage: 24, range: 57, cooldown: 0.72, requiresWorkbench: true
+  },
+  {
+    type: "iron_axe", kind: "weapon", equipmentClass: "tool", toolType: "axe", tier: "iron",
+    label: "铁斧", cost: { wood: 2, stone: 1, scrap: 5 },
+    damage: 58, range: 65, cooldown: 0.52, requiresWorkbench: true
+  },
+  {
+    type: "wood_pickaxe", kind: "weapon", equipmentClass: "tool", toolType: "pickaxe", tier: "wood",
+    label: "木镐", cost: { wood: 3 },
+    damage: 20, range: 55, cooldown: 0.74, requiresWorkbench: true
+  },
+  {
+    type: "iron_pickaxe", kind: "weapon", equipmentClass: "tool", toolType: "pickaxe", tier: "iron",
+    label: "铁镐", cost: { wood: 2, stone: 1, scrap: 6 },
+    damage: 52, range: 63, cooldown: 0.54, requiresWorkbench: true
+  },
+  {
+    type: "stone_hammer", kind: "weapon", equipmentClass: "weapon", tier: "stone",
+    label: "石锤", cost: { wood: 2, stone: 3 },
+    damage: 38, range: 57, cooldown: 0.55, requiresWorkbench: true
   }
 ];
 const SUPPLY_RECIPES = [
@@ -2554,7 +2626,7 @@ function interact() {
   }
   if (nearbyWorkbench()) {
     setInventoryOpen(true);
-    if (craftStatus) craftStatus.textContent = "工作台已连接：选择一种武器制作";
+    if (craftStatus) craftStatus.textContent = "工作台已连接：选择木、石或铁级工具与武器";
     showMessage("打开工作台", 1);
     return;
   }
@@ -2778,8 +2850,8 @@ function findGatherTarget() {
 }
 
 function requiredHarvestTool(type) {
-  if (type === "tree") return { type: "axe", label: "石斧" };
-  if (type === "rock") return { type: "pickaxe", label: "石镐" };
+  if (type === "tree") return { toolType: "axe", label: "斧头" };
+  if (type === "rock") return { toolType: "pickaxe", label: "镐子" };
   return null;
 }
 
@@ -2828,7 +2900,7 @@ function collectResource(target = findGatherTarget()) {
 
   const requiredTool = requiredHarvestTool(target.type);
   const heldItem = equippedQuickbarItem();
-  if (requiredTool && heldItem?.type !== requiredTool.type) {
+  if (requiredTool && heldItem?.toolType !== requiredTool.toolType) {
     const action = target.type === "tree" ? "砍树" : "采石";
     showMessage(`${action}需要先装备${requiredTool.label}`, 1.2);
     return;
@@ -2856,7 +2928,7 @@ function collectResource(target = findGatherTarget()) {
     );
   }
   playGatherSound(gatheredType, target.x, target.y);
-  const requiredHits = resourceHarvestHits(target.type);
+  const requiredHits = resourceHarvestHits(target.type, heldItem);
   target.harvestHits = Math.min(requiredHits, (target.harvestHits || 0) + 1);
   if (target.harvestHits < requiredHits) {
     const action = target.type === "tree"
@@ -2995,11 +3067,13 @@ function nearbyWorkbench() {
 function renderWeaponCrafting() {
   const hasWorkbench = Boolean(nearbyWorkbench());
   if (workbenchStatus) {
-    workbenchStatus.textContent = hasWorkbench ? "工作台已连接" : "靠近工作台后解锁";
+    workbenchStatus.textContent = hasWorkbench ? "木 / 石 / 铁三级已解锁" : "靠近工作台后解锁";
   }
   weaponCraftButtons.forEach((button) => {
     const recipe = WEAPON_TYPES[Number(button.dataset.weaponRecipe)];
     if (!recipe) return;
+    button.dataset.itemTier = recipe.tier || "";
+    button.dataset.equipmentClass = recipe.equipmentClass || "weapon";
     const unlocked = recipe.requiresWorkbench === false || hasWorkbench;
     const hasSpace = inventoryItems.some((item) => item === null)
       || quickbarItems.some((item) => item === null);
@@ -3012,7 +3086,7 @@ function renderWeaponCrafting() {
       : !hasSpace
         ? "背包和快捷栏都已满"
         : affordable
-          ? `制作${recipe.label}：${recipeCostText(recipe.cost)}`
+          ? `制作${equipmentDisplayLabel(recipe)}：${recipeCostText(recipe.cost)}`
           : `材料不足：${recipeCostText(recipe.cost)}`;
   });
 }
@@ -3023,7 +3097,7 @@ function craftWeapon(weaponIndex) {
   if (!recipe) return;
   const needsWorkbench = recipe.requiresWorkbench !== false;
   if (needsWorkbench && !nearbyWorkbench()) {
-    if (craftStatus) craftStatus.textContent = `制作${recipe.label}需要靠近工作台`;
+    if (craftStatus) craftStatus.textContent = `制作${equipmentDisplayLabel(recipe)}需要靠近工作台`;
     renderWeaponCrafting();
     return;
   }
@@ -3046,8 +3120,8 @@ function craftWeapon(weaponIndex) {
   playBuildSound(player.x, player.y);
   if (craftStatus) {
     craftStatus.textContent = quickIndex >= 0
-      ? `已制作${recipe.label}，放入快捷栏 ${quickIndex + 1}`
-      : `快捷栏已满，${recipe.label}放入背包 ${inventoryIndex + 1}`;
+      ? `已制作${equipmentDisplayLabel(recipe)}，放入快捷栏 ${quickIndex + 1}`
+      : `快捷栏已满，${equipmentDisplayLabel(recipe)}放入背包 ${inventoryIndex + 1}`;
   }
   updateHud();
 }
@@ -3662,8 +3736,7 @@ function usePrimaryAction() {
     collectResource();
     return;
   }
-  const isHarvestTool = heldItem.type === "axe" || heldItem.type === "pickaxe";
-  if (!isHarvestTool || hasMonsterInWeaponRange(heldItem)) {
+  if (!isHarvestTool(heldItem) || hasMonsterInWeaponRange(heldItem)) {
     attack();
     return;
   }
@@ -4160,7 +4233,9 @@ function renderInventory() {
     slot.classList.toggle("item-empty", !item);
     slot.classList.toggle("empty-slot", !item);
     slot.dataset.itemType = item?.type || "empty";
-    slot.dataset.label = item?.label || "";
+    slot.dataset.itemTier = item?.tier || "";
+    slot.dataset.equipmentClass = item?.equipmentClass || "";
+    slot.dataset.label = item ? equipmentDisplayLabel(item, true) : "";
     slot.dataset.count = item ? String(amount) : "";
     slot.draggable = Boolean(item);
     const useTip = item?.type === "berry"
@@ -4172,7 +4247,7 @@ function renderInventory() {
       ? `，弹药 ${item.loadedAmmo}/${item.magazineSize}`
       : "";
     slot.title = item
-      ? `${item.label} ×${amount}${firearmTip}${useTip}；拖动可整理，右键拆分`
+      ? `${equipmentDisplayLabel(item)} ×${amount}${firearmTip}${useTip}；拖动可整理，右键拆分`
       : "空格，可以把物品拖到这里";
     slot.setAttribute("aria-label", slot.title);
   });
@@ -4187,11 +4262,13 @@ function renderChestStorage() {
     slot.classList.toggle("item-empty", !item);
     slot.classList.toggle("empty-slot", !item);
     slot.dataset.itemType = item?.type || "empty";
-    slot.dataset.label = item?.label || "";
+    slot.dataset.itemTier = item?.tier || "";
+    slot.dataset.equipmentClass = item?.equipmentClass || "";
+    slot.dataset.label = item ? equipmentDisplayLabel(item, true) : "";
     slot.dataset.count = item ? String(item.count) : "";
     slot.draggable = Boolean(item);
     slot.title = item
-      ? `${item.label} ×${item.count}；拖回背包可取出，右键拆分`
+      ? `${equipmentDisplayLabel(item)} ×${item.count}；拖回背包可取出，右键拆分`
       : "储物箱空格，把背包物品拖到这里";
     slot.setAttribute("aria-label", slot.title);
   });
@@ -4482,13 +4559,15 @@ function updateHud() {
     slot.classList.toggle("quick-empty", !item);
     slot.dataset.itemKind = item?.kind || "empty";
     slot.dataset.itemType = item?.type || "empty";
-    slot.dataset.label = item?.label || "空";
+    slot.dataset.itemTier = item?.tier || "";
+    slot.dataset.equipmentClass = item?.equipmentClass || "";
+    slot.dataset.label = item ? equipmentDisplayLabel(item, true) : "空";
     slot.dataset.count = amount === null ? "" : String(amount);
     slot.draggable = Boolean(item);
     slot.title = item
       ? item.magazineSize
-        ? `${item.label} · 弹药 ${amount}/${item.magazineSize} · R 换弹`
-        : `${item.label}${amount === null ? "" : ` ×${amount}`}${
+        ? `${equipmentDisplayLabel(item)} · 弹药 ${amount}/${item.magazineSize} · R 换弹`
+        : `${equipmentDisplayLabel(item)}${amount === null ? "" : ` ×${amount}`}${
           item.type === "glass_bottle" ? " · 靠近水边按 E 装水" : ""
         }`
       : "空快捷格";
@@ -4500,9 +4579,14 @@ function updateHud() {
   } else if (selectedItem?.kind === "food" && selectedItem.type === "berry") {
     buildingLabel.textContent = `快捷 ${selectedQuickSlot + 1}：浆果（${player.berry}）`;
   } else if (selectedItem?.magazineSize) {
-    buildingLabel.textContent = `当前武器：${selectedItem.label} · 弹药 ${selectedItem.loadedAmmo}/${selectedItem.magazineSize} · 弹药箱 ${portableItemCount("ammo_box")} · R 换弹`;
+    buildingLabel.textContent = `当前武器：${equipmentDisplayLabel(selectedItem)} · 弹药 ${selectedItem.loadedAmmo}/${selectedItem.magazineSize} · 弹药箱 ${portableItemCount("ammo_box")} · R 换弹`;
+  } else if (selectedItem?.equipmentClass === "tool") {
+    const efficiency = selectedItem.tier === "wood"
+      ? "基础开采"
+      : selectedItem.tier === "iron" ? "快速开采" : "标准开采";
+    buildingLabel.textContent = `当前工具：${equipmentDisplayLabel(selectedItem)} · ${efficiency}`;
   } else if (selectedItem?.kind === "weapon") {
-    buildingLabel.textContent = `当前武器：${selectedItem.label || "武器"}`;
+    buildingLabel.textContent = `当前武器：${equipmentDisplayLabel(selectedItem) || "武器"}`;
   } else if (selectedItem?.kind === "material") {
     buildingLabel.textContent = `当前物品：${selectedItem.label}`;
   } else if (selectedItem) {
@@ -4966,7 +5050,7 @@ function drawResources(layer = "all") {
 function drawHarvestProgress(resource) {
   const hits = resource.harvestHits || 0;
   if (hits <= 0) return;
-  const requiredHits = resourceHarvestHits(resource.type);
+  const requiredHits = resourceHarvestHits(resource.type, equippedQuickbarItem());
   const width = 38;
   const x = Math.round(resource.x - width / 2);
   const y = Math.round(resource.y - (resource.type === "tree" ? 171 : 36));
@@ -5348,9 +5432,9 @@ function drawWeaponActionTrail(weapon) {
   ctx.translate(player.x, player.y - 14);
   ctx.rotate(action.baseAngle);
   ctx.globalAlpha = fade * 0.76;
-  ctx.strokeStyle = weapon.type === "pickaxe"
+  ctx.strokeStyle = weapon.toolType === "pickaxe"
     ? "#c7d5d5"
-    : weapon.type === "axe"
+    : weapon.toolType === "axe"
       ? "#e0b56c"
       : weapon.type === "knife" ? "#e5edf0" : "#d2a56a";
   ctx.shadowColor = ctx.strokeStyle;
@@ -5393,9 +5477,15 @@ function drawHeldWeapon(weapon) {
   ctx.rotate(angle + actionPose.offset + recoilRotation);
   if (aimX < 0) ctx.scale(1, -1);
   if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
+    if (weapon.tier === "wood") ctx.filter = "sepia(.5) saturate(.82) brightness(.9)";
+    if (weapon.tier === "stone") ctx.filter = "grayscale(.48) saturate(.62) brightness(1.04)";
+    if (weapon.tier === "iron") ctx.filter = "saturate(.55) brightness(1.22)";
     ctx.drawImage(worldSprite, frame * 16, 64, 16, 16, -3 + recoil, -16, 32, 32);
+    ctx.filter = "none";
   } else {
-    ctx.fillStyle = weapon.magazineSize ? "#5a5144" : "#76523b";
+    ctx.fillStyle = weapon.tier === "iron"
+      ? "#aeb9b9"
+      : weapon.tier === "stone" ? "#777b76" : "#76523b";
     ctx.fillRect(recoil, -3, weapon.type === "shotgun" ? 31 : weapon.magazineSize ? 24 : 27, 6);
   }
   if (firing) {

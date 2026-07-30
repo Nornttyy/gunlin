@@ -1269,6 +1269,21 @@ h1 {
   animation: weather-signal 2.6s steps(2, end) infinite;
 }
 
+.game-screen.blood-moon #weatherLabel {
+  color: #f0716b;
+  text-shadow: 0 0 10px rgba(209, 35, 40, .62);
+  animation: blood-moon-signal 1.3s ease-in-out infinite alternate;
+}
+
+.game-screen.blood-moon .hud-stamp::before {
+  background: #d33a3e;
+  box-shadow: 0 0 13px rgba(224, 49, 53, .8);
+}
+
+.game-screen.blood-moon .phase-track > span {
+  background: linear-gradient(90deg, #5a2024, #bd4b47);
+}
+
 .hud-primary #phaseLabel::before,
 .hud-primary #dayLabel::before,
 .hud-primary #classLabel::before,
@@ -1666,6 +1681,11 @@ h1 {
   88% { opacity: .35; }
   91% { opacity: .85; }
   94% { opacity: .48; }
+}
+
+@keyframes blood-moon-signal {
+  from { opacity: .72; }
+  to { opacity: 1; }
 }
 
 @media (max-width: 860px) {

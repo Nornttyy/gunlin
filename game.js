@@ -31,6 +31,11 @@ const WEATHER_DEFINITIONS = {
   rain: { label: "降雨", minDuration: 110, maxDuration: 230 },
   storm: { label: "雷暴", minDuration: 75, maxDuration: 150 }
 };
+const BLOOD_MOON_CHANCE = 0.22;
+const BLOOD_MOON_HEALTH_MULTIPLIER = 1.5;
+const BLOOD_MOON_DAMAGE_MULTIPLIER = 1.35;
+const BLOOD_MOON_SPEED_MULTIPLIER = 1.3;
+const BLOOD_MOON_SPAWN_INTERVAL_MULTIPLIER = 0.5;
 const MIMIC_DETECTION_DISTANCE = 360;
 const MIMIC_LOSE_DISTANCE = 540;
 const MIMIC_ATTACK_DISTANCE = 27;
@@ -415,6 +420,9 @@ const weather = {
   thunderPan: 0,
   wind: 0.18
 };
+let bloodMoonActive = false;
+let bloodMoonNightNumber = 0;
+let bloodMoonPulse = 0;
 
 const player = {
   x: PLAYER_START.x,
@@ -825,6 +833,10 @@ function saveGame(announce = true) {
     wasNight,
     spawnTimer,
     weather: serializeWeather(),
+    bloodMoon: {
+      active: bloodMoonActive,
+      nightNumber: bloodMoonNightNumber
+    },
     selectedBuild,
     selectedQuickSlot,
     selectedClass,
@@ -1377,6 +1389,40 @@ function playPhaseSound(night) {
   }
 }
 
+function playBloodMoonStartSound() {
+  playTone({
+    frequency: 64,
+    endFrequency: 31,
+    type: "sine",
+    duration: 1.8,
+    volume: 0.058,
+    pan: -0.2,
+    bus: "ambience",
+    attack: 0.12
+  });
+  playNoise({
+    duration: 1.9,
+    volume: 0.045,
+    frequency: 180,
+    filterType: "lowpass",
+    resonance: 0.35,
+    pan: 0.25,
+    bus: "ambience",
+    attack: 0.18
+  });
+  playTone({
+    frequency: 92,
+    endFrequency: 46,
+    type: "triangle",
+    duration: 1.15,
+    volume: 0.026,
+    delay: 0.32,
+    pan: 0.35,
+    bus: "ambience",
+    attack: 0.1
+  });
+}
+
 function playRainAmbience(intensity) {
   const stormStrength = weatherBlend("storm");
   const pan = Math.max(-0.85, Math.min(0.85, weather.wind * 0.55 + (Math.random() - 0.5) * 0.35));
@@ -1642,6 +1688,7 @@ function startGame() {
   wasNight = false;
   spawnTimer = 4;
   resetWeather();
+  resetBloodMoon();
   autosaveTimer = 20;
   selectedBuild = 0;
   selectedQuickSlot = -1;
@@ -1744,6 +1791,7 @@ function continueGame() {
   wasNight = Boolean(saved.wasNight);
   spawnTimer = Number.isFinite(saved.spawnTimer) ? saved.spawnTimer : 4;
   restoreWeather(saved.weather);
+  restoreBloodMoon(saved.bloodMoon);
   autosaveTimer = 20;
   selectedBuild = Math.max(0, Math.min(
     BUILD_TYPES.length - 1,
@@ -1814,6 +1862,7 @@ function continueGame() {
     saved.harvestedResourceKeys.forEach((key) => harvestedResourceKeys.add(String(key)));
   }
   restoreList(monsters, saved.monsters);
+  if (bloodMoonActive) monsters.forEach(applyBloodMoonBuff);
   restoreList(barricades, saved.barricades);
   restoreList(doors, saved.doors);
   restoreList(buildings, saved.buildings);
@@ -2133,6 +2182,56 @@ function updateWeather(delta) {
   updateWeatherAudio(delta);
 }
 
+function resetBloodMoon() {
+  bloodMoonActive = false;
+  bloodMoonNightNumber = 0;
+  bloodMoonPulse = 0;
+}
+
+function restoreBloodMoon(savedBloodMoon) {
+  bloodMoonNightNumber = Math.max(0, Math.floor(Number(savedBloodMoon?.nightNumber) || 0));
+  bloodMoonActive = Boolean(savedBloodMoon?.active) && isNight();
+  bloodMoonPulse = 0;
+  if (!savedBloodMoon && isNight()) {
+    beginNightSpecialWeather(Math.random(), false);
+  }
+}
+
+function setBloodMoon(active, playSound = true) {
+  bloodMoonActive = Boolean(active) && isNight();
+  bloodMoonPulse = 0;
+  if (bloodMoonActive && playSound) playBloodMoonStartSound();
+  gameScreen.classList.toggle("blood-moon", bloodMoonActive);
+  gameScreen.dataset.bloodMoon = bloodMoonActive ? "active" : "inactive";
+  return bloodMoonActive;
+}
+
+function beginNightSpecialWeather(roll = Math.random(), playSound = true) {
+  bloodMoonNightNumber = dayNumber;
+  return setBloodMoon(roll < BLOOD_MOON_CHANCE, playSound);
+}
+
+function bloodMoonSpawnInterval() {
+  const normalInterval = Math.max(5, 15 - dayNumber * 0.8);
+  return bloodMoonActive
+    ? Math.max(2.8, normalInterval * BLOOD_MOON_SPAWN_INTERVAL_MULTIPLIER)
+    : normalInterval;
+}
+
+function bloodMoonMonsterDamage(monster, baseDamage) {
+  return Math.max(1, Math.round(
+    baseDamage * (monster?.bloodMoonBuffed ? BLOOD_MOON_DAMAGE_MULTIPLIER : 1)
+  ));
+}
+
+function applyBloodMoonBuff(monster) {
+  if (!monster || monster.bloodMoonBuffed) return monster;
+  monster.health = Math.round(Math.max(1, monster.health) * BLOOD_MOON_HEALTH_MULTIPLIER);
+  monster.speed *= BLOOD_MOON_SPEED_MULTIPLIER;
+  monster.bloodMoonBuffed = true;
+  return monster;
+}
+
 function updateEscapeGateDiscovery() {
   if (escapeGate.discovered || escapeGateDistance() > ESCAPE_GATE_DISCOVERY_DISTANCE) return;
   escapeGate.discovered = true;
@@ -2150,11 +2249,17 @@ function update(delta) {
 
   if (night !== wasNight) {
     wasNight = night;
+    if (night) beginNightSpecialWeather();
+    else setBloodMoon(false, false);
     playPhaseSound(night);
     showMessage(night ? "夜幕降临：不要相信雾里的眼睛" : "天亮了：怪物正在退回深林");
-    if (night) spawnMonster();
+    if (night) {
+      spawnMonster();
+      spawnTimer = bloodMoonActive ? 2.8 : 4;
+    }
   }
 
+  if (bloodMoonActive) bloodMoonPulse += delta;
   updatePlayer(delta);
   updateEscapeGateDiscovery();
   updateDoors(delta);
@@ -2166,7 +2271,7 @@ function update(delta) {
   spawnTimer -= delta;
   if (night && spawnTimer <= 0) {
     spawnMonster();
-    spawnTimer = Math.max(5, 15 - dayNumber * 0.8);
+    spawnTimer = bloodMoonSpawnInterval();
   }
 
   if (messageTimer > 0) {
@@ -3632,6 +3737,7 @@ function spawnMonster(forcedType = null) {
     dead: false,
     deathTimer: 0
   });
+  if (bloodMoonActive) applyBloodMoonBuff(monsters[monsters.length - 1]);
 }
 
 function triggerMimicJumpscare(worldX = player.x) {
@@ -3779,12 +3885,14 @@ function updateMonsters(delta, night) {
       } else {
         if (monster.attackCooldown <= 0 && player.hurtTimer <= 0) {
           if (isZombie) {
-            player.health = Math.max(0, player.health - ZOMBIE_ATTACK_DAMAGE);
+            const damage = bloodMoonMonsterDamage(monster, ZOMBIE_ATTACK_DAMAGE);
+            player.health = Math.max(0, player.health - damage);
             player.hurtTimer = 0.62;
             monster.attackCooldown = 1.15;
             playZombieAttack(monster);
           } else {
-            player.health = Math.max(0, player.health - MIMIC_JUMPSCARE_DAMAGE);
+            const damage = bloodMoonMonsterDamage(monster, MIMIC_JUMPSCARE_DAMAGE);
+            player.health = Math.max(0, player.health - damage);
             player.hurtTimer = 0.9;
             monster.attackCooldown = 2.2;
             monster.alerted = false;
@@ -3816,7 +3924,8 @@ function findBlockingDefense(x, y, radius) {
 
 function attackDefense(monster, defense) {
   if (monster.attackCooldown > 0) return;
-  defense.item.health -= monster.type === "zombie" ? 9 + dayNumber : 12 + dayNumber * 2;
+  const baseDamage = monster.type === "zombie" ? 9 + dayNumber : 12 + dayNumber * 2;
+  defense.item.health -= bloodMoonMonsterDamage(monster, baseDamage);
   monster.attackCooldown = monster.type === "zombie" ? 1.1 : 0.8;
   if (defense.item.health > 0) return;
   const index = defense.list.indexOf(defense.item);
@@ -4183,12 +4292,17 @@ function updateHud() {
   }
   dayLabel.textContent = `第 ${dayNumber} 天`;
   if (weatherLabel) {
-    weatherLabel.textContent = WEATHER_DEFINITIONS[weather.type]?.label || "晴朗";
-    weatherLabel.title = precipitationIntensity() > 0.1
-      ? "雨声会掩盖脚步，怪物更难发现你"
-      : "当前天气不会影响怪物的感知";
+    const normalWeather = WEATHER_DEFINITIONS[weather.type]?.label || "晴朗";
+    weatherLabel.textContent = bloodMoonActive ? `血月·${normalWeather}` : normalWeather;
+    weatherLabel.title = bloodMoonActive
+      ? "血月：怪物生命、伤害、速度与刷新率全部提高"
+      : precipitationIntensity() > 0.1
+        ? "雨声会掩盖脚步，怪物更难发现你"
+        : "当前天气不会影响怪物的感知";
   }
   gameScreen.dataset.weather = weather.type;
+  gameScreen.dataset.bloodMoon = bloodMoonActive ? "active" : "inactive";
+  gameScreen.classList.toggle("blood-moon", bloodMoonActive);
   healthLabel.textContent = `生命 ${Math.max(0, Math.round(player.health))}`;
   if (phaseProgress) {
     phaseProgress.style.width = `${Math.round(currentPhaseProgress() * 100)}%`;
@@ -4785,6 +4899,20 @@ function drawMonsters() {
     ctx.beginPath();
     ctx.ellipse(monster.x, monster.y + 15, monster.dead ? 17 : 20, monster.dead ? 5 : 7, 0, 0, Math.PI * 2);
     ctx.fill();
+    if (monster.bloodMoonBuffed && !monster.dead) {
+      const aura = ctx.createRadialGradient(
+        monster.x,
+        monster.y - 7,
+        4,
+        monster.x,
+        monster.y - 7,
+        34
+      );
+      aura.addColorStop(0, "rgba(174, 34, 38, .18)");
+      aura.addColorStop(1, "rgba(91, 5, 12, 0)");
+      ctx.fillStyle = aura;
+      ctx.fillRect(monster.x - 34, monster.y - 41, 68, 68);
+    }
 
     if (isZombie && zombieSprite.complete
       && zombieSprite.naturalWidth >= 176 && zombieSprite.naturalHeight >= 16) {
@@ -5079,7 +5207,9 @@ function drawAtmosphere() {
   gameScreen.classList.toggle("is-night", darkness > 0.68);
   drawSkyTint(darkness);
   drawWeatherTint(darkness);
+  drawBloodMoonTint(darkness);
   drawNightCurtain(darkness);
+  drawBloodMoonOrb(darkness);
   drawCampfireGlow(darkness);
   drawFlashlightGlow(darkness);
   drawDriftingFog(darkness);
@@ -5112,6 +5242,50 @@ function drawWeatherTint(darkness) {
   tint.addColorStop(1, `rgba(11, 20, 22, ${cloud * 0.18 + rain * 0.06})`);
   ctx.fillStyle = tint;
   ctx.fillRect(0, 0, W, H);
+}
+
+function drawBloodMoonTint(darkness) {
+  if (!bloodMoonActive || darkness <= 0.05) return;
+  const pulse = 0.88 + Math.sin(bloodMoonPulse * 0.82) * 0.12;
+  const tint = ctx.createRadialGradient(W * 0.78, H * 0.16, 20, W * 0.55, H * 0.45, W * 0.75);
+  tint.addColorStop(0, `rgba(126, 15, 20, ${darkness * 0.2 * pulse})`);
+  tint.addColorStop(0.48, `rgba(89, 8, 14, ${darkness * 0.14 * pulse})`);
+  tint.addColorStop(1, `rgba(42, 0, 8, ${darkness * 0.18})`);
+  ctx.fillStyle = tint;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function drawBloodMoonOrb(darkness) {
+  if (!bloodMoonActive || darkness <= 0.12) return;
+  const x = W - 94;
+  const y = 82;
+  const radius = 28 + Math.sin(bloodMoonPulse * 0.5) * 1.2;
+  const cloudCover = overcastIntensity();
+  const alpha = darkness * (0.86 - cloudCover * 0.32);
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  const glow = ctx.createRadialGradient(x, y, 4, x, y, 78);
+  glow.addColorStop(0, `rgba(236, 82, 78, ${alpha * 0.4})`);
+  glow.addColorStop(0.38, `rgba(161, 24, 31, ${alpha * 0.24})`);
+  glow.addColorStop(1, "rgba(86, 4, 12, 0)");
+  ctx.fillStyle = glow;
+  ctx.fillRect(x - 78, y - 78, 156, 156);
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = "#a52931";
+  ctx.shadowColor = "#d33c40";
+  ctx.shadowBlur = 15;
+  ctx.beginPath();
+  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.globalAlpha = alpha * 0.34;
+  ctx.fillStyle = "#4d0910";
+  ctx.beginPath();
+  ctx.arc(x - 9, y - 7, 6, 0, Math.PI * 2);
+  ctx.arc(x + 8, y + 6, 8, 0, Math.PI * 2);
+  ctx.arc(x + 5, y - 11, 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 
 function getRainDrop(index, time = elapsed, intensity = precipitationIntensity()) {
@@ -5383,6 +5557,7 @@ function drawWatchingEyes(darkness) {
     const distance = Math.hypot(dx, dy);
     const pulse = Math.max(0, Math.sin(elapsed * 0.58 + index * 1.91));
     let alpha = (0.12 + darkness * 0.88) * (0.015 + Math.pow(pulse, 7) * (0.07 + darkness * 0.42));
+    if (bloodMoonActive) alpha *= 1.45;
 
     if (player.flashlight && distance < 330) {
       const eyeAngle = Math.atan2(dy, dx);

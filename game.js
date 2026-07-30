@@ -213,7 +213,7 @@ function trapStats() {
     : { uses: 3, range: 35, damage: 45 };
 }
 
-const ASSET_VERSION = "20260730-potions1";
+const ASSET_VERSION = "20260730-bottles1";
 const PLAYER_ASSET_VERSION = "20260728-player-redraw1";
 const TREE_ASSET_VERSION = "20260728-tree-visible2";
 const MIMIC_ASSET_VERSION = "20260728-mimic-drawn1";
@@ -4294,6 +4294,10 @@ function drawResources(layer = "all") {
       ctx.fillRect(resource.x + 1, resource.y - 9, 8, 13);
       ctx.fillRect(resource.x - 4, resource.y + 4, 12, 5);
     } else if (resource.type === "glass_bottle") {
+      if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
+        ctx.drawImage(worldSprite, 6 * 16, 16, 16, 16, resource.x - 16, resource.y - 16, 32, 32);
+        continue;
+      }
       ctx.save();
       ctx.fillStyle = "rgba(3, 7, 7, .35)";
       ctx.beginPath();

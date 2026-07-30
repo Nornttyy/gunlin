@@ -207,12 +207,12 @@ function trapStats() {
     : { uses: 3, range: 35, damage: 45 };
 }
 
-const ASSET_VERSION = "20260728-assets2";
+const ASSET_VERSION = "20260730-pickaxe1";
 const PLAYER_ASSET_VERSION = "20260728-player-redraw1";
 const TREE_ASSET_VERSION = "20260728-tree-visible2";
 const MIMIC_ASSET_VERSION = "20260728-mimic-drawn1";
 const ESCAPE_GATE_ASSET_VERSION = "20260729-gate-drawn1";
-const HELD_WEAPON_FRAME = { club: 0, axe: 1, pickaxe: 2, pistol: 3 };
+const HELD_WEAPON_FRAME = { club: 0, axe: 1, knife: 2, pistol: 3, shotgun: 4, pickaxe: 5 };
 const sprite = new Image();
 const worldSprite = new Image();
 const treeSprite = new Image();

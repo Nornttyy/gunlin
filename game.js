@@ -541,26 +541,13 @@ const RESOURCE_CHUNK_KEEP_RADIUS = 2;
 const RESOURCE_MAX_PER_CHUNK = 8;
 const RESOURCE_MIN_GAP = 34;
 const STARTER_RESOURCES = [
-  { type: "branch", offsetX: -66, offsetY: 0 },
-  { type: "branch", offsetX: 66, offsetY: 0 },
-  { type: "branch", offsetX: -86, offsetY: 58 },
-  { type: "branch", offsetX: 84, offsetY: 58 },
-  { type: "branch", offsetX: -38, offsetY: 118 },
-  { type: "pebble", offsetX: 0, offsetY: 38 },
-  { type: "pebble", offsetX: 38, offsetY: 88 },
-  { type: "pebble", offsetX: 4, offsetY: 142 },
-  { type: "pebble", offsetX: 82, offsetY: 126 },
-  { type: "branch", offsetX: -122, offsetY: 24 },
-  { type: "branch", offsetX: 124, offsetY: 26 },
-  { type: "branch", offsetX: -132, offsetY: 92 },
-  { type: "branch", offsetX: 128, offsetY: 94 },
-  { type: "branch", offsetX: -92, offsetY: 156 },
-  { type: "pebble", offsetX: 94, offsetY: 164 },
-  { type: "scrap", offsetX: -154, offsetY: 132 },
-  { type: "scrap", offsetX: 154, offsetY: 138 },
-  { type: "scrap", offsetX: 18, offsetY: 188 },
-  { type: "glass_bottle", offsetX: -188, offsetY: 74 },
-  { type: "glass_bottle", offsetX: 188, offsetY: 78 }
+  { type: "branch", offsetX: -132, offsetY: 18 },
+  { type: "branch", offsetX: 142, offsetY: 48 },
+  { type: "branch", offsetX: -78, offsetY: 174 },
+  { type: "pebble", offsetX: -164, offsetY: 108 },
+  { type: "pebble", offsetX: 158, offsetY: 142 },
+  { type: "scrap", offsetX: 34, offsetY: 214 },
+  { type: "glass_bottle", offsetX: 188, offsetY: 82 }
 ];
 let activeResourceChunk = "";
 const monsters = [];

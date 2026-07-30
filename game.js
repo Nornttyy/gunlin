@@ -112,6 +112,7 @@ const chestCapacity = document.getElementById("chestCapacity");
 const chestSlots = [...document.querySelectorAll("[data-chest-slot]")];
 const craftButtons = [...document.querySelectorAll(".craft-button")];
 const weaponCraftButtons = [...document.querySelectorAll(".weapon-craft-button")];
+const supplyCraftButtons = [...document.querySelectorAll(".supply-craft-button")];
 const craftStatus = document.getElementById("craftStatus");
 const workbenchStatus = document.getElementById("workbenchStatus");
 const inventoryItems = Array(12).fill(null);
@@ -120,7 +121,8 @@ const quickbarItems = Array(9).fill(null);
 const RESOURCE_ITEMS = [
   { type: "wood", kind: "material", label: "木材" },
   { type: "stone", kind: "material", label: "石头" },
-  { type: "berry", kind: "food", label: "浆果" }
+  { type: "berry", kind: "food", label: "浆果" },
+  { type: "scrap", kind: "material", label: "废铁" }
 ];
 const PORTABLE_ITEMS = [
   { type: "ammo_box", kind: "ammo", label: "弹药箱" },
@@ -129,8 +131,10 @@ const PORTABLE_ITEMS = [
   { type: "strength_potion", kind: "consumable", label: "力量药水" }
 ];
 const PISTOL_MAGAZINE_SIZE = 7;
+const SHOTGUN_MAGAZINE_SIZE = 2;
 const PISTOL_BULLET_SPEED = 1600;
 const PISTOL_BULLET_WIDTH = 10;
+const SHOTGUN_PELLET_COUNT = 5;
 const EMOTES = {
   thunder_spin: { label: "雷霆旋转", kind: "dance", duration: 0 },
   de_dance: { label: "德舞", kind: "dance", duration: 0 },
@@ -273,18 +277,43 @@ const WEAPON_TYPES = [
     damage: 38, range: 60, cooldown: 0.64, requiresWorkbench: true
   },
   {
+    type: "knife", kind: "weapon", label: "小刀", cost: { wood: 1, scrap: 2 },
+    damage: 32, range: 50, cooldown: 0.27, requiresWorkbench: true
+  },
+  {
     type: "pistol",
     kind: "weapon",
     label: "手枪",
-    cost: { wood: 0, stone: 0 },
+    cost: { wood: 2, scrap: 8 },
     damage: 32,
     range: 720,
     cooldown: 0.42,
+    requiresWorkbench: true,
     magazineSize: PISTOL_MAGAZINE_SIZE
+  },
+  {
+    type: "shotgun",
+    kind: "weapon",
+    label: "霰弹枪",
+    cost: { wood: 4, scrap: 12 },
+    damage: 16,
+    range: 500,
+    cooldown: 0.8,
+    requiresWorkbench: true,
+    magazineSize: SHOTGUN_MAGAZINE_SIZE,
+    pellets: SHOTGUN_PELLET_COUNT
   }
 ];
-const RESOURCE_HARVEST_HITS = { tree: 7, rock: 6, berry: 3, branch: 1, pebble: 1 };
-const RESOURCE_GATHER_COOLDOWN = { tree: 0.42, rock: 0.46, berry: 0.3, branch: 0.16, pebble: 0.18 };
+const SUPPLY_RECIPES = [
+  { type: "ammo_box", label: "弹药箱", cost: { stone: 1, scrap: 3 }, requiresWorkbench: true },
+  { type: "medkit", label: "医疗包", cost: { berry: 4, scrap: 1 }, requiresWorkbench: true },
+  { type: "healing_potion", label: "治疗药水", cost: { berry: 5, scrap: 2 }, requiresWorkbench: true },
+  { type: "strength_potion", label: "力量药水", cost: { berry: 6, scrap: 3 }, requiresWorkbench: true }
+];
+const RESOURCE_HARVEST_HITS = { tree: 7, rock: 6, berry: 3, branch: 1, pebble: 1, scrap: 2 };
+const RESOURCE_GATHER_COOLDOWN = {
+  tree: 0.42, rock: 0.46, berry: 0.3, branch: 0.16, pebble: 0.18, scrap: 0.28
+};
 const craftedCounts = Array(BUILD_TYPES.length).fill(0);
 const DEFAULT_GAME_SETTINGS = {
   volume: 70,
@@ -349,6 +378,7 @@ const player = {
   wood: 0,
   stone: 0,
   berry: 0,
+  scrap: 0,
   flashlight: true,
   classRow: 0,
   moving: false,
@@ -385,7 +415,10 @@ const STARTER_RESOURCES = [
   { type: "branch", offsetX: -132, offsetY: 92 },
   { type: "branch", offsetX: 128, offsetY: 94 },
   { type: "branch", offsetX: -92, offsetY: 156 },
-  { type: "pebble", offsetX: 94, offsetY: 164 }
+  { type: "pebble", offsetX: 94, offsetY: 164 },
+  { type: "scrap", offsetX: -154, offsetY: 132 },
+  { type: "scrap", offsetX: 154, offsetY: 138 },
+  { type: "scrap", offsetX: 18, offsetY: 188 }
 ];
 let activeResourceChunk = "";
 const monsters = [];
@@ -512,18 +545,23 @@ function generateResourceChunk(chunkX, chunkY) {
     if (Math.hypot(x - campfire.x, y - campfire.y) < 230) continue;
     if (isInsideSpawnCorridor(x, y)) continue;
     const roll = gridHash(chunkX, chunkY, candidate * 4 + 3);
-    const type = roll < 0.48
+    const type = roll < 0.44
       ? "tree"
-      : roll < 0.68
+      : roll < 0.62
         ? "rock"
-        : roll < 0.82
+        : roll < 0.75
           ? "berry"
-          : roll < 0.91 ? "branch" : "pebble";
-    const radius = type === "tree" ? 24 : type === "rock" ? 15 : type === "berry" ? 18 : 8;
+          : roll < 0.84
+            ? "branch"
+            : roll < 0.91 ? "pebble" : "scrap";
+    const radius = type === "tree"
+      ? 24
+      : type === "rock" ? 15 : type === "berry" ? 18 : type === "scrap" ? 9 : 8;
     if (resourceOverlapsEscapeGate(x, y, radius)) continue;
     const treeFrame = type === "tree" && gridHash(chunkX, chunkY, candidate * 7 + 101) < 0.22 ? 1 : 0;
     if ((type === "tree" || type === "berry") && !canPlantGrowAt(x, y, radius)) continue;
-    if ((type === "branch" || type === "pebble") && terrainAtWorld(x, y) !== TERRAIN_FRAME.grass) continue;
+    if ((type === "branch" || type === "pebble" || type === "scrap")
+      && terrainAtWorld(x, y) !== TERRAIN_FRAME.grass) continue;
     if (resources.some((item) => Math.hypot(x - item.x, y - item.y) < radius + item.radius + 22)) continue;
     resources.push({
       id: resourceId++,
@@ -737,6 +775,7 @@ function saveGame(announce = true) {
       wood: player.wood,
       stone: player.stone,
       berry: player.berry,
+      scrap: player.scrap,
       flashlight: player.flashlight,
       strengthTimer: player.strengthTimer,
       classRow: player.classRow,
@@ -973,7 +1012,7 @@ function playGatherSound(type, worldX, worldY) {
       duration: 0.055, volume: 0.026, frequency: 1050, filterType: "bandpass",
       delay: 0.055, attack: 0.003, worldX, worldY, range: 260
     });
-  } else if (type === "stone") {
+  } else if (type === "stone" || type === "scrap") {
     playNoise({
       duration: 0.055, volume: 0.042, frequency: 1250, filterType: "bandpass",
       attack: 0.004, worldX, worldY, range: 280
@@ -999,7 +1038,7 @@ function playGatherSound(type, worldX, worldY) {
 }
 
 function playPickupSound(type) {
-  const stone = type === "stone";
+  const stone = type === "stone" || type === "scrap";
   const berry = type === "berry";
   playNoise({
     duration: berry ? 0.09 : 0.055,
@@ -1100,6 +1139,21 @@ function playPistolSound(worldX, worldY = player.y) {
     duration: 0.22, volume: 0.026, frequency: 880, filterType: "bandpass",
     resonance: 1.2, delay: 0.095, pan: (Math.random() - 0.5) * 0.5,
     bus: "ambience", attack: 0.012
+  });
+}
+
+function playShotgunSound(worldX, worldY = player.y) {
+  playNoise({
+    duration: 0.11, volume: 0.105, frequency: 980, filterType: "bandpass",
+    resonance: 0.42, attack: 0.003, worldX, worldY, range: 1400
+  });
+  playTone({
+    frequency: 112, endFrequency: 38, type: "triangle", duration: 0.24,
+    volume: 0.085, attack: 0.003, worldX, worldY, range: 1400
+  });
+  playNoise({
+    duration: 0.28, volume: 0.038, frequency: 520, filterType: "lowpass",
+    delay: 0.07, attack: 0.01, worldX, worldY, range: 900
   });
 }
 
@@ -1434,6 +1488,7 @@ function startGame() {
     wood: 0,
     stone: 0,
     berry: 0,
+    scrap: 0,
     flashlight: true,
     classRow: 0,
     attackTimer: 0,
@@ -1525,6 +1580,7 @@ function continueGame() {
     wood: Math.max(0, Number(saved.player.wood) || 0),
     stone: Math.max(0, Number(saved.player.stone) || 0),
     berry: Math.max(0, Number(saved.player.berry) || 0),
+    scrap: Math.max(0, Number(saved.player.scrap) || 0),
     flashlight: saved.player.flashlight !== false,
     strengthTimer: Math.max(0, Number(saved.player.strengthTimer) || 0),
     classRow: selectedClass,
@@ -1887,7 +1943,8 @@ function collides(x, y) {
     if (collider && circleHitsRectangle(x, y, player.radius, collider)) return true;
   }
   for (const resource of resources) {
-    if (resource.type === "berry" || resource.type === "branch" || resource.type === "pebble") continue;
+    if (resource.type === "berry" || resource.type === "branch"
+      || resource.type === "pebble" || resource.type === "scrap") continue;
     if (Math.hypot(x - resource.x, y - resource.y) < resource.radius + player.radius - 2) return true;
   }
   return false;
@@ -1980,10 +2037,10 @@ function normalizePortableItem(item, fallbackCount = 1) {
       count: 1,
       source: item.source || (weapon.requiresWorkbench === false ? "handcrafted" : "workbench")
     };
-    if (weapon.type === "pistol") {
+    if (weapon.magazineSize) {
       normalized.loadedAmmo = Math.max(0, Math.min(
-        PISTOL_MAGAZINE_SIZE,
-        Number.isFinite(item.loadedAmmo) ? Math.floor(item.loadedAmmo) : PISTOL_MAGAZINE_SIZE
+        weapon.magazineSize,
+        Number.isFinite(item.loadedAmmo) ? Math.floor(item.loadedAmmo) : weapon.magazineSize
       ));
     }
     return normalized;
@@ -2003,7 +2060,7 @@ function giveClassStartingItems(classIndex) {
     const item = normalizePortableItem(definition, amount);
     if (!item) continue;
     item.count = amount;
-    if (item.type === "pistol") item.loadedAmmo = PISTOL_MAGAZINE_SIZE;
+    if (item.magazineSize) item.loadedAmmo = item.magazineSize;
     if (item.kind === "building") craftedCounts[item.buildIndex] += amount;
     const quickIndex = quickbarItems.findIndex((slot) => slot === null);
     const inventoryIndex = inventoryItems.findIndex((slot) => slot === null);
@@ -2157,12 +2214,16 @@ function collectResource(target = findGatherTarget()) {
   player.gatherCooldown = RESOURCE_GATHER_COOLDOWN[target.type] || 0.32;
   const gatheredType = target.type === "tree" || target.type === "branch"
     ? "wood"
-    : target.type === "rock" || target.type === "pebble" ? "stone" : "berry";
+    : target.type === "rock" || target.type === "pebble"
+      ? "stone"
+      : target.type === "scrap" ? "scrap" : "berry";
   playGatherSound(gatheredType, target.x, target.y);
   const requiredHits = resourceHarvestHits(target.type);
   target.harvestHits = Math.min(requiredHits, (target.harvestHits || 0) + 1);
   if (target.harvestHits < requiredHits) {
-    const action = target.type === "tree" ? "砍伐" : target.type === "rock" ? "敲击" : "采摘";
+    const action = target.type === "tree"
+      ? "砍伐"
+      : target.type === "rock" ? "敲击" : target.type === "scrap" ? "拆解" : "采摘";
     showMessage(`${action}中 ${target.harvestHits}/${requiredHits}`, 0.6);
     updateHud();
     return;
@@ -2185,6 +2246,9 @@ function collectResource(target = findGatherTarget()) {
   } else if (target.type === "pebble") {
     addResource("stone", 1);
     showMessage("捡到小石块：获得石头 ×1");
+  } else if (target.type === "scrap") {
+    addResource("scrap", 2);
+    showMessage("拆出废铁 ×2");
   } else {
     addResource("berry", 1);
     showMessage("浆果已放进物品栏");
@@ -2205,7 +2269,24 @@ function craftedInventorySlot(buildIndex) {
 }
 
 function recipeCostText(cost) {
-  return `木材 ${cost.wood}${cost.stone ? ` · 石头 ${cost.stone}` : ""}`;
+  const labels = { wood: "木材", stone: "石头", berry: "浆果", scrap: "废铁" };
+  return ["wood", "stone", "berry", "scrap"]
+    .filter((type) => Math.max(0, Number(cost?.[type]) || 0) > 0)
+    .map((type) => `${labels[type]} ${Math.max(0, Number(cost[type]) || 0)}`)
+    .join(" · ");
+}
+
+function canAffordRecipe(cost) {
+  return ["wood", "stone", "berry", "scrap"].every((type) => (
+    player[type] >= Math.max(0, Number(cost?.[type]) || 0)
+  ));
+}
+
+function spendRecipeCost(cost) {
+  for (const type of ["wood", "stone", "berry", "scrap"]) {
+    const amount = Math.max(0, Number(cost?.[type]) || 0);
+    if (amount > 0) spendResource(type, amount);
+  }
 }
 
 function renderCrafting() {
@@ -2219,7 +2300,7 @@ function renderCrafting() {
     const hasSpace = existingSlot
       || inventoryItems.some((item) => item === null)
       || quickbarItems.some((item) => item === null);
-    const affordable = player.wood >= recipe.cost.wood && player.stone >= recipe.cost.stone;
+    const affordable = canAffordRecipe(recipe.cost);
     button.disabled = !unlocked || !affordable || !hasSpace;
     button.classList.toggle("craft-ready", unlocked && affordable && hasSpace);
     button.classList.toggle("workbench-locked", !unlocked);
@@ -2251,7 +2332,7 @@ function renderWeaponCrafting() {
     const unlocked = recipe.requiresWorkbench === false || hasWorkbench;
     const hasSpace = inventoryItems.some((item) => item === null)
       || quickbarItems.some((item) => item === null);
-    const affordable = player.wood >= recipe.cost.wood && player.stone >= recipe.cost.stone;
+    const affordable = canAffordRecipe(recipe.cost);
     button.disabled = !unlocked || !affordable || !hasSpace;
     button.classList.toggle("weapon-ready", unlocked && affordable && hasSpace);
     button.classList.toggle("workbench-locked", !unlocked);
@@ -2281,14 +2362,14 @@ function craftWeapon(weaponIndex) {
     if (craftStatus) craftStatus.textContent = "背包和快捷栏都满了，先腾出一个位置";
     return;
   }
-  if (player.wood < recipe.cost.wood || player.stone < recipe.cost.stone) {
+  if (!canAffordRecipe(recipe.cost)) {
     if (craftStatus) craftStatus.textContent = `材料不足：${recipeCostText(recipe.cost)}`;
     return;
   }
-  spendResource("wood", recipe.cost.wood);
-  spendResource("stone", recipe.cost.stone);
+  spendRecipeCost(recipe.cost);
   const source = needsWorkbench ? "workbench" : "handcrafted";
   const weapon = { ...recipe, cost: { ...recipe.cost }, count: 1, source };
+  if (weapon.magazineSize) weapon.loadedAmmo = 0;
   if (inventoryIndex >= 0) inventoryItems[inventoryIndex] = weapon;
   else quickbarItems[quickIndex] = weapon;
   playBuildSound(player.x, player.y);
@@ -2317,12 +2398,11 @@ function craftBuilding(buildIndex) {
     if (craftStatus) craftStatus.textContent = "背包和快捷栏都满了，先腾出一个位置";
     return;
   }
-  if (player.wood < recipe.cost.wood || player.stone < recipe.cost.stone) {
+  if (!canAffordRecipe(recipe.cost)) {
     if (craftStatus) craftStatus.textContent = `材料不足：${recipeCostText(recipe.cost)}`;
     return;
   }
-  spendResource("wood", recipe.cost.wood);
-  spendResource("stone", recipe.cost.stone);
+  spendRecipeCost(recipe.cost);
   craftedCounts[buildIndex] += 1;
   let destination = "";
   if (inventoryStack >= 0) {
@@ -2348,6 +2428,74 @@ function craftBuilding(buildIndex) {
       destination = `快捷栏 ${emptyQuick + 1}`;
     }
   }
+  if (craftStatus) craftStatus.textContent = `已制作${recipe.label}，放入${destination}`;
+  updateHud();
+}
+
+function renderSupplyCrafting() {
+  const hasWorkbench = Boolean(nearbyWorkbench());
+  supplyCraftButtons.forEach((button) => {
+    const recipe = SUPPLY_RECIPES[Number(button.dataset.supplyRecipe)];
+    if (!recipe) return;
+    const existingSlot = inventoryItems.some((item) => item?.type === recipe.type)
+      || quickbarItems.some((item) => item?.type === recipe.type);
+    const hasSpace = existingSlot
+      || inventoryItems.some((item) => item === null)
+      || quickbarItems.some((item) => item === null);
+    const affordable = canAffordRecipe(recipe.cost);
+    button.disabled = !hasWorkbench || !affordable || !hasSpace;
+    button.classList.toggle("supply-ready", hasWorkbench && affordable && hasSpace);
+    button.classList.toggle("workbench-locked", !hasWorkbench);
+    button.title = !hasWorkbench
+      ? "需要靠近已放置的工作台"
+      : !hasSpace
+        ? "背包和快捷栏都已满"
+        : affordable
+          ? `制作${recipe.label}：${recipeCostText(recipe.cost)}`
+          : `材料不足：${recipeCostText(recipe.cost)}`;
+  });
+}
+
+function craftSupply(recipeIndex) {
+  if (state !== "game" || !inventoryOpen) return;
+  const recipe = SUPPLY_RECIPES[recipeIndex];
+  if (!recipe) return;
+  if (!nearbyWorkbench()) {
+    if (craftStatus) craftStatus.textContent = `制作${recipe.label}需要靠近工作台`;
+    renderSupplyCrafting();
+    return;
+  }
+  const inventoryStack = inventoryItems.findIndex((item) => item?.type === recipe.type);
+  const quickStack = quickbarItems.findIndex((item) => item?.type === recipe.type);
+  const emptyInventory = inventoryItems.findIndex((item) => item === null);
+  const emptyQuick = quickbarItems.findIndex((item) => item === null);
+  if (inventoryStack < 0 && quickStack < 0 && emptyInventory < 0 && emptyQuick < 0) {
+    if (craftStatus) craftStatus.textContent = "背包和快捷栏都满了，先腾出一个位置";
+    return;
+  }
+  if (!canAffordRecipe(recipe.cost)) {
+    if (craftStatus) craftStatus.textContent = `材料不足：${recipeCostText(recipe.cost)}`;
+    return;
+  }
+  spendRecipeCost(recipe.cost);
+  let destination = "";
+  if (inventoryStack >= 0) {
+    inventoryItems[inventoryStack].count = Math.max(0, Number(inventoryItems[inventoryStack].count) || 0) + 1;
+    destination = `背包 ${inventoryStack + 1}`;
+  } else if (quickStack >= 0) {
+    quickbarItems[quickStack].count = Math.max(0, Number(quickbarItems[quickStack].count) || 0) + 1;
+    destination = `快捷栏 ${quickStack + 1}`;
+  } else {
+    const item = normalizePortableItem({ type: recipe.type, count: 1, source: "workbench" });
+    if (emptyInventory >= 0) {
+      inventoryItems[emptyInventory] = item;
+      destination = `背包 ${emptyInventory + 1}`;
+    } else {
+      quickbarItems[emptyQuick] = item;
+      destination = `快捷栏 ${emptyQuick + 1}`;
+    }
+  }
+  playBuildSound(player.x, player.y);
   if (craftStatus) craftStatus.textContent = `已制作${recipe.label}，放入${destination}`;
   updateHud();
 }
@@ -2456,23 +2604,26 @@ function useConsumable(type) {
 }
 
 function reloadPistol() {
-  const pistol = quickbarItems[selectedQuickSlot];
-  if (pistol?.type !== "pistol") {
-    showMessage("先把手枪拿在手上才能换弹", 1.1);
+  const firearm = quickbarItems[selectedQuickSlot];
+  if (!firearm?.magazineSize) {
+    showMessage("先把枪拿在手上才能换弹", 1.1);
     return false;
   }
-  if (pistol.loadedAmmo >= PISTOL_MAGAZINE_SIZE) {
-    showMessage("手枪弹夹已经装满", 1);
+  if (firearm.loadedAmmo >= firearm.magazineSize) {
+    showMessage(`${firearm.label}弹仓已经装满`, 1);
     return false;
   }
   if (!spendPortableItem("ammo_box", 1)) {
     showMessage("没有弹药箱了", 1.1);
     return false;
   }
-  pistol.loadedAmmo = PISTOL_MAGAZINE_SIZE;
+  firearm.loadedAmmo = firearm.magazineSize;
   player.attackCooldown = Math.max(player.attackCooldown, 0.7);
   playReloadSound();
-  showMessage(`换上新弹夹：${PISTOL_MAGAZINE_SIZE}/${PISTOL_MAGAZINE_SIZE}，剩余弹药箱 ${portableItemCount("ammo_box")}`, 1.5);
+  showMessage(
+    `${firearm.label}装填完成：${firearm.loadedAmmo}/${firearm.magazineSize}，剩余弹药箱 ${portableItemCount("ammo_box")}`,
+    1.5
+  );
   updateHud();
   return true;
 }
@@ -2711,7 +2862,7 @@ function usePrimaryAction() {
     return;
   }
   const isHarvestTool = heldItem.type === "axe" || heldItem.type === "pickaxe";
-  if (!isHarvestTool || heldItem.type === "pistol" || hasMonsterInWeaponRange(heldItem)) {
+  if (!isHarvestTool || hasMonsterInWeaponRange(heldItem)) {
     attack();
     return;
   }
@@ -2720,48 +2871,60 @@ function usePrimaryAction() {
   else attack();
 }
 
-function firePistol(weapon) {
+function fireFirearm(weapon) {
   const loadedAmmo = Math.max(0, Math.floor(Number(weapon.loadedAmmo) || 0));
   if (loadedAmmo <= 0) {
     player.attackCooldown = 0.18;
     playDryFireSound();
-    showMessage(`弹夹空了，按 R 换弹 · 弹药箱 ${portableItemCount("ammo_box")}`, 1.2);
+    showMessage(`${weapon.label}没子弹了，按 R 换弹 · 弹药箱 ${portableItemCount("ammo_box")}`, 1.2);
     return;
   }
 
   weapon.loadedAmmo = loadedAmmo - 1;
   player.attackCooldown = weaponAttackCooldown(weapon);
-  player.attackTimer = 0.12;
+  player.attackTimer = weapon.type === "shotgun" ? 0.18 : 0.12;
   const range = weapon.range || 720;
   const directionLength = Math.hypot(player.dirX, player.dirY) || 1;
-  const directionX = player.dirX / directionLength;
-  const directionY = player.dirY / directionLength;
-  const startX = player.x + directionX * 19;
-  const startY = player.y - 15 + directionY * 5;
+  const baseDirectionX = player.dirX / directionLength;
+  const baseDirectionY = player.dirY / directionLength;
+  const startX = player.x + baseDirectionX * 19;
+  const startY = player.y - 15 + baseDirectionY * 5;
   Object.assign(pistolShot, {
-    timer: 0.12,
+    timer: weapon.type === "shotgun" ? 0.18 : 0.12,
     startX,
     startY,
     endX: startX,
     endY: startY,
     hit: false
   });
-  projectiles.push({
-    x: startX,
-    y: startY,
-    previousX: startX,
-    previousY: startY,
-    directionX,
-    directionY,
-    angle: Math.atan2(directionY, directionX),
-    speed: PISTOL_BULLET_SPEED,
-    distance: 0,
-    range,
-    damage: weaponDamage(weapon)
-  });
-  playPistolSound(player.x, player.y);
-  const ammoText = `${weapon.loadedAmmo}/${PISTOL_MAGAZINE_SIZE}`;
-  showMessage(`手枪开火 · 弹夹 ${ammoText}`, 0.75);
+  const pelletCount = Math.max(1, Number(weapon.pellets) || 1);
+  const baseAngle = Math.atan2(baseDirectionY, baseDirectionX);
+  for (let pellet = 0; pellet < pelletCount; pellet += 1) {
+    const spread = pelletCount === 1
+      ? 0
+      : (pellet / (pelletCount - 1) - 0.5) * 0.28;
+    const angle = baseAngle + spread;
+    projectiles.push({
+      x: startX,
+      y: startY,
+      previousX: startX,
+      previousY: startY,
+      directionX: Math.cos(angle),
+      directionY: Math.sin(angle),
+      angle,
+      speed: weapon.type === "shotgun" ? 1350 : PISTOL_BULLET_SPEED,
+      distance: 0,
+      range,
+      damage: weaponDamage(weapon),
+      width: weapon.type === "shotgun" ? 7 : PISTOL_BULLET_WIDTH,
+      sourceType: weapon.type,
+      sourceLabel: weapon.label
+    });
+  }
+  if (weapon.type === "shotgun") playShotgunSound(player.x, player.y);
+  else playPistolSound(player.x, player.y);
+  const ammoText = `${weapon.loadedAmmo}/${weapon.magazineSize}`;
+  showMessage(`${weapon.label}开火 · 弹药 ${ammoText}`, 0.75);
   updateHud();
 }
 
@@ -2804,11 +2967,12 @@ function updateProjectiles(delta) {
     if (target) {
       target.health -= bullet.damage;
       target.hurtTimer = 0.2;
-      target.x += bullet.directionX * 12;
-      target.y += bullet.directionY * 12;
+      const bulletKnockback = bullet.sourceType === "shotgun" ? 3 : 12;
+      target.x += bullet.directionX * bulletKnockback;
+      target.y += bullet.directionY * bulletKnockback;
       pistolShot.hit = true;
       playBulletImpact(target.x, target.y);
-      showMessage("手枪子弹命中怪物", 0.65);
+      showMessage(`${bullet.sourceLabel || "子弹"}命中怪物`, 0.65);
       projectiles.splice(index, 1);
       continue;
     }
@@ -2823,8 +2987,8 @@ function updateProjectiles(delta) {
 function attack() {
   if (player.attackCooldown > 0) return;
   const weapon = quickbarItems[selectedQuickSlot];
-  if (weapon?.type === "pistol") {
-    firePistol(weapon);
+  if (weapon?.magazineSize) {
+    fireFirearm(weapon);
     return;
   }
   const damage = weaponDamage(weapon);
@@ -2966,8 +3130,16 @@ function updateMonsters(delta, night) {
       monster.deathTimer = (monster.deathTimer || 0) + delta;
       if (monster.deathTimer >= MIMIC_DEATH_DURATION) {
         monsters.splice(i, 1);
-        if (Math.random() < .45) addResource("wood", 1);
-        showMessage("模仿者倒下了");
+        const dropRoll = Math.random();
+        if (dropRoll < 0.55) {
+          addResource("scrap", 1);
+          showMessage("模仿者留下了废铁 ×1");
+        } else if (dropRoll < 0.8) {
+          addResource("wood", 1);
+          showMessage("模仿者留下了木材 ×1");
+        } else {
+          showMessage("模仿者倒下了");
+        }
       }
       continue;
     }
@@ -3115,11 +3287,11 @@ function renderInventory() {
     const useTip = item?.type === "berry"
       ? "，点击食用"
       : item?.kind === "consumable" ? "，点击使用" : "";
-    const pistolTip = item?.type === "pistol"
-      ? `，弹夹 ${item.loadedAmmo}/${PISTOL_MAGAZINE_SIZE}`
+    const firearmTip = item?.magazineSize
+      ? `，弹药 ${item.loadedAmmo}/${item.magazineSize}`
       : "";
     slot.title = item
-      ? `${item.label} ×${amount}${pistolTip}${useTip}；拖动可整理，右键拆分`
+      ? `${item.label} ×${amount}${firearmTip}${useTip}；拖动可整理，右键拆分`
       : "空格，可以把物品拖到这里";
     slot.setAttribute("aria-label", slot.title);
   });
@@ -3335,7 +3507,7 @@ function syncResourceQuickbar() {
 
 function quickbarItemAmount(item) {
   if (!item) return null;
-  if (item.type === "pistol") return Math.max(0, Number(item.loadedAmmo) || 0);
+  if (item.magazineSize) return Math.max(0, Number(item.loadedAmmo) || 0);
   if (item.kind === "building") return Math.max(0, Number(item.count) || 0);
   if (resourceItemDefinition(item.type)) return player[item.type];
   if (portableItemDefinition(item.type)) return Math.max(0, Number(item.count) || 0);
@@ -3401,7 +3573,7 @@ function updateHud() {
       : "进入游戏后选择职业";
   }
   healthLabel.classList.toggle("danger", player.health <= 30);
-  resourceLabel.textContent = `木材 ${player.wood}　石头 ${player.stone}　浆果 ${player.berry}`;
+  resourceLabel.textContent = `木材 ${player.wood}　石头 ${player.stone}　浆果 ${player.berry}　废铁 ${player.scrap}`;
   flashlightLabel.textContent = `手电筒 ${player.flashlight ? "开" : "关"}`;
   updateSurvivalReadout();
   const selected = BUILD_TYPES[selectedBuild];
@@ -3410,6 +3582,7 @@ function updateHud() {
   syncResourceQuickbar();
   renderCrafting();
   renderWeaponCrafting();
+  renderSupplyCrafting();
   quickSlots.forEach((slot, index) => {
     const item = quickbarItems[index];
     const amount = quickbarItemAmount(item);
@@ -3423,8 +3596,8 @@ function updateHud() {
     slot.dataset.count = amount === null ? "" : String(amount);
     slot.draggable = Boolean(item);
     slot.title = item
-      ? item.type === "pistol"
-        ? `${item.label} · 弹夹 ${amount}/${PISTOL_MAGAZINE_SIZE} · R 换弹`
+      ? item.magazineSize
+        ? `${item.label} · 弹药 ${amount}/${item.magazineSize} · R 换弹`
         : `${item.label}${amount === null ? "" : ` ×${amount}`}`
       : "空快捷格";
     slot.setAttribute("aria-pressed", String(selectedSlot));
@@ -3434,8 +3607,8 @@ function updateHud() {
     buildingLabel.textContent = `快捷 ${selectedQuickSlot + 1}：${selected.label}（木${selected.cost.wood} 石${selected.cost.stone}）`;
   } else if (selectedItem?.kind === "food" && selectedItem.type === "berry") {
     buildingLabel.textContent = `快捷 ${selectedQuickSlot + 1}：浆果（${player.berry}）`;
-  } else if (selectedItem?.type === "pistol") {
-    buildingLabel.textContent = `当前武器：手枪 · 弹夹 ${selectedItem.loadedAmmo}/${PISTOL_MAGAZINE_SIZE} · 弹药箱 ${portableItemCount("ammo_box")} · R 换弹`;
+  } else if (selectedItem?.magazineSize) {
+    buildingLabel.textContent = `当前武器：${selectedItem.label} · 弹药 ${selectedItem.loadedAmmo}/${selectedItem.magazineSize} · 弹药箱 ${portableItemCount("ammo_box")} · R 换弹`;
   } else if (selectedItem?.kind === "weapon") {
     buildingLabel.textContent = `当前武器：${selectedItem.label || "武器"}`;
   } else if (selectedItem?.kind === "material") {
@@ -3813,6 +3986,16 @@ function drawResources() {
       ctx.beginPath();
       ctx.ellipse(resource.x, resource.y, 9, 6, -0.3, 0, Math.PI * 2);
       ctx.fill();
+    } else if (resource.type === "scrap") {
+      if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
+        ctx.drawImage(worldSprite, 4 * 16, 2 * 16, 16, 16, resource.x - 16, resource.y - 16, 32, 32);
+        drawHarvestProgress(resource);
+        continue;
+      }
+      ctx.fillStyle = "#81858a";
+      ctx.fillRect(resource.x - 11, resource.y - 5, 9, 6);
+      ctx.fillRect(resource.x + 1, resource.y - 9, 8, 13);
+      ctx.fillRect(resource.x - 4, resource.y + 4, 12, 5);
     } else {
       if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
         ctx.drawImage(worldSprite, PROP_FRAME.berryBush * 16, 16, 16, 16, resource.x - 24, resource.y - 24, 48, 48);
@@ -3981,17 +4164,18 @@ function drawProjectiles() {
     ctx.fillRect(pistolShot.startX - 18, pistolShot.startY - 18, 36, 36);
   }
   for (const bullet of projectiles) {
+    const width = Math.max(5, Number(bullet.width) || PISTOL_BULLET_WIDTH);
     ctx.save();
     ctx.translate(bullet.x, bullet.y);
     ctx.rotate(bullet.angle);
     ctx.shadowColor = "#ffd469";
     ctx.shadowBlur = 13;
     ctx.fillStyle = "rgba(255, 185, 72, .72)";
-    ctx.fillRect(-PISTOL_BULLET_WIDTH / 2 - 2, -3, PISTOL_BULLET_WIDTH + 4, 6);
+    ctx.fillRect(-width / 2 - 2, -3, width + 4, 6);
     ctx.shadowColor = "#fff0a6";
     ctx.shadowBlur = 7;
     ctx.fillStyle = "#fff4ba";
-    ctx.fillRect(-PISTOL_BULLET_WIDTH / 2, -1.5, PISTOL_BULLET_WIDTH, 3);
+    ctx.fillRect(-width / 2, -1.5, width, 3);
     ctx.restore();
   }
   ctx.restore();
@@ -4001,8 +4185,9 @@ function drawHeldWeapon(weapon) {
   const frame = HELD_WEAPON_FRAME[weapon?.type];
   if (!Number.isInteger(frame)) return;
   const angle = Math.atan2(player.dirY, player.dirX);
-  const firing = weapon.type === "pistol" && pistolShot.timer > 0;
-  const recoil = firing ? -3 * Math.min(1, pistolShot.timer / 0.12) : 0;
+  const firing = Boolean(weapon.magazineSize) && pistolShot.timer > 0;
+  const recoilScale = weapon.type === "shotgun" ? 6 : 3;
+  const recoil = firing ? -recoilScale * Math.min(1, pistolShot.timer / 0.12) : 0;
   ctx.save();
   ctx.translate(
     player.x + player.dirX * 5,
@@ -4013,8 +4198,8 @@ function drawHeldWeapon(weapon) {
   if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
     ctx.drawImage(worldSprite, frame * 16, 64, 16, 16, -3 + recoil, -16, 32, 32);
   } else {
-    ctx.fillStyle = weapon.type === "pistol" ? "#5a5144" : "#76523b";
-    ctx.fillRect(recoil, -3, weapon.type === "pistol" ? 24 : 27, 6);
+    ctx.fillStyle = weapon.magazineSize ? "#5a5144" : "#76523b";
+    ctx.fillRect(recoil, -3, weapon.type === "shotgun" ? 31 : weapon.magazineSize ? 24 : 27, 6);
   }
   if (firing) {
     ctx.fillStyle = "#fff0a4";
@@ -4145,7 +4330,7 @@ function drawPlayer() {
   }
   drawEmoteGesture(activeEmote, emoteTime);
   if (heldWeapon && player.dirY >= -0.28) drawHeldWeapon(heldWeapon);
-  if (player.attackTimer > 0 && heldWeapon?.type !== "pistol") {
+  if (player.attackTimer > 0 && !heldWeapon?.magazineSize) {
     const attackAngle = Math.atan2(player.dirY, player.dirX);
     ctx.save();
     ctx.translate(player.x, player.y);
@@ -4698,6 +4883,12 @@ weaponCraftButtons.forEach((button) => {
   button.addEventListener("click", () => {
     const weaponIndex = Number(button.dataset.weaponRecipe);
     if (Number.isInteger(weaponIndex)) craftWeapon(weaponIndex);
+  });
+});
+supplyCraftButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    const recipeIndex = Number(button.dataset.supplyRecipe);
+    if (Number.isInteger(recipeIndex)) craftSupply(recipeIndex);
   });
 });
 

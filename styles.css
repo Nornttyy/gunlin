@@ -393,9 +393,11 @@ button.inventory-slot { font: inherit; cursor: default; }
 .item-wood { background-position: 0 -64px; }
 .item-stone { background-position: -32px -64px; }
 .item-berry { background-position: -64px -64px; }
+.item-scrap { background-position: -128px -64px; }
 .inventory-slot[data-item-type="wood"] .item-sprite { background-position: 0 -64px; }
 .inventory-slot[data-item-type="stone"] .item-sprite { background-position: -32px -64px; }
 .inventory-slot[data-item-type="berry"] .item-sprite { background-position: -64px -64px; }
+.inventory-slot[data-item-type="scrap"] .item-sprite { background-position: -128px -64px; }
 
 .inventory-count {
   position: absolute;
@@ -587,6 +589,7 @@ button.inventory-slot { font: inherit; cursor: default; }
 .quick-slot[data-item-type="wood"] .item-sprite { background-position: 0 -64px; }
 .quick-slot[data-item-type="stone"] .item-sprite { background-position: -32px -64px; }
 .quick-slot[data-item-type="berry"] .item-sprite { background-position: -64px -64px; }
+.quick-slot[data-item-type="scrap"] .item-sprite { background-position: -128px -64px; }
 
 .quick-slot.slot-empty::after {
   content: "空";
@@ -1419,7 +1422,8 @@ h1 {
 }
 
 .craft-button,
-.weapon-craft-button {
+.weapon-craft-button,
+.supply-craft-button {
   display: grid;
   grid-template-columns: 32px minmax(0, 1fr) 25px;
   align-items: center;
@@ -1434,7 +1438,8 @@ h1 {
 }
 
 .craft-button .item-sprite,
-.weapon-craft-button .item-sprite {
+.weapon-craft-button .item-sprite,
+.supply-craft-button .item-sprite {
   width: 32px;
   height: 32px;
 }
@@ -1457,40 +1462,51 @@ h1 {
   letter-spacing: 0;
 }
 
-.weapon-craft-list {
+.weapon-craft-list,
+.supply-craft-list {
   display: grid;
   gap: 5px;
 }
 
-.weapon-craft-button {
+.weapon-craft-button,
+.supply-craft-button {
   grid-template-columns: 32px minmax(0, 1fr);
 }
 
-.weapon-craft-button.weapon-ready {
+.weapon-craft-button.weapon-ready,
+.supply-craft-button.supply-ready {
   border-color: #65715f;
   border-left-color: #a64a45;
   color: #e0dcc9;
   background: #182019;
 }
 
-.weapon-craft-button.weapon-ready:hover {
+.weapon-craft-button.weapon-ready:hover,
+.supply-craft-button.supply-ready:hover {
   background: #292720;
   box-shadow: inset 3px 0 0 #a74440;
   transform: translateX(2px);
 }
 
-.weapon-craft-button:disabled {
+.weapon-craft-button:disabled,
+.supply-craft-button:disabled {
   opacity: .42;
   cursor: not-allowed;
 }
 
-.weapon-craft-button.workbench-locked {
+.weapon-craft-button.workbench-locked,
+.supply-craft-button.workbench-locked {
   filter: grayscale(.85);
 }
 
 .weapon-club { background-position: 0 -128px; }
 .weapon-axe { background-position: -32px -128px; }
+.weapon-knife { background-position: -64px -128px; }
+.weapon-pistol { background-position: -96px -128px; }
+.weapon-shotgun { background-position: -128px -128px; }
 .weapon-pickaxe { background-position: -160px -128px; }
+.item-ammo-box { background-position: -192px -64px; }
+.item-medkit { background-position: -160px -64px; }
 
 .craft-copy {
   display: grid;
@@ -1605,6 +1621,9 @@ h1 {
 .quick-slot[data-item-type="trap"] .item-sprite { background-position: -224px -96px; }
 .quick-slot[data-item-type="club"] .item-sprite { background-position: 0 -128px; }
 .quick-slot[data-item-type="axe"] .item-sprite { background-position: -32px -128px; }
+.quick-slot[data-item-type="knife"] .item-sprite { background-position: -64px -128px; }
+.quick-slot[data-item-type="pistol"] .item-sprite { background-position: -96px -128px; }
+.quick-slot[data-item-type="shotgun"] .item-sprite { background-position: -128px -128px; }
 .quick-slot[data-item-type="pickaxe"] .item-sprite { background-position: -160px -128px; }
 
 @keyframes vital-panic {
@@ -2764,6 +2783,8 @@ h1 {
 .inventory-slot[data-item-type="trap"] .item-sprite { background-position: -224px -96px; }
 .inventory-slot[data-item-type="club"] .item-sprite { background-position: 0 -128px; }
 .inventory-slot[data-item-type="axe"] .item-sprite { background-position: -32px -128px; }
+.inventory-slot[data-item-type="knife"] .item-sprite { background-position: -64px -128px; }
+.inventory-slot[data-item-type="shotgun"] .item-sprite { background-position: -128px -128px; }
 .inventory-slot[data-item-type="pickaxe"] .item-sprite { background-position: -160px -128px; }
 .inventory-slot[data-item-type="pistol"] .item-sprite,
 .quick-slot[data-item-type="pistol"] .item-sprite { background-position: -96px -128px; }
@@ -2778,7 +2799,9 @@ h1 {
 .inventory-slot[data-item-type="healing_potion"] .item-sprite,
 .quick-slot[data-item-type="healing_potion"] .item-sprite,
 .inventory-slot[data-item-type="strength_potion"] .item-sprite,
-.quick-slot[data-item-type="strength_potion"] .item-sprite {
+.quick-slot[data-item-type="strength_potion"] .item-sprite,
+.item-healing-potion,
+.item-strength-potion {
   position: relative;
   background-image: none;
 }
@@ -2786,7 +2809,9 @@ h1 {
 .inventory-slot[data-item-type="healing_potion"] .item-sprite::before,
 .quick-slot[data-item-type="healing_potion"] .item-sprite::before,
 .inventory-slot[data-item-type="strength_potion"] .item-sprite::before,
-.quick-slot[data-item-type="strength_potion"] .item-sprite::before {
+.quick-slot[data-item-type="strength_potion"] .item-sprite::before,
+.item-healing-potion::before,
+.item-strength-potion::before {
   content: "";
   position: absolute;
   left: 7px;
@@ -2799,14 +2824,17 @@ h1 {
 }
 
 .inventory-slot[data-item-type="strength_potion"] .item-sprite::before,
-.quick-slot[data-item-type="strength_potion"] .item-sprite::before {
+.quick-slot[data-item-type="strength_potion"] .item-sprite::before,
+.item-strength-potion::before {
   background: linear-gradient(90deg, #50316d 0 22%, #9162c1 22% 68%, #e4b1e9 68% 82%, #50316d 82%);
 }
 
 .inventory-slot[data-item-type="healing_potion"] .item-sprite::after,
 .quick-slot[data-item-type="healing_potion"] .item-sprite::after,
 .inventory-slot[data-item-type="strength_potion"] .item-sprite::after,
-.quick-slot[data-item-type="strength_potion"] .item-sprite::after {
+.quick-slot[data-item-type="strength_potion"] .item-sprite::after,
+.item-healing-potion::after,
+.item-strength-potion::after {
   content: "";
   position: absolute;
   left: 12px;

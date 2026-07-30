@@ -24,6 +24,13 @@ const SPAWN_CORRIDOR = {
 const DAY_LENGTH = 10 * 60;
 const NIGHT_LENGTH = 15 * 60;
 const CYCLE_LENGTH = DAY_LENGTH + NIGHT_LENGTH;
+const WEATHER_TRANSITION_DURATION = 10;
+const WEATHER_DEFINITIONS = {
+  clear: { label: "晴朗", minDuration: 120, maxDuration: 240 },
+  cloudy: { label: "阴天", minDuration: 100, maxDuration: 210 },
+  rain: { label: "降雨", minDuration: 110, maxDuration: 230 },
+  storm: { label: "雷暴", minDuration: 75, maxDuration: 150 }
+};
 const MIMIC_DETECTION_DISTANCE = 360;
 const MIMIC_LOSE_DISTANCE = 540;
 const MIMIC_ATTACK_DISTANCE = 27;
@@ -103,6 +110,7 @@ const objectiveLabel = document.getElementById("objectiveLabel");
 const threatLabel = document.getElementById("threatLabel");
 const threatMeter = document.getElementById("threatMeter");
 const phaseLabel = document.getElementById("phaseLabel");
+const weatherLabel = document.getElementById("weatherLabel");
 const dayLabel = document.getElementById("dayLabel");
 const healthLabel = document.getElementById("healthLabel");
 const resourceLabel = document.getElementById("resourceLabel");
@@ -388,6 +396,7 @@ let audioCompressor = null;
 let noiseBuffer = null;
 let audioEnabled = true;
 let ambienceTimer = 1.5;
+let weatherAudioTimer = 0.5;
 let playerFootstepTimer = 0;
 let playerFootstepSide = -1;
 let nightMaskCanvas = null;
@@ -395,6 +404,17 @@ let nightMaskContext = null;
 let assetsReady = false;
 let assetsLoading = false;
 let gameSettings = loadGameSettings();
+const weather = {
+  type: "clear",
+  previousType: "clear",
+  timer: 150,
+  transition: 1,
+  lightningTimer: 8,
+  lightningFlash: 0,
+  thunderDelay: -1,
+  thunderPan: 0,
+  wind: 0.18
+};
 
 const player = {
   x: PLAYER_START.x,
@@ -804,6 +824,7 @@ function saveGame(announce = true) {
     dayNumber,
     wasNight,
     spawnTimer,
+    weather: serializeWeather(),
     selectedBuild,
     selectedQuickSlot,
     selectedClass,
@@ -1356,6 +1377,92 @@ function playPhaseSound(night) {
   }
 }
 
+function playRainAmbience(intensity) {
+  const stormStrength = weatherBlend("storm");
+  const pan = Math.max(-0.85, Math.min(0.85, weather.wind * 0.55 + (Math.random() - 0.5) * 0.35));
+  playNoise({
+    duration: 2.1,
+    volume: 0.012 + intensity * 0.022,
+    frequency: 760 + intensity * 260,
+    filterType: "bandpass",
+    resonance: 0.45,
+    pan,
+    bus: "ambience",
+    attack: 0.18
+  });
+  playNoise({
+    duration: 1.8,
+    volume: 0.006 + intensity * 0.012 + stormStrength * 0.006,
+    frequency: 310,
+    filterType: "lowpass",
+    resonance: 0.3,
+    pan: -pan * 0.6,
+    bus: "ambience",
+    attack: 0.24
+  });
+}
+
+function playThunderSound(pan = 0) {
+  playNoise({
+    duration: 1.8,
+    volume: 0.072,
+    frequency: 145,
+    filterType: "lowpass",
+    resonance: 0.35,
+    pan,
+    bus: "ambience",
+    attack: 0.055
+  });
+  playTone({
+    frequency: 58,
+    endFrequency: 27,
+    type: "sine",
+    duration: 1.35,
+    volume: 0.052,
+    pan,
+    bus: "ambience",
+    attack: 0.04
+  });
+  playNoise({
+    duration: 0.9,
+    volume: 0.028,
+    frequency: 260,
+    filterType: "lowpass",
+    resonance: 0.4,
+    delay: 0.18,
+    pan: pan * 0.72,
+    bus: "ambience",
+    attack: 0.08
+  });
+}
+
+function updateWeatherAudio(delta) {
+  weatherAudioTimer -= delta;
+  if (weatherAudioTimer > 0) return;
+  const rain = precipitationIntensity();
+  if (rain > 0.08) {
+    playRainAmbience(rain);
+    weatherAudioTimer = 1.35 + Math.random() * 0.55;
+    return;
+  }
+  const cloud = overcastIntensity();
+  if (cloud > 0.2) {
+    playNoise({
+      duration: 2.4,
+      volume: 0.008 + cloud * 0.012,
+      frequency: 280 + Math.random() * 100,
+      filterType: "lowpass",
+      resonance: 0.3,
+      pan: weather.wind,
+      bus: "ambience",
+      attack: 0.35
+    });
+    weatherAudioTimer = 4 + Math.random() * 3;
+    return;
+  }
+  weatherAudioTimer = 5;
+}
+
 function updateAudioAmbience(delta) {
   ambienceTimer -= delta;
   if (ambienceTimer > 0) return;
@@ -1523,6 +1630,7 @@ function startGame() {
   setHowToPlayOpen(false);
   ensureAudio();
   ambienceTimer = 0.8;
+  weatherAudioTimer = 0.35;
   playerFootstepTimer = 0;
   updateAudioButton();
   titleScreen.classList.add("hidden");
@@ -1533,6 +1641,7 @@ function startGame() {
   dayNumber = 1;
   wasNight = false;
   spawnTimer = 4;
+  resetWeather();
   autosaveTimer = 20;
   selectedBuild = 0;
   selectedQuickSlot = -1;
@@ -1598,6 +1707,7 @@ function continueGame() {
   setHowToPlayOpen(false);
   ensureAudio();
   ambienceTimer = 0.8;
+  weatherAudioTimer = 0.35;
   playerFootstepTimer = 0;
   updateAudioButton();
   titleScreen.classList.add("hidden");
@@ -1633,6 +1743,7 @@ function continueGame() {
   dayNumber = Math.floor(elapsed / CYCLE_LENGTH) + 1;
   wasNight = Boolean(saved.wasNight);
   spawnTimer = Number.isFinite(saved.spawnTimer) ? saved.spawnTimer : 4;
+  restoreWeather(saved.weather);
   autosaveTimer = 20;
   selectedBuild = Math.max(0, Math.min(
     BUILD_TYPES.length - 1,
@@ -1888,6 +1999,140 @@ function nightIntensity() {
   return 1 - smooth;
 }
 
+function weatherDuration(type) {
+  const definition = WEATHER_DEFINITIONS[type] || WEATHER_DEFINITIONS.clear;
+  return definition.minDuration + Math.random() * (definition.maxDuration - definition.minDuration);
+}
+
+function weatherBlend(type) {
+  if (weather.type === weather.previousType) return weather.type === type ? 1 : 0;
+  let amount = 0;
+  if (weather.previousType === type) amount += 1 - weather.transition;
+  if (weather.type === type) amount += weather.transition;
+  return Math.max(0, Math.min(1, amount));
+}
+
+function precipitationIntensity() {
+  return Math.max(0, Math.min(1, weatherBlend("rain") * 0.72 + weatherBlend("storm")));
+}
+
+function overcastIntensity() {
+  return Math.max(0, Math.min(
+    1,
+    weatherBlend("cloudy") * 0.65 + weatherBlend("rain") * 0.82 + weatherBlend("storm")
+  ));
+}
+
+function weatherMonsterDetectionScale() {
+  return 1 - precipitationIntensity() * 0.25;
+}
+
+function serializeWeather() {
+  return {
+    type: weather.type,
+    previousType: weather.previousType,
+    timer: weather.timer,
+    transition: weather.transition,
+    lightningTimer: weather.lightningTimer,
+    wind: weather.wind
+  };
+}
+
+function resetWeather() {
+  Object.assign(weather, {
+    type: "clear",
+    previousType: "clear",
+    timer: weatherDuration("clear"),
+    transition: 1,
+    lightningTimer: 7 + Math.random() * 7,
+    lightningFlash: 0,
+    thunderDelay: -1,
+    thunderPan: 0,
+    wind: (Math.random() - 0.5) * 0.32
+  });
+}
+
+function restoreWeather(savedWeather) {
+  if (!savedWeather || !WEATHER_DEFINITIONS[savedWeather.type]) {
+    resetWeather();
+    return;
+  }
+  const previousType = WEATHER_DEFINITIONS[savedWeather.previousType]
+    ? savedWeather.previousType
+    : savedWeather.type;
+  Object.assign(weather, {
+    type: savedWeather.type,
+    previousType,
+    timer: Math.max(1, Number(savedWeather.timer) || weatherDuration(savedWeather.type)),
+    transition: Math.max(0, Math.min(1, Number(savedWeather.transition) || 0)),
+    lightningTimer: Math.max(0.5, Number(savedWeather.lightningTimer) || 7),
+    lightningFlash: 0,
+    thunderDelay: -1,
+    thunderPan: 0,
+    wind: Math.max(-1, Math.min(1, Number(savedWeather.wind) || 0.18))
+  });
+}
+
+function chooseNextWeather(type = weather.type, roll = Math.random()) {
+  if (type === "clear") return roll < 0.72 ? "cloudy" : "rain";
+  if (type === "cloudy") return roll < 0.32 ? "clear" : roll < 0.82 ? "rain" : "storm";
+  if (type === "rain") return roll < 0.48 ? "cloudy" : roll < 0.78 ? "storm" : "clear";
+  return roll < 0.7 ? "rain" : "cloudy";
+}
+
+function setWeather(type, duration = null) {
+  if (!WEATHER_DEFINITIONS[type]) return false;
+  if (weather.type === type && weather.transition >= 1) {
+    weather.timer = Number.isFinite(duration) ? Math.max(1, duration) : weatherDuration(type);
+    return true;
+  }
+  weather.previousType = weather.type;
+  weather.type = type;
+  weather.transition = 0;
+  weather.timer = Number.isFinite(duration) ? Math.max(1, duration) : weatherDuration(type);
+  const windStrength = type === "storm"
+    ? 0.72 + Math.random() * 0.26
+    : type === "rain"
+      ? 0.38 + Math.random() * 0.3
+      : type === "cloudy" ? 0.2 + Math.random() * 0.28 : 0.08 + Math.random() * 0.18;
+  weather.wind = windStrength * (Math.random() < 0.5 ? -1 : 1);
+  weather.lightningTimer = type === "storm" ? 3 + Math.random() * 6 : 8;
+  weatherAudioTimer = 0.1;
+  showMessage(`天气变化：${WEATHER_DEFINITIONS[type].label}`, 1.2);
+  return true;
+}
+
+function triggerWeatherLightning(pan = null) {
+  if (weatherBlend("storm") <= 0.15) return false;
+  weather.lightningFlash = 0.32;
+  weather.thunderPan = Number.isFinite(pan)
+    ? Math.max(-1, Math.min(1, pan))
+    : (Math.random() < 0.5 ? -1 : 1) * (0.28 + Math.random() * 0.72);
+  weather.thunderDelay = 0.32 + Math.random() * 1.15;
+  weather.lightningTimer = 5 + Math.random() * 10;
+  return true;
+}
+
+function updateWeather(delta) {
+  weather.transition = Math.min(1, weather.transition + delta / WEATHER_TRANSITION_DURATION);
+  weather.timer -= delta;
+  weather.lightningFlash = Math.max(0, weather.lightningFlash - delta);
+  if (weather.thunderDelay >= 0) {
+    weather.thunderDelay -= delta;
+    if (weather.thunderDelay < 0) playThunderSound(weather.thunderPan);
+  }
+  if (weather.timer <= 0) setWeather(chooseNextWeather());
+
+  const storm = weatherBlend("storm");
+  if (storm > 0.15) {
+    weather.lightningTimer -= delta * (0.35 + storm * 0.65);
+    if (weather.lightningTimer <= 0) triggerWeatherLightning();
+  } else {
+    weather.lightningTimer = Math.max(weather.lightningTimer, 3);
+  }
+  updateWeatherAudio(delta);
+}
+
 function updateEscapeGateDiscovery() {
   if (escapeGate.discovered || escapeGateDistance() > ESCAPE_GATE_DISCOVERY_DISTANCE) return;
   escapeGate.discovered = true;
@@ -1898,6 +2143,7 @@ function updateEscapeGateDiscovery() {
 function update(delta) {
   elapsed += delta;
   dayNumber = Math.floor(elapsed / CYCLE_LENGTH) + 1;
+  updateWeather(delta);
   autosaveTimer -= delta;
   if (autosaveTimer <= 0) saveGame(false);
   const night = isNight();
@@ -3448,7 +3694,8 @@ function updateMonsters(delta, night) {
     const monster = monsters[i];
     const isZombie = monster.type === "zombie";
     const deathDuration = isZombie ? ZOMBIE_DEATH_DURATION : MIMIC_DEATH_DURATION;
-    const detectionDistance = isZombie ? ZOMBIE_DETECTION_DISTANCE : MIMIC_DETECTION_DISTANCE;
+    const detectionDistance = (isZombie ? ZOMBIE_DETECTION_DISTANCE : MIMIC_DETECTION_DISTANCE)
+      * weatherMonsterDetectionScale();
     const loseDistance = isZombie ? ZOMBIE_LOSE_DISTANCE : MIMIC_LOSE_DISTANCE;
     const attackDistance = isZombie ? ZOMBIE_ATTACK_DISTANCE : MIMIC_ATTACK_DISTANCE;
     monster.attackCooldown = Math.max(0, (monster.attackCooldown || 0) - delta);
@@ -3935,6 +4182,13 @@ function updateHud() {
     phaseLabel.textContent = isNight() ? "夜晚" : "白天";
   }
   dayLabel.textContent = `第 ${dayNumber} 天`;
+  if (weatherLabel) {
+    weatherLabel.textContent = WEATHER_DEFINITIONS[weather.type]?.label || "晴朗";
+    weatherLabel.title = precipitationIntensity() > 0.1
+      ? "雨声会掩盖脚步，怪物更难发现你"
+      : "当前天气不会影响怪物的感知";
+  }
+  gameScreen.dataset.weather = weather.type;
   healthLabel.textContent = `生命 ${Math.max(0, Math.round(player.health))}`;
   if (phaseProgress) {
     phaseProgress.style.width = `${Math.round(currentPhaseProgress() * 100)}%`;
@@ -4824,14 +5078,18 @@ function drawAtmosphere() {
   const darkness = nightIntensity();
   gameScreen.classList.toggle("is-night", darkness > 0.68);
   drawSkyTint(darkness);
+  drawWeatherTint(darkness);
   drawNightCurtain(darkness);
   drawCampfireGlow(darkness);
   drawFlashlightGlow(darkness);
   drawDriftingFog(darkness);
+  drawWetWeatherSheen();
+  drawRain();
   drawWatchingEyes(darkness);
   drawAirborneSpecks(darkness);
   drawFilmGrain(darkness);
   drawVignette(darkness);
+  drawWeatherLightning();
   drawDamageFlash();
 }
 
@@ -4842,6 +5100,111 @@ function drawSkyTint(darkness) {
   tint.addColorStop(1, `rgba(0, 3, 6, ${0.18 + darkness * 0.66})`);
   ctx.fillStyle = tint;
   ctx.fillRect(0, 0, W, H);
+}
+
+function drawWeatherTint(darkness) {
+  const cloud = overcastIntensity();
+  const rain = precipitationIntensity();
+  if (cloud <= 0.01) return;
+  const tint = ctx.createLinearGradient(0, 0, 0, H);
+  tint.addColorStop(0, `rgba(18, 29, 34, ${cloud * (0.2 + darkness * 0.08)})`);
+  tint.addColorStop(0.55, `rgba(25, 37, 39, ${cloud * 0.12})`);
+  tint.addColorStop(1, `rgba(11, 20, 22, ${cloud * 0.18 + rain * 0.06})`);
+  ctx.fillStyle = tint;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function getRainDrop(index, time = elapsed, intensity = precipitationIntensity()) {
+  const speed = (390 + hash(index + 701) * 440) * (0.78 + intensity * 0.42);
+  const loopHeight = H + 190;
+  const y = ((hash(index + 733) * loopHeight + time * speed) % loopHeight) - 95;
+  const windOffset = weather.wind * (time * 105 + y * 0.28);
+  const loopWidth = W + 180;
+  const rawX = hash(index + 719) * loopWidth + windOffset;
+  const x = ((rawX % loopWidth) + loopWidth) % loopWidth - 90;
+  const length = 8 + hash(index + 751) * 15 + intensity * 8;
+  return {
+    x,
+    y,
+    length,
+    endX: x + weather.wind * length * 0.72,
+    endY: y + length,
+    alpha: (0.2 + hash(index + 769) * 0.42) * intensity,
+    width: hash(index + 787) > 0.83 ? 1.5 : 1
+  };
+}
+
+function drawWetWeatherSheen() {
+  const rain = precipitationIntensity();
+  if (rain <= 0.08) return;
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  const sheen = ctx.createLinearGradient(0, H * 0.36, 0, H);
+  sheen.addColorStop(0, "rgba(125, 157, 164, 0)");
+  sheen.addColorStop(1, `rgba(120, 153, 159, ${rain * 0.055})`);
+  ctx.fillStyle = sheen;
+  ctx.fillRect(0, H * 0.36, W, H * 0.64);
+  ctx.globalAlpha = rain * 0.12;
+  ctx.fillStyle = "#b5d2d3";
+  for (let index = 0; index < 18; index += 1) {
+    const x = hash(index + 811) * W;
+    const y = H * (0.58 + hash(index + 827) * 0.37);
+    const width = 10 + hash(index + 839) * 34;
+    ctx.fillRect(Math.round(x), Math.round(y), Math.round(width), 1);
+  }
+  ctx.restore();
+}
+
+function drawRain() {
+  const rain = precipitationIntensity();
+  if (rain <= 0.04) return;
+  const dropCount = Math.round(48 + rain * 116);
+  ctx.save();
+  ctx.strokeStyle = "#b7d1d3";
+  ctx.lineCap = "square";
+  for (let index = 0; index < dropCount; index += 1) {
+    const drop = getRainDrop(index, elapsed, rain);
+    ctx.globalAlpha = drop.alpha;
+    ctx.lineWidth = drop.width;
+    ctx.beginPath();
+    ctx.moveTo(drop.x, drop.y);
+    ctx.lineTo(drop.endX, drop.endY);
+    ctx.stroke();
+    if (index % 9 === 0 && drop.endY > H * 0.62 && drop.endY < H - 8) {
+      ctx.globalAlpha = drop.alpha * 0.48;
+      ctx.beginPath();
+      ctx.moveTo(drop.endX - 4, drop.endY);
+      ctx.lineTo(drop.endX + 4, drop.endY);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+function drawWeatherLightning() {
+  if (weather.lightningFlash <= 0) return;
+  const progress = Math.max(0, Math.min(1, weather.lightningFlash / 0.32));
+  const flicker = Math.sin((0.32 - weather.lightningFlash) * 92) > -0.2 ? 1 : 0.34;
+  ctx.save();
+  ctx.globalCompositeOperation = "screen";
+  ctx.fillStyle = `rgba(196, 218, 226, ${progress * flicker * 0.34})`;
+  ctx.fillRect(0, 0, W, H);
+  if (weather.lightningFlash > 0.2) {
+    const startX = W * (0.5 + weather.thunderPan * 0.42);
+    ctx.globalAlpha = Math.min(0.7, progress);
+    ctx.strokeStyle = "#d8edf0";
+    ctx.shadowColor = "#a9d4dd";
+    ctx.shadowBlur = 10;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(startX, -10);
+    ctx.lineTo(startX - 13, H * 0.12);
+    ctx.lineTo(startX + 8, H * 0.22);
+    ctx.lineTo(startX - 18, H * 0.34);
+    ctx.lineTo(startX - 3, H * 0.47);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function getNightMaskContext() {

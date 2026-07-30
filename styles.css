@@ -1199,7 +1199,7 @@ h1 {
 }
 
 .hud {
-  width: 326px;
+  width: 390px;
   min-width: 0;
   color: var(--ui-bone);
   background: rgba(3, 7, 8, .9);
@@ -1223,7 +1223,7 @@ h1 {
 
 .hud-primary {
   display: grid;
-  grid-template-columns: .8fr .8fr 1.25fr;
+  grid-template-columns: .7fr .7fr .82fr 1.18fr;
   border-top: 1px solid #3f4c45;
 }
 
@@ -1248,6 +1248,25 @@ h1 {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 13px;
+}
+
+.weather-cell span {
+  transition: color .8s ease, text-shadow .8s ease;
+}
+
+.game-screen[data-weather="cloudy"] #weatherLabel {
+  color: #aab8b3;
+}
+
+.game-screen[data-weather="rain"] #weatherLabel {
+  color: #8fc1c8;
+  text-shadow: 0 0 7px rgba(98, 169, 181, .32);
+}
+
+.game-screen[data-weather="storm"] #weatherLabel {
+  color: #b7dce0;
+  text-shadow: 0 0 9px rgba(139, 201, 215, .48);
+  animation: weather-signal 2.6s steps(2, end) infinite;
 }
 
 .hud-primary #phaseLabel::before,
@@ -1642,6 +1661,13 @@ h1 {
   to { box-shadow: inset 0 -3px 0 #bc5048, 0 0 0 1px #6d4640, 0 0 15px rgba(145, 44, 43, .25); }
 }
 
+@keyframes weather-signal {
+  0%, 86%, 100% { opacity: 1; }
+  88% { opacity: .35; }
+  91% { opacity: .85; }
+  94% { opacity: .48; }
+}
+
 @media (max-width: 860px) {
   .inventory-workspace {
     grid-template-columns: minmax(0, 520px);
@@ -1665,7 +1691,7 @@ h1 {
 
 @media (max-width: 560px) {
   .title-card { padding: 46px 24px 32px; }
-  .hud { left: 10px; width: min(326px, calc(100vw - 132px)); min-width: 0; }
+  .hud { left: 10px; width: min(390px, calc(100vw - 132px)); min-width: 0; }
   .hud-cell { padding: 6px; }
   .hud-cell span { font-size: 10px; }
   .vital-row, .held-row { padding: 4px 7px; }

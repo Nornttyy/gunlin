@@ -12,7 +12,7 @@
   <link rel="preload" href="assets/escape-gate.png?v=20260729-gate-drawn1" as="image" />
   <link rel="preload" href="assets/forest-assets.png?v=20260730-bottles1" as="image" />
   <link rel="preload" href="assets/ark-pixel-12px-zh_cn.woff2?v=20260728-assets2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=20260730-zombie1" />
+  <link rel="stylesheet" href="styles.css?v=20260730-weather1" />
 </head>
 <body>
   <main id="app">
@@ -24,7 +24,7 @@
         <div id="loadingStatus" class="loading-status" aria-live="polite">
           <div class="loading-copy">
             <span id="loadingText">正在接收森林信号…</span>
-            <span id="loadingCount">0 / 6</span>
+            <span id="loadingCount">0 / 7</span>
           </div>
           <div class="loading-track"><span id="loadingProgress"></span></div>
         </div>
@@ -176,6 +176,7 @@
         <div class="hud-primary">
           <div class="hud-cell"><small>时段</small><span id="phaseLabel">白天</span></div>
           <div class="hud-cell"><small>记录</small><span id="dayLabel">第 1 天</span></div>
+          <div class="hud-cell weather-cell"><small>天气</small><span id="weatherLabel">晴朗</span></div>
           <div class="hud-cell role-cell"><small>身份</small><span id="classLabel">未选择</span></div>
         </div>
         <div class="phase-track" aria-hidden="true"><span id="phaseProgress"></span></div>
@@ -386,6 +387,6 @@
       <p class="settings-tip">设置会自动保存在这个浏览器中</p>
     </section>
   </main>
-  <script type="module" src="game.js?v=20260730-zombie1"></script>
+  <script type="module" src="game.js?v=20260730-weather1"></script>
 </body>
 </html>

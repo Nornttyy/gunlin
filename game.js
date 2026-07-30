@@ -51,6 +51,10 @@ const ZOMBIE_ATTACK_DAMAGE = 18;
 const ZOMBIE_FRAME_SIZE = 16;
 const ZOMBIE_DEATH_DURATION = 0.72;
 const AUDIO_PAN_DISTANCE = 420;
+const PLAYER_ACCELERATION = 1200;
+const PLAYER_TURN_ACCELERATION = 1900;
+const PLAYER_DECELERATION = 900;
+const PLAYER_STOP_SPEED = 2;
 const BUILD_GRID_SIZE = TILE_SIZE;
 const ESCAPE_GATE_MIN_DISTANCE = 600 * TILE_SIZE;
 const ESCAPE_GATE_MAX_DISTANCE = 900 * TILE_SIZE;
@@ -435,6 +439,8 @@ const player = {
   y: PLAYER_START.y,
   radius: 10,
   speed: 132,
+  velocityX: 0,
+  velocityY: 0,
   health: 100,
   wood: 0,
   stone: 0,
@@ -1724,6 +1730,8 @@ function startGame() {
   Object.assign(player, {
     x: PLAYER_START.x,
     y: PLAYER_START.y,
+    velocityX: 0,
+    velocityY: 0,
     health: 100,
     wood: 0,
     stone: 0,
@@ -1824,6 +1832,8 @@ function continueGame() {
   Object.assign(player, {
     x: Number.isFinite(saved.player.x) ? saved.player.x : PLAYER_START.x,
     y: Number.isFinite(saved.player.y) ? saved.player.y : PLAYER_START.y,
+    velocityX: 0,
+    velocityY: 0,
     health: Math.max(1, Number(saved.player.health) || 100),
     wood: Math.max(0, Number(saved.player.wood) || 0),
     stone: Math.max(0, Number(saved.player.stone) || 0),
@@ -1927,6 +1937,7 @@ function continueGame() {
 function returnToTitle() {
   state = "title";
   keys.clear();
+  stopPlayerMotion();
   inventoryOpen = false;
   howToPlayOpen = false;
   settingsOpen = false;
@@ -1953,6 +1964,7 @@ function returnToTitle() {
 
 function endGame() {
   state = "over";
+  stopPlayerMotion();
   classSelectionOpen = false;
   classSelectPanel.classList.add("hidden");
   setPauseOpen(false);
@@ -1968,6 +1980,7 @@ function winGame() {
   if (state !== "game") return;
   state = "won";
   keys.clear();
+  stopPlayerMotion();
   classSelectionOpen = false;
   classSelectPanel.classList.add("hidden");
   setPauseOpen(false);
@@ -2015,6 +2028,7 @@ function setEmoteOpen(open) {
   emoteOpen = shouldOpen;
   emotePanel?.classList.toggle("hidden", !emoteOpen);
   keys.clear();
+  stopPlayerMotion();
   if (!emoteOpen) lastTime = performance.now();
 }
 
@@ -2313,41 +2327,90 @@ function update(delta) {
 }
 
 function updatePlayer(delta) {
-  let x = 0;
-  let y = 0;
-  if (keys.has("KeyA") || keys.has("ArrowLeft")) x -= 1;
-  if (keys.has("KeyD") || keys.has("ArrowRight")) x += 1;
-  if (keys.has("KeyW") || keys.has("ArrowUp")) y -= 1;
-  if (keys.has("KeyS") || keys.has("ArrowDown")) y += 1;
-  const length = Math.hypot(x, y) || 1;
-  x /= length;
-  y /= length;
-  player.moving = Math.abs(x) + Math.abs(y) > 0;
-  if (player.moving) {
-    stopEmote();
-    player.animation += delta * (keys.has("ShiftLeft") || keys.has("ShiftRight") ? 11 : 8);
+  let inputX = 0;
+  let inputY = 0;
+  if (keys.has("KeyA") || keys.has("ArrowLeft")) inputX -= 1;
+  if (keys.has("KeyD") || keys.has("ArrowRight")) inputX += 1;
+  if (keys.has("KeyW") || keys.has("ArrowUp")) inputY -= 1;
+  if (keys.has("KeyS") || keys.has("ArrowDown")) inputY += 1;
+  const inputLength = Math.hypot(inputX, inputY);
+  const hasMoveInput = inputLength > 0;
+  if (hasMoveInput) {
+    inputX /= inputLength;
+    inputY /= inputLength;
   }
 
   const sprinting = keys.has("ShiftLeft") || keys.has("ShiftRight");
+  const targetSpeed = player.speed * (sprinting ? 1.45 : 1);
+  const targetVelocityX = inputX * targetSpeed;
+  const targetVelocityY = inputY * targetSpeed;
+  const reversing = hasMoveInput
+    && player.velocityX * inputX + player.velocityY * inputY < -PLAYER_STOP_SPEED;
+  const velocityChange = (
+    hasMoveInput
+      ? reversing ? PLAYER_TURN_ACCELERATION : PLAYER_ACCELERATION
+      : PLAYER_DECELERATION
+  ) * delta;
+  movePlayerVelocityToward(targetVelocityX, targetVelocityY, velocityChange);
+  if (!hasMoveInput && Math.hypot(player.velocityX, player.velocityY) < PLAYER_STOP_SPEED) {
+    player.velocityX = 0;
+    player.velocityY = 0;
+  }
+
+  const movementSpeed = Math.hypot(player.velocityX, player.velocityY);
+  player.moving = movementSpeed >= PLAYER_STOP_SPEED;
+  if (player.moving) {
+    if (hasMoveInput) stopEmote();
+    const speedRatio = Math.min(1.45, movementSpeed / player.speed);
+    player.animation += delta * (1.7 + speedRatio * 6.3);
+  }
+
   if (player.moving) {
     playerFootstepTimer -= delta;
     if (playerFootstepTimer <= 0) {
       playPlayerFootstep();
-      playerFootstepTimer = sprinting ? 0.22 : 0.31;
+      const speedRatio = Math.max(0.55, movementSpeed / player.speed);
+      playerFootstepTimer = 0.31 / speedRatio;
     }
   } else {
     playerFootstepTimer = Math.min(playerFootstepTimer, 0.06);
   }
-  const speed = player.speed * (sprinting ? 1.45 : 1);
-  const nextX = player.x + x * speed * delta;
-  const nextY = player.y + y * speed * delta;
+
+  const nextX = player.x + player.velocityX * delta;
+  const nextY = player.y + player.velocityY * delta;
   if (!collides(nextX, player.y)) player.x = nextX;
+  else player.velocityX = 0;
   if (!collides(player.x, nextY)) player.y = nextY;
-  player.x = Math.max(WORLD.margin, Math.min(WORLD.width - WORLD.margin, player.x));
-  player.y = Math.max(WORLD.margin, Math.min(WORLD.height - WORLD.margin, player.y));
+  else player.velocityY = 0;
+
+  const boundedX = Math.max(WORLD.margin, Math.min(WORLD.width - WORLD.margin, player.x));
+  const boundedY = Math.max(WORLD.margin, Math.min(WORLD.height - WORLD.margin, player.y));
+  if (boundedX !== player.x) player.velocityX = 0;
+  if (boundedY !== player.y) player.velocityY = 0;
+  player.x = boundedX;
+  player.y = boundedY;
   updateResourceChunks();
 
   if (player.health <= 0) endGame();
+}
+
+function movePlayerVelocityToward(targetX, targetY, maximumChange) {
+  const differenceX = targetX - player.velocityX;
+  const differenceY = targetY - player.velocityY;
+  const differenceLength = Math.hypot(differenceX, differenceY);
+  if (differenceLength <= maximumChange || differenceLength <= 0.0001) {
+    player.velocityX = targetX;
+    player.velocityY = targetY;
+    return;
+  }
+  player.velocityX += differenceX / differenceLength * maximumChange;
+  player.velocityY += differenceY / differenceLength * maximumChange;
+}
+
+function stopPlayerMotion() {
+  player.velocityX = 0;
+  player.velocityY = 0;
+  player.moving = false;
 }
 
 // 木墙和木门的有效像素靠近图块边缘，碰撞盒也要跟着旋转到同一条边上。
@@ -3128,6 +3191,7 @@ function setInventoryOpen(open) {
   inventoryButtonLabel.textContent = inventoryOpen ? (chest ? "关闭箱子" : "关闭") : "背包";
   if (inventoryOpen) {
     keys.clear();
+    stopPlayerMotion();
     if (craftStatus && !chest) craftStatus.textContent = "选择配方制作，成品会优先进入快捷栏";
   }
   updateHud();
@@ -3147,6 +3211,7 @@ function setSettingsOpen(open, returnTarget = null) {
     if (settingsReturnTarget === "pause") pausePanel?.classList.add("hidden");
     settingsPanel?.classList.remove("hidden");
     keys.clear();
+    stopPlayerMotion();
     renderSettings();
     return;
   }
@@ -3164,6 +3229,7 @@ function setPauseOpen(open) {
   pausePanel?.classList.toggle("hidden", !pauseOpen);
   if (pauseOpen) {
     keys.clear();
+    stopPlayerMotion();
     const saved = saveGame(false);
     if (saveStatus) saveStatus.textContent = saved ? "已自动保存" : "游戏已暂停";
   } else {
@@ -5360,6 +5426,14 @@ function playerWeaponActionPose(weapon) {
   return pose;
 }
 
+function playerMovementLean() {
+  const maximumSpeed = player.speed * 1.45;
+  return Math.max(-0.04, Math.min(
+    0.04,
+    player.velocityX / maximumSpeed * 0.04
+  ));
+}
+
 function playerEmotePose(type = activeEmote, time = activeEmoteTime()) {
   const pose = {
     offsetX: 0,
@@ -5461,7 +5535,7 @@ function drawPlayer() {
     emotePose.offsetX + actionPose.offsetX,
     emotePose.offsetY + actionPose.offsetY
   );
-  ctx.rotate(emotePose.rotation + actionPose.rotation);
+  ctx.rotate(emotePose.rotation + actionPose.rotation + playerMovementLean());
   ctx.scale(emotePose.scaleX, emotePose.scaleY);
   ctx.translate(-player.x, -player.y);
   drawWeaponActionTrail(heldWeapon);
@@ -5993,7 +6067,10 @@ canvas.addEventListener("pointermove", (event) => {
 // 在游戏画布上按右键时只负责建造，不弹出浏览器菜单。
 canvas.addEventListener("contextmenu", (event) => event.preventDefault());
 window.addEventListener("keyup", (event) => keys.delete(event.code));
-window.addEventListener("blur", () => keys.clear());
+window.addEventListener("blur", () => {
+  keys.clear();
+  stopPlayerMotion();
+});
 startButton.addEventListener("click", startGame);
 continueButton?.addEventListener("click", continueGame);
 howToPlayButton?.addEventListener("click", () => setHowToPlayOpen(true));
@@ -6206,6 +6283,7 @@ classButtons.forEach((button) => {
     classSelectPanel.classList.add("hidden");
     inventoryButton.disabled = false;
     keys.clear();
+    stopPlayerMotion();
     lastTime = performance.now();
     const skill = CLASS_SKILLS[selectedClass];
     const startingItems = giveClassStartingItems(selectedClass);

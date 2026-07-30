@@ -241,9 +241,11 @@ const MIMIC_ASSET_VERSION = "20260728-mimic-drawn1";
 const ZOMBIE_ASSET_VERSION = "20260730-zombie1";
 const ESCAPE_GATE_ASSET_VERSION = "20260729-gate-drawn1";
 const HELD_WEAPON_FRAME = { club: 0, axe: 1, knife: 2, pistol: 3, shotgun: 4, pickaxe: 5 };
-const MELEE_SWING_DURATION = 0.28;
-const TOOL_SWING_DURATION = 0.34;
-const ACTION_IMPACT_DURATION = 0.36;
+const MELEE_SWING_DURATION = 0.36;
+const TOOL_SWING_DURATION = 0.44;
+const PISTOL_RECOIL_DURATION = 0.18;
+const SHOTGUN_RECOIL_DURATION = 0.26;
+const ACTION_IMPACT_DURATION = 0.42;
 const sprite = new Image();
 const worldSprite = new Image();
 const treeSprite = new Image();
@@ -497,7 +499,7 @@ const camera = { x: 0, y: 0 };
 const pointerAim = { x: W / 2, y: H / 2, active: false };
 const pistolShot = {
   timer: 0,
-  duration: 0.12,
+  duration: PISTOL_RECOIL_DURATION,
   weaponType: "pistol",
   startX: 0,
   startY: 0,
@@ -3617,7 +3619,10 @@ function fireFirearm(weapon) {
   player.attackCooldown = weaponAttackCooldown(weapon);
   player.toolSwingTimer = 0;
   player.toolSwingType = "";
-  player.attackTimer = weapon.type === "shotgun" ? 0.2 : 0.14;
+  const recoilDuration = weapon.type === "shotgun"
+    ? SHOTGUN_RECOIL_DURATION
+    : PISTOL_RECOIL_DURATION;
+  player.attackTimer = recoilDuration;
   const range = weapon.range || 720;
   const directionLength = Math.hypot(player.dirX, player.dirY) || 1;
   const baseDirectionX = player.dirX / directionLength;
@@ -3625,8 +3630,8 @@ function fireFirearm(weapon) {
   const startX = player.x + baseDirectionX * 19;
   const startY = player.y - 15 + baseDirectionY * 5;
   Object.assign(pistolShot, {
-    timer: weapon.type === "shotgun" ? 0.18 : 0.12,
-    duration: weapon.type === "shotgun" ? 0.18 : 0.12,
+    timer: recoilDuration,
+    duration: recoilDuration,
     weaponType: weapon.type,
     startX,
     startY,
@@ -5125,7 +5130,11 @@ function drawProjectiles() {
   ctx.save();
   ctx.globalCompositeOperation = "screen";
   if (pistolShot.timer > 0) {
-    const flashStrength = Math.min(1, pistolShot.timer / 0.12);
+    const flashProgress = 1 - Math.max(0, Math.min(
+      1,
+      pistolShot.timer / (pistolShot.duration || PISTOL_RECOIL_DURATION)
+    ));
+    const flashStrength = 1 - actionSmootherStep(flashProgress);
     const flash = ctx.createRadialGradient(
       pistolShot.startX,
       pistolShot.startY,
@@ -5158,6 +5167,38 @@ function drawProjectiles() {
   ctx.restore();
 }
 
+function actionSmootherStep(value) {
+  const progress = Math.max(0, Math.min(1, value));
+  return progress * progress * progress
+    * (progress * (progress * 6 - 15) + 10);
+}
+
+function actionEaseInOut(value) {
+  const progress = Math.max(0, Math.min(1, value));
+  return progress < 0.5
+    ? 4 * progress * progress * progress
+    : 1 - Math.pow(-2 * progress + 2, 3) / 2;
+}
+
+function actionLerp(start, end, progress) {
+  return start + (end - start) * progress;
+}
+
+function firearmRecoilDuration(weapon) {
+  return weapon?.type === "shotgun"
+    ? SHOTGUN_RECOIL_DURATION
+    : PISTOL_RECOIL_DURATION;
+}
+
+function firearmRecoilStrength(weapon) {
+  if (!weapon?.magazineSize || pistolShot.timer <= 0) return 0;
+  const duration = firearmRecoilDuration(weapon);
+  const progress = Math.max(0, Math.min(1, 1 - pistolShot.timer / duration));
+  const peakAt = weapon.type === "shotgun" ? 0.3 : 0.24;
+  if (progress < peakAt) return actionSmootherStep(progress / peakAt);
+  return 1 - actionSmootherStep((progress - peakAt) / (1 - peakAt));
+}
+
 function heldWeaponAction(weapon) {
   if (!weapon) return null;
   if (!weapon?.magazineSize
@@ -5188,15 +5229,37 @@ function heldWeaponAction(weapon) {
 }
 
 function weaponSwingPose(action) {
-  if (!action) return { offset: 0, side: 1, eased: 0 };
+  if (!action) return { offset: 0, side: 1, phase: "idle" };
   const side = Math.cos(action.baseAngle) < -0.08 ? -1 : 1;
-  const eased = 1 - Math.pow(1 - action.progress, 3);
-  const start = action.kind === "tool" ? -1.34 : -1.02;
-  const end = action.kind === "tool" ? 0.82 : 0.92;
+  const windupEnd = action.kind === "tool" ? 0.24 : 0.2;
+  const strikeEnd = action.kind === "tool" ? 0.58 : 0.52;
+  const windup = action.kind === "tool" ? -1.28 : -0.96;
+  const contact = action.kind === "tool" ? 0.78 : 0.86;
+  if (action.progress < windupEnd) {
+    const progress = actionSmootherStep(action.progress / windupEnd);
+    return {
+      side,
+      phase: "windup",
+      offset: side * actionLerp(0, windup, progress)
+    };
+  }
+  if (action.progress < strikeEnd) {
+    const progress = actionEaseInOut(
+      (action.progress - windupEnd) / (strikeEnd - windupEnd)
+    );
+    return {
+      side,
+      phase: "strike",
+      offset: side * actionLerp(windup, contact, progress)
+    };
+  }
+  const progress = actionSmootherStep(
+    (action.progress - strikeEnd) / (1 - strikeEnd)
+  );
   return {
     side,
-    eased,
-    offset: side * (start + (end - start) * eased)
+    phase: "recover",
+    offset: side * actionLerp(contact, 0, progress)
   };
 }
 
@@ -5206,11 +5269,19 @@ function drawWeaponActionTrail(weapon) {
   const pose = weaponSwingPose(action);
   const radius = action.kind === "tool" ? 34 : 31;
   const tail = action.kind === "tool" ? 0.82 : 0.68;
-  const fade = Math.sin(Math.min(1, action.progress) * Math.PI);
+  const windupEnd = action.kind === "tool" ? 0.24 : 0.2;
+  const strikeEnd = action.kind === "tool" ? 0.58 : 0.52;
+  const fadeIn = actionSmootherStep(
+    (action.progress - windupEnd * 0.7) / (strikeEnd - windupEnd * 0.7)
+  );
+  const fadeOut = 1 - actionSmootherStep(
+    (action.progress - strikeEnd) / (1 - strikeEnd)
+  );
+  const fade = fadeIn * fadeOut;
   ctx.save();
   ctx.translate(player.x, player.y - 14);
   ctx.rotate(action.baseAngle);
-  ctx.globalAlpha = 0.18 + fade * 0.58;
+  ctx.globalAlpha = fade * 0.76;
   ctx.strokeStyle = weapon.type === "pickaxe"
     ? "#c7d5d5"
     : weapon.type === "axe"
@@ -5242,10 +5313,7 @@ function drawHeldWeapon(weapon) {
   const aimX = Math.cos(angle);
   const aimY = Math.sin(angle);
   const firing = Boolean(weapon.magazineSize) && pistolShot.timer > 0;
-  const shotDuration = weapon.type === "shotgun" ? 0.18 : 0.12;
-  const recoilStrength = firing
-    ? Math.sin(Math.min(1, pistolShot.timer / shotDuration) * Math.PI / 2)
-    : 0;
+  const recoilStrength = firearmRecoilStrength(weapon);
   const recoilScale = weapon.type === "shotgun" ? 9 : 5;
   const recoil = -recoilScale * recoilStrength;
   const recoilRotation = firing
@@ -5277,8 +5345,7 @@ function playerWeaponActionPose(weapon) {
   const pose = { offsetX: 0, offsetY: 0, rotation: 0 };
   if (!weapon) return pose;
   if (weapon.magazineSize && pistolShot.timer > 0) {
-    const shotDuration = weapon.type === "shotgun" ? 0.18 : 0.12;
-    const recoil = Math.sin(Math.min(1, pistolShot.timer / shotDuration) * Math.PI / 2);
+    const recoil = firearmRecoilStrength(weapon);
     pose.offsetX = -player.dirX * recoil * (weapon.type === "shotgun" ? 2.6 : 1.4);
     pose.offsetY = -player.dirY * recoil * (weapon.type === "shotgun" ? 2.6 : 1.4);
     pose.rotation = (player.dirX < 0 ? -1 : 1) * -0.035 * recoil;
@@ -5286,7 +5353,7 @@ function playerWeaponActionPose(weapon) {
   }
   const action = heldWeaponAction(weapon);
   if (!action) return pose;
-  const swing = Math.sin(action.progress * Math.PI);
+  const swing = Math.sin(actionSmootherStep(action.progress) * Math.PI);
   const side = Math.cos(action.baseAngle) < -0.08 ? -1 : 1;
   pose.offsetY = swing * 1.5;
   pose.rotation = side * swing * (action.kind === "tool" ? 0.055 : 0.04);

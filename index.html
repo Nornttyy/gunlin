@@ -11,7 +11,7 @@
   <link rel="preload" href="assets/escape-gate.png?v=20260729-gate-drawn1" as="image" />
   <link rel="preload" href="assets/forest-assets.png?v=20260730-pickaxe1" as="image" />
   <link rel="preload" href="assets/ark-pixel-12px-zh_cn.woff2?v=20260728-assets2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=20260730-starter1" />
+  <link rel="stylesheet" href="styles.css?v=20260730-workbench1" />
 </head>
 <body>
   <main id="app">
@@ -120,26 +120,26 @@
           <div class="craft-header">
             <div>
               <p>合成栏</p>
-              <span>成品优先进入背包</span>
+              <span>工作台本身可徒手制作</span>
             </div>
             <span>配方 09</span>
           </div>
           <div class="craft-list">
-            <button type="button" class="craft-button" data-recipe="0"><span class="item-sprite quick-wall" aria-hidden="true"></span><span class="craft-copy"><strong>木墙</strong><small>木材 3 · 石头 1</small></span><span class="craft-owned">0</span></button>
-            <button type="button" class="craft-button" data-recipe="1"><span class="item-sprite quick-door" aria-hidden="true"></span><span class="craft-copy"><strong>木门</strong><small>木材 4 · 石头 1</small></span><span class="craft-owned">0</span></button>
-            <button type="button" class="craft-button" data-recipe="2"><span class="item-sprite quick-floor" aria-hidden="true"></span><span class="craft-copy"><strong>木地板</strong><small>木材 2</small></span><span class="craft-owned">0</span></button>
-            <button type="button" class="craft-button" data-recipe="3"><span class="item-sprite quick-chest" aria-hidden="true"></span><span class="craft-copy"><strong>储物箱</strong><small>木材 5</small></span><span class="craft-owned">0</span></button>
-            <button type="button" class="craft-button" data-recipe="4"><span class="item-sprite quick-workbench" aria-hidden="true"></span><span class="craft-copy"><strong>工作台</strong><small>木材 6 · 石头 2</small></span><span class="craft-owned">0</span></button>
-            <button type="button" class="craft-button" data-recipe="5"><span class="item-sprite quick-trap" aria-hidden="true"></span><span class="craft-copy"><strong>陷阱</strong><small>木材 2 · 石头 1</small></span><span class="craft-owned">0</span></button>
+            <button type="button" class="craft-button" data-recipe="0"><span class="item-sprite quick-wall" aria-hidden="true"></span><span class="craft-copy"><strong>木墙</strong><small>工作台 · 木材 3 · 石头 1</small></span><span class="craft-owned">0</span></button>
+            <button type="button" class="craft-button" data-recipe="1"><span class="item-sprite quick-door" aria-hidden="true"></span><span class="craft-copy"><strong>木门</strong><small>工作台 · 木材 4 · 石头 1</small></span><span class="craft-owned">0</span></button>
+            <button type="button" class="craft-button" data-recipe="2"><span class="item-sprite quick-floor" aria-hidden="true"></span><span class="craft-copy"><strong>木地板</strong><small>工作台 · 木材 2</small></span><span class="craft-owned">0</span></button>
+            <button type="button" class="craft-button" data-recipe="3"><span class="item-sprite quick-chest" aria-hidden="true"></span><span class="craft-copy"><strong>储物箱</strong><small>工作台 · 木材 5</small></span><span class="craft-owned">0</span></button>
+            <button type="button" class="craft-button" data-recipe="4"><span class="item-sprite quick-workbench" aria-hidden="true"></span><span class="craft-copy"><strong>工作台</strong><small>徒手制作 · 木材 6 · 石头 2</small></span><span class="craft-owned">0</span></button>
+            <button type="button" class="craft-button" data-recipe="5"><span class="item-sprite quick-trap" aria-hidden="true"></span><span class="craft-copy"><strong>陷阱</strong><small>工作台 · 木材 2 · 石头 1</small></span><span class="craft-owned">0</span></button>
           </div>
           <div class="workbench-craft-header">
-            <span>基础工具与工作台武器</span>
-            <small id="workbenchStatus">基础工具可直接制作</small>
+            <span>工作台工具与武器</span>
+            <small id="workbenchStatus">靠近工作台后解锁</small>
           </div>
           <div class="weapon-craft-list">
             <button type="button" class="weapon-craft-button" data-weapon-recipe="0"><span class="item-sprite weapon-club" aria-hidden="true"></span><span class="craft-copy"><strong>木棒</strong><small>木材 4 · 伤害 25</small></span></button>
-            <button type="button" class="weapon-craft-button" data-weapon-recipe="1"><span class="item-sprite weapon-axe" aria-hidden="true"></span><span class="craft-copy"><strong>石斧</strong><small>徒手制作 · 木材 2 · 石头 1</small></span></button>
-            <button type="button" class="weapon-craft-button" data-weapon-recipe="2"><span class="item-sprite weapon-pickaxe" aria-hidden="true"></span><span class="craft-copy"><strong>石镐</strong><small>徒手制作 · 木材 2 · 石头 2</small></span></button>
+            <button type="button" class="weapon-craft-button" data-weapon-recipe="1"><span class="item-sprite weapon-axe" aria-hidden="true"></span><span class="craft-copy"><strong>石斧</strong><small>工作台 · 木材 2 · 石头 1</small></span></button>
+            <button type="button" class="weapon-craft-button" data-weapon-recipe="2"><span class="item-sprite weapon-pickaxe" aria-hidden="true"></span><span class="craft-copy"><strong>石镐</strong><small>工作台 · 木材 2 · 石头 2</small></span></button>
           </div>
           <p id="craftStatus" class="craft-status">收集材料后可以制作</p>
         </section>
@@ -287,6 +287,6 @@
       <p class="settings-tip">设置会自动保存在这个浏览器中</p>
     </section>
   </main>
-  <script type="module" src="game.js?v=20260730-starter1"></script>
+  <script type="module" src="game.js?v=20260730-workbench1"></script>
 </body>
 </html>

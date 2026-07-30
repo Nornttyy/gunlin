@@ -252,12 +252,12 @@ const PROP_FRAME = {
 };
 
 const BUILD_TYPES = [
-  { type: "wall", label: "木墙", cost: { wood: 3, stone: 1 }, health: 120 },
-  { type: "door", label: "木门", cost: { wood: 4, stone: 1 }, health: 90 },
-  { type: "floor", label: "木地板", cost: { wood: 2, stone: 0 } },
-  { type: "chest", label: "储物箱", cost: { wood: 5, stone: 0 } },
-  { type: "workbench", label: "工作台", cost: { wood: 6, stone: 2 } },
-  { type: "trap", label: "陷阱", cost: { wood: 2, stone: 1 }, uses: 3 }
+  { type: "wall", label: "木墙", cost: { wood: 3, stone: 1 }, health: 120, requiresWorkbench: true },
+  { type: "door", label: "木门", cost: { wood: 4, stone: 1 }, health: 90, requiresWorkbench: true },
+  { type: "floor", label: "木地板", cost: { wood: 2, stone: 0 }, requiresWorkbench: true },
+  { type: "chest", label: "储物箱", cost: { wood: 5, stone: 0 }, requiresWorkbench: true },
+  { type: "workbench", label: "工作台", cost: { wood: 6, stone: 2 }, requiresWorkbench: false },
+  { type: "trap", label: "陷阱", cost: { wood: 2, stone: 1 }, uses: 3, requiresWorkbench: true }
 ];
 const WEAPON_TYPES = [
   {
@@ -266,11 +266,11 @@ const WEAPON_TYPES = [
   },
   {
     type: "axe", kind: "weapon", label: "石斧", cost: { wood: 2, stone: 1 },
-    damage: 45, range: 62, cooldown: 0.62, requiresWorkbench: false
+    damage: 45, range: 62, cooldown: 0.62, requiresWorkbench: true
   },
   {
     type: "pickaxe", kind: "weapon", label: "石镐", cost: { wood: 2, stone: 2 },
-    damage: 38, range: 60, cooldown: 0.64, requiresWorkbench: false
+    damage: 38, range: 60, cooldown: 0.64, requiresWorkbench: true
   },
   {
     type: "pistol",
@@ -379,7 +379,13 @@ const STARTER_RESOURCES = [
   { type: "pebble", offsetX: 0, offsetY: 38 },
   { type: "pebble", offsetX: 38, offsetY: 88 },
   { type: "pebble", offsetX: 4, offsetY: 142 },
-  { type: "pebble", offsetX: 82, offsetY: 126 }
+  { type: "pebble", offsetX: 82, offsetY: 126 },
+  { type: "branch", offsetX: -122, offsetY: 24 },
+  { type: "branch", offsetX: 124, offsetY: 26 },
+  { type: "branch", offsetX: -132, offsetY: 92 },
+  { type: "branch", offsetX: 128, offsetY: 94 },
+  { type: "branch", offsetX: -92, offsetY: 156 },
+  { type: "pebble", offsetX: 94, offsetY: 164 }
 ];
 let activeResourceChunk = "";
 const monsters = [];
@@ -2203,18 +2209,23 @@ function recipeCostText(cost) {
 }
 
 function renderCrafting() {
+  const hasWorkbench = Boolean(nearbyWorkbench());
   craftButtons.forEach((button) => {
     const buildIndex = Number(button.dataset.recipe);
     if (!Number.isInteger(buildIndex) || !BUILD_TYPES[buildIndex]) return;
     const recipe = BUILD_TYPES[buildIndex];
+    const unlocked = recipe.requiresWorkbench === false || hasWorkbench;
     const existingSlot = craftedInventorySlot(buildIndex) >= 0 || craftedQuickSlot(buildIndex) >= 0;
     const hasSpace = existingSlot
       || inventoryItems.some((item) => item === null)
       || quickbarItems.some((item) => item === null);
     const affordable = player.wood >= recipe.cost.wood && player.stone >= recipe.cost.stone;
-    button.disabled = !affordable || !hasSpace;
-    button.classList.toggle("craft-ready", affordable && hasSpace);
-    button.title = !hasSpace
+    button.disabled = !unlocked || !affordable || !hasSpace;
+    button.classList.toggle("craft-ready", unlocked && affordable && hasSpace);
+    button.classList.toggle("workbench-locked", !unlocked);
+    button.title = !unlocked
+      ? "需要靠近已放置的工作台"
+      : !hasSpace
       ? "背包和快捷栏都已满"
       : affordable ? `制作${recipe.label}：${recipeCostText(recipe.cost)}` : `材料不足：${recipeCostText(recipe.cost)}`;
     const owned = button.querySelector?.(".craft-owned");
@@ -2232,7 +2243,7 @@ function nearbyWorkbench() {
 function renderWeaponCrafting() {
   const hasWorkbench = Boolean(nearbyWorkbench());
   if (workbenchStatus) {
-    workbenchStatus.textContent = hasWorkbench ? "工作台已连接" : "基础工具可直接制作";
+    workbenchStatus.textContent = hasWorkbench ? "工作台已连接" : "靠近工作台后解锁";
   }
   weaponCraftButtons.forEach((button) => {
     const recipe = WEAPON_TYPES[Number(button.dataset.weaponRecipe)];
@@ -2293,6 +2304,11 @@ function craftBuilding(buildIndex) {
   if (state !== "game" || !inventoryOpen) return;
   const recipe = BUILD_TYPES[buildIndex];
   if (!recipe) return;
+  if (recipe.requiresWorkbench !== false && !nearbyWorkbench()) {
+    if (craftStatus) craftStatus.textContent = `制作${recipe.label}需要靠近工作台`;
+    renderCrafting();
+    return;
+  }
   const inventoryStack = craftedInventorySlot(buildIndex);
   const quickStack = craftedQuickSlot(buildIndex);
   const emptyInventory = inventoryItems.findIndex((item) => item === null);

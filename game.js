@@ -336,22 +336,22 @@ const BUILD_TYPES = [
 const WEAPON_TYPES = [
   {
     type: "club", kind: "weapon", equipmentClass: "weapon", tier: "wood",
-    label: "木棒", cost: { wood: 4, stone: 0 },
+    label: "木棒", cost: { wood: 6, stone: 0 },
     damage: 25, range: 54, cooldown: 0.48, requiresWorkbench: true
   },
   {
     type: "axe", kind: "weapon", equipmentClass: "tool", toolType: "axe", tier: "stone",
-    label: "石斧", cost: { wood: 2, stone: 1 },
+    label: "石斧", cost: { wood: 6, stone: 6 },
     damage: 45, range: 62, cooldown: 0.62, requiresWorkbench: true
   },
   {
     type: "pickaxe", kind: "weapon", equipmentClass: "tool", toolType: "pickaxe", tier: "stone",
-    label: "石镐", cost: { wood: 2, stone: 2 },
+    label: "石镐", cost: { wood: 6, stone: 8 },
     damage: 38, range: 60, cooldown: 0.64, requiresWorkbench: true
   },
   {
     type: "knife", kind: "weapon", equipmentClass: "weapon", tier: "iron",
-    label: "铁刀", cost: { wood: 1, scrap: 2 },
+    label: "铁刀", cost: { wood: 8, stone: 10, scrap: 16 },
     damage: 42, range: 50, cooldown: 0.27, requiresWorkbench: true
   },
   {
@@ -360,7 +360,7 @@ const WEAPON_TYPES = [
     equipmentClass: "weapon",
     tier: "iron",
     label: "手枪",
-    cost: { wood: 2, scrap: 8 },
+    cost: { wood: 16, stone: 18, scrap: 32 },
     damage: 32,
     range: 720,
     cooldown: 0.42,
@@ -373,7 +373,7 @@ const WEAPON_TYPES = [
     equipmentClass: "weapon",
     tier: "iron",
     label: "霰弹枪",
-    cost: { wood: 4, scrap: 12 },
+    cost: { wood: 24, stone: 28, scrap: 52 },
     damage: 16,
     range: 500,
     cooldown: 0.8,
@@ -388,7 +388,7 @@ const WEAPON_TYPES = [
   },
   {
     type: "iron_axe", kind: "weapon", equipmentClass: "tool", toolType: "axe", tier: "iron",
-    label: "铁斧", cost: { wood: 2, stone: 1, scrap: 5 },
+    label: "铁斧", cost: { wood: 10, stone: 12, scrap: 18 },
     damage: 58, range: 65, cooldown: 0.52, requiresWorkbench: true
   },
   {
@@ -398,17 +398,17 @@ const WEAPON_TYPES = [
   },
   {
     type: "iron_pickaxe", kind: "weapon", equipmentClass: "tool", toolType: "pickaxe", tier: "iron",
-    label: "铁镐", cost: { wood: 2, stone: 1, scrap: 6 },
+    label: "铁镐", cost: { wood: 10, stone: 16, scrap: 22 },
     damage: 52, range: 63, cooldown: 0.54, requiresWorkbench: true
   },
   {
     type: "stone_hammer", kind: "weapon", equipmentClass: "weapon", tier: "stone",
-    label: "石锤", cost: { wood: 2, stone: 3 },
+    label: "石锤", cost: { wood: 10, stone: 12 },
     damage: 38, range: 57, cooldown: 0.55, requiresWorkbench: true
   }
 ];
 const SUPPLY_RECIPES = [
-  { type: "ammo_box", label: "弹药箱", cost: { stone: 1, scrap: 3 }, requiresWorkbench: true },
+  { type: "ammo_box", label: "弹药箱", cost: { stone: 4, scrap: 8 }, requiresWorkbench: true },
   { type: "medkit", label: "医疗包", cost: { berry: 4, scrap: 1 }, requiresWorkbench: true },
   { type: "healing_potion", label: "治疗药水", cost: { berry: 3, water_bottle: 1 }, requiresWorkbench: true },
   { type: "strength_potion", label: "力量药水", cost: { berry: 5, water_bottle: 1 }, requiresWorkbench: true }

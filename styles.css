@@ -384,7 +384,7 @@ button.inventory-slot { font: inherit; cursor: default; }
   flex: 0 0 auto;
   width: 32px;
   height: 32px;
-  background-image: url("assets/forest-assets.png?v=20260730-pickaxe1");
+  background-image: url("assets/forest-assets.png?v=20260730-potions1");
   background-repeat: no-repeat;
   background-size: 256px 192px;
   image-rendering: pixelated;
@@ -2790,7 +2790,7 @@ h1 {
 .quick-slot[data-item-type="pistol"] .item-sprite { background-position: -96px -128px; }
 .inventory-slot[data-item-type="ammo_box"] .item-sprite,
 .quick-slot[data-item-type="ammo_box"] .item-sprite {
-  background-image: url("assets/forest-assets.png?v=20260730-pickaxe1");
+  background-image: url("assets/forest-assets.png?v=20260730-potions1");
   background-position: -192px -64px;
 }
 .inventory-slot[data-item-type="medkit"] .item-sprite,
@@ -2798,52 +2798,11 @@ h1 {
 
 .inventory-slot[data-item-type="healing_potion"] .item-sprite,
 .quick-slot[data-item-type="healing_potion"] .item-sprite,
+.item-healing-potion { background-position: -128px -32px; }
+
 .inventory-slot[data-item-type="strength_potion"] .item-sprite,
 .quick-slot[data-item-type="strength_potion"] .item-sprite,
-.item-healing-potion,
-.item-strength-potion {
-  position: relative;
-  background-image: none;
-}
-
-.inventory-slot[data-item-type="healing_potion"] .item-sprite::before,
-.quick-slot[data-item-type="healing_potion"] .item-sprite::before,
-.inventory-slot[data-item-type="strength_potion"] .item-sprite::before,
-.quick-slot[data-item-type="strength_potion"] .item-sprite::before,
-.item-healing-potion::before,
-.item-strength-potion::before {
-  content: "";
-  position: absolute;
-  left: 7px;
-  top: 8px;
-  width: 18px;
-  height: 20px;
-  clip-path: polygon(33% 0, 67% 0, 67% 20%, 83% 35%, 83% 90%, 72% 100%, 28% 100%, 17% 90%, 17% 35%, 33% 20%);
-  background: linear-gradient(90deg, #70262d 0 22%, #d34b51 22% 68%, #f29a89 68% 82%, #70262d 82%);
-  box-shadow: 0 2px 0 #1a0c0e;
-}
-
-.inventory-slot[data-item-type="strength_potion"] .item-sprite::before,
-.quick-slot[data-item-type="strength_potion"] .item-sprite::before,
-.item-strength-potion::before {
-  background: linear-gradient(90deg, #50316d 0 22%, #9162c1 22% 68%, #e4b1e9 68% 82%, #50316d 82%);
-}
-
-.inventory-slot[data-item-type="healing_potion"] .item-sprite::after,
-.quick-slot[data-item-type="healing_potion"] .item-sprite::after,
-.inventory-slot[data-item-type="strength_potion"] .item-sprite::after,
-.quick-slot[data-item-type="strength_potion"] .item-sprite::after,
-.item-healing-potion::after,
-.item-strength-potion::after {
-  content: "";
-  position: absolute;
-  left: 12px;
-  top: 4px;
-  width: 8px;
-  height: 6px;
-  background: #c9b891;
-  box-shadow: inset 0 -2px 0 #74654d, 0 1px 0 #17100c;
-}
+.item-strength-potion { background-position: -160px -32px; }
 
 .victory-panel {
   background:

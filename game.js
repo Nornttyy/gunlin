@@ -211,7 +211,7 @@ function trapStats() {
     : { uses: 3, range: 35, damage: 45 };
 }
 
-const ASSET_VERSION = "20260730-pickaxe1";
+const ASSET_VERSION = "20260730-potions1";
 const PLAYER_ASSET_VERSION = "20260728-player-redraw1";
 const TREE_ASSET_VERSION = "20260728-tree-visible2";
 const MIMIC_ASSET_VERSION = "20260728-mimic-drawn1";

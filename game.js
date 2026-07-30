@@ -260,9 +260,18 @@ const BUILD_TYPES = [
   { type: "trap", label: "陷阱", cost: { wood: 2, stone: 1 }, uses: 3 }
 ];
 const WEAPON_TYPES = [
-  { type: "club", kind: "weapon", label: "木棒", cost: { wood: 4, stone: 0 }, damage: 25, range: 54, cooldown: 0.48 },
-  { type: "axe", kind: "weapon", label: "石斧", cost: { wood: 4, stone: 3 }, damage: 45, range: 62, cooldown: 0.62 },
-  { type: "pickaxe", kind: "weapon", label: "石镐", cost: { wood: 4, stone: 4 }, damage: 38, range: 60, cooldown: 0.64 },
+  {
+    type: "club", kind: "weapon", label: "木棒", cost: { wood: 4, stone: 0 },
+    damage: 25, range: 54, cooldown: 0.48, requiresWorkbench: true
+  },
+  {
+    type: "axe", kind: "weapon", label: "石斧", cost: { wood: 2, stone: 1 },
+    damage: 45, range: 62, cooldown: 0.62, requiresWorkbench: false
+  },
+  {
+    type: "pickaxe", kind: "weapon", label: "石镐", cost: { wood: 2, stone: 2 },
+    damage: 38, range: 60, cooldown: 0.64, requiresWorkbench: false
+  },
   {
     type: "pistol",
     kind: "weapon",
@@ -274,8 +283,8 @@ const WEAPON_TYPES = [
     magazineSize: PISTOL_MAGAZINE_SIZE
   }
 ];
-const RESOURCE_HARVEST_HITS = { tree: 7, rock: 6, berry: 3 };
-const RESOURCE_GATHER_COOLDOWN = { tree: 0.42, rock: 0.46, berry: 0.3 };
+const RESOURCE_HARVEST_HITS = { tree: 7, rock: 6, berry: 3, branch: 1, pebble: 1 };
+const RESOURCE_GATHER_COOLDOWN = { tree: 0.42, rock: 0.46, berry: 0.3, branch: 0.16, pebble: 0.18 };
 const craftedCounts = Array(BUILD_TYPES.length).fill(0);
 const DEFAULT_GAME_SETTINGS = {
   volume: 70,
@@ -361,6 +370,17 @@ const RESOURCE_CHUNK_TILES = 16;
 const RESOURCE_CHUNK_SIZE = RESOURCE_CHUNK_TILES * TILE_SIZE;
 const RESOURCE_CHUNK_LOAD_RADIUS = 1;
 const RESOURCE_CHUNK_KEEP_RADIUS = 2;
+const STARTER_RESOURCES = [
+  { type: "branch", offsetX: -66, offsetY: 0 },
+  { type: "branch", offsetX: 66, offsetY: 0 },
+  { type: "branch", offsetX: -86, offsetY: 58 },
+  { type: "branch", offsetX: 84, offsetY: 58 },
+  { type: "branch", offsetX: -38, offsetY: 118 },
+  { type: "pebble", offsetX: 0, offsetY: 38 },
+  { type: "pebble", offsetX: 38, offsetY: 88 },
+  { type: "pebble", offsetX: 4, offsetY: 142 },
+  { type: "pebble", offsetX: 82, offsetY: 126 }
+];
 let activeResourceChunk = "";
 const monsters = [];
 const projectiles = [];
@@ -486,11 +506,18 @@ function generateResourceChunk(chunkX, chunkY) {
     if (Math.hypot(x - campfire.x, y - campfire.y) < 230) continue;
     if (isInsideSpawnCorridor(x, y)) continue;
     const roll = gridHash(chunkX, chunkY, candidate * 4 + 3);
-    const type = roll < 0.58 ? "tree" : roll < 0.82 ? "rock" : "berry";
-    const radius = type === "tree" ? 24 : type === "rock" ? 15 : 18;
+    const type = roll < 0.48
+      ? "tree"
+      : roll < 0.68
+        ? "rock"
+        : roll < 0.82
+          ? "berry"
+          : roll < 0.91 ? "branch" : "pebble";
+    const radius = type === "tree" ? 24 : type === "rock" ? 15 : type === "berry" ? 18 : 8;
     if (resourceOverlapsEscapeGate(x, y, radius)) continue;
     const treeFrame = type === "tree" && gridHash(chunkX, chunkY, candidate * 7 + 101) < 0.22 ? 1 : 0;
     if ((type === "tree" || type === "berry") && !canPlantGrowAt(x, y, radius)) continue;
+    if ((type === "branch" || type === "pebble") && terrainAtWorld(x, y) !== TERRAIN_FRAME.grass) continue;
     if (resources.some((item) => Math.hypot(x - item.x, y - item.y) < radius + item.radius + 22)) continue;
     resources.push({
       id: resourceId++,
@@ -506,6 +533,45 @@ function generateResourceChunk(chunkX, chunkY) {
     });
     generated += 1;
   }
+}
+
+function findStarterResourceSpot(definition) {
+  const baseX = PLAYER_START.x + definition.offsetX;
+  const baseY = PLAYER_START.y + definition.offsetY;
+  for (let ring = 0; ring <= 6; ring += 1) {
+    for (let gridY = -ring; gridY <= ring; gridY += 1) {
+      for (let gridX = -ring; gridX <= ring; gridX += 1) {
+        if (ring > 0 && Math.abs(gridX) !== ring && Math.abs(gridY) !== ring) continue;
+        const x = baseX + gridX * 16;
+        const y = baseY + gridY * 16;
+        if (terrainAtWorld(x, y) !== TERRAIN_FRAME.grass) continue;
+        if (Math.hypot(x - campfire.x, y - campfire.y) < 44) continue;
+        if (Math.hypot(x - PLAYER_START.x, y - PLAYER_START.y) < 24) continue;
+        if (resources.some((item) => Math.hypot(x - item.x, y - item.y) < item.radius + 20)) continue;
+        return { x, y };
+      }
+    }
+  }
+  return null;
+}
+
+function generateStarterResources() {
+  STARTER_RESOURCES.forEach((definition, index) => {
+    const spawnKey = `starter:${definition.type}:${index}`;
+    if (harvestedResourceKeys.has(spawnKey)
+      || resources.some((item) => item.spawnKey === spawnKey)) return;
+    const position = findStarterResourceSpot(definition);
+    if (!position) return;
+    resources.push({
+      id: resourceId++,
+      spawnKey,
+      x: position.x,
+      y: position.y,
+      type: definition.type,
+      radius: 8,
+      harvestHits: 0
+    });
+  });
 }
 
 function updateResourceChunks(force = false) {
@@ -1316,6 +1382,7 @@ function resetWorld() {
   buildingId = 0;
   generateEscapeGate();
   updateResourceChunks(true);
+  generateStarterResources();
 }
 
 function startGame() {
@@ -1522,6 +1589,7 @@ function continueGame() {
   doorId = nextEntityId(doors);
   buildingId = nextEntityId(buildings);
   updateResourceChunks(true);
+  generateStarterResources();
 
   camera.x = Math.max(0, Math.min(WORLD.width - W, player.x - W / 2));
   camera.y = Math.max(0, Math.min(WORLD.height - H, player.y - H / 2));
@@ -1813,7 +1881,7 @@ function collides(x, y) {
     if (collider && circleHitsRectangle(x, y, player.radius, collider)) return true;
   }
   for (const resource of resources) {
-    if (resource.type === "berry") continue;
+    if (resource.type === "berry" || resource.type === "branch" || resource.type === "pebble") continue;
     if (Math.hypot(x - resource.x, y - resource.y) < resource.radius + player.radius - 2) return true;
   }
   return false;
@@ -1904,7 +1972,7 @@ function normalizePortableItem(item, fallbackCount = 1) {
       ...weapon,
       cost: { ...weapon.cost },
       count: 1,
-      source: "workbench"
+      source: item.source || (weapon.requiresWorkbench === false ? "handcrafted" : "workbench")
     };
     if (weapon.type === "pistol") {
       normalized.loadedAmmo = Math.max(0, Math.min(
@@ -2081,7 +2149,9 @@ function collectResource(target = findGatherTarget()) {
   }
 
   player.gatherCooldown = RESOURCE_GATHER_COOLDOWN[target.type] || 0.32;
-  const gatheredType = target.type === "tree" ? "wood" : target.type === "rock" ? "stone" : "berry";
+  const gatheredType = target.type === "tree" || target.type === "branch"
+    ? "wood"
+    : target.type === "rock" || target.type === "pebble" ? "stone" : "berry";
   playGatherSound(gatheredType, target.x, target.y);
   const requiredHits = resourceHarvestHits(target.type);
   target.harvestHits = Math.min(requiredHits, (target.harvestHits || 0) + 1);
@@ -2103,6 +2173,12 @@ function collectResource(target = findGatherTarget()) {
   } else if (target.type === "rock") {
     addResource("stone", 2);
     showMessage("获得石头 ×2");
+  } else if (target.type === "branch") {
+    addResource("wood", 1);
+    showMessage("捡到树枝：获得木材 ×1");
+  } else if (target.type === "pebble") {
+    addResource("stone", 1);
+    showMessage("捡到小石块：获得石头 ×1");
   } else {
     addResource("berry", 1);
     showMessage("浆果已放进物品栏");
@@ -2154,11 +2230,14 @@ function nearbyWorkbench() {
 }
 
 function renderWeaponCrafting() {
-  const unlocked = Boolean(nearbyWorkbench());
-  if (workbenchStatus) workbenchStatus.textContent = unlocked ? "工作台已连接" : "靠近工作台后解锁";
+  const hasWorkbench = Boolean(nearbyWorkbench());
+  if (workbenchStatus) {
+    workbenchStatus.textContent = hasWorkbench ? "工作台已连接" : "基础工具可直接制作";
+  }
   weaponCraftButtons.forEach((button) => {
     const recipe = WEAPON_TYPES[Number(button.dataset.weaponRecipe)];
     if (!recipe) return;
+    const unlocked = recipe.requiresWorkbench === false || hasWorkbench;
     const hasSpace = inventoryItems.some((item) => item === null)
       || quickbarItems.some((item) => item === null);
     const affordable = player.wood >= recipe.cost.wood && player.stone >= recipe.cost.stone;
@@ -2179,8 +2258,9 @@ function craftWeapon(weaponIndex) {
   if (state !== "game" || !inventoryOpen) return;
   const recipe = WEAPON_TYPES[weaponIndex];
   if (!recipe) return;
-  if (!nearbyWorkbench()) {
-    if (craftStatus) craftStatus.textContent = "需要靠近已放置的工作台才能制作武器";
+  const needsWorkbench = recipe.requiresWorkbench !== false;
+  if (needsWorkbench && !nearbyWorkbench()) {
+    if (craftStatus) craftStatus.textContent = `制作${recipe.label}需要靠近工作台`;
     renderWeaponCrafting();
     return;
   }
@@ -2196,7 +2276,8 @@ function craftWeapon(weaponIndex) {
   }
   spendResource("wood", recipe.cost.wood);
   spendResource("stone", recipe.cost.stone);
-  const weapon = { ...recipe, cost: { ...recipe.cost }, count: 1, source: "workbench" };
+  const source = needsWorkbench ? "workbench" : "handcrafted";
+  const weapon = { ...recipe, cost: { ...recipe.cost }, count: 1, source };
   if (inventoryIndex >= 0) inventoryItems[inventoryIndex] = weapon;
   else quickbarItems[quickIndex] = weapon;
   playBuildSound(player.x, player.y);
@@ -3696,6 +3777,26 @@ function drawResources() {
       ctx.beginPath(); ctx.moveTo(resource.x - 16, resource.y + 8); ctx.lineTo(resource.x - 10, resource.y - 10); ctx.lineTo(resource.x + 7, resource.y - 16); ctx.lineTo(resource.x + 17, resource.y + 3); ctx.lineTo(resource.x + 6, resource.y + 13); ctx.closePath(); ctx.fill();
       ctx.fillStyle = "#a3b09b";
       ctx.fillRect(resource.x - 7, resource.y - 7, 8, 5);
+    } else if (resource.type === "branch") {
+      if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
+        ctx.drawImage(worldSprite, 0, 2 * 16, 16, 16, resource.x - 16, resource.y - 16, 32, 32);
+        continue;
+      }
+      ctx.strokeStyle = "#7b4c2b";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(resource.x - 12, resource.y + 7);
+      ctx.lineTo(resource.x + 12, resource.y - 7);
+      ctx.stroke();
+    } else if (resource.type === "pebble") {
+      if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
+        ctx.drawImage(worldSprite, PROP_FRAME.stone * 16, 2 * 16, 16, 16, resource.x - 13, resource.y - 13, 26, 26);
+        continue;
+      }
+      ctx.fillStyle = "#869187";
+      ctx.beginPath();
+      ctx.ellipse(resource.x, resource.y, 9, 6, -0.3, 0, Math.PI * 2);
+      ctx.fill();
     } else {
       if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
         ctx.drawImage(worldSprite, PROP_FRAME.berryBush * 16, 16, 16, 16, resource.x - 24, resource.y - 24, 48, 48);

@@ -51,6 +51,9 @@ const titleScreen = document.getElementById("titleScreen");
 const gameScreen = document.getElementById("gameScreen");
 const startButton = document.getElementById("startButton");
 const continueButton = document.getElementById("continueButton");
+const howToPlayButton = document.getElementById("howToPlayButton");
+const howToPlayPanel = document.getElementById("howToPlayPanel");
+const howToPlayCloseButton = document.getElementById("howToPlayCloseButton");
 const titleSettingsButton = document.getElementById("titleSettingsButton");
 const loadingStatus = document.getElementById("loadingStatus");
 const loadingText = document.getElementById("loadingText");
@@ -356,6 +359,7 @@ let selectedQuickSlot = -1;
 let selectedClass = -1;
 let classSelectionOpen = false;
 let inventoryOpen = false;
+let howToPlayOpen = false;
 let settingsOpen = false;
 let pauseOpen = false;
 let emoteOpen = false;
@@ -1479,6 +1483,7 @@ function startGame() {
     return;
   }
   state = "game";
+  setHowToPlayOpen(false);
   ensureAudio();
   ambienceTimer = 0.8;
   playerFootstepTimer = 0;
@@ -1553,6 +1558,7 @@ function continueGame() {
   }
 
   state = "game";
+  setHowToPlayOpen(false);
   ensureAudio();
   ambienceTimer = 0.8;
   playerFootstepTimer = 0;
@@ -1704,6 +1710,7 @@ function returnToTitle() {
   state = "title";
   keys.clear();
   inventoryOpen = false;
+  howToPlayOpen = false;
   settingsOpen = false;
   pauseOpen = false;
   emoteOpen = false;
@@ -1714,6 +1721,7 @@ function returnToTitle() {
   gameScreen.classList.remove("inventory-open");
   inventoryPanel.classList.add("hidden");
   settingsPanel?.classList.add("hidden");
+  howToPlayPanel?.classList.add("hidden");
   pausePanel?.classList.add("hidden");
   emotePanel?.classList.add("hidden");
   gameScreen.dataset.emote = "";
@@ -2671,6 +2679,13 @@ function setInventoryOpen(open) {
     if (craftStatus && !chest) craftStatus.textContent = "选择配方制作，成品会优先进入快捷栏";
   }
   updateHud();
+}
+
+function setHowToPlayOpen(open) {
+  howToPlayOpen = Boolean(open) && state === "title";
+  howToPlayPanel?.classList.toggle("hidden", !howToPlayOpen);
+  howToPlayButton?.setAttribute("aria-expanded", String(howToPlayOpen));
+  if (howToPlayOpen) keys.clear();
 }
 
 function setSettingsOpen(open, returnTarget = null) {
@@ -4983,6 +4998,10 @@ function loop(now) {
 
 window.addEventListener("keydown", (event) => {
   if (["Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.code)) event.preventDefault();
+  if (howToPlayOpen) {
+    if (event.code === "Escape" && !event.repeat) setHowToPlayOpen(false);
+    return;
+  }
   if (settingsOpen) {
     if (event.code === "Escape" && !event.repeat) setSettingsOpen(false);
     return;
@@ -5050,6 +5069,8 @@ window.addEventListener("keyup", (event) => keys.delete(event.code));
 window.addEventListener("blur", () => keys.clear());
 startButton.addEventListener("click", startGame);
 continueButton?.addEventListener("click", continueGame);
+howToPlayButton?.addEventListener("click", () => setHowToPlayOpen(true));
+howToPlayCloseButton?.addEventListener("click", () => setHowToPlayOpen(false));
 titleSettingsButton?.addEventListener("click", () => setSettingsOpen(true, "title"));
 retryAssetsButton.addEventListener("click", loadGameAssets);
 restartButton.addEventListener("click", startGame);

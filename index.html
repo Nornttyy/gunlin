@@ -11,7 +11,7 @@
   <link rel="preload" href="assets/escape-gate.png?v=20260729-gate-drawn1" as="image" />
   <link rel="preload" href="assets/forest-assets.png?v=20260730-bottles1" as="image" />
   <link rel="preload" href="assets/ark-pixel-12px-zh_cn.woff2?v=20260728-assets2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=20260730-bottles1" />
+  <link rel="stylesheet" href="styles.css?v=20260730-gameplay1" />
 </head>
 <body>
   <main id="app">
@@ -30,10 +30,101 @@
         <div class="title-menu">
           <button id="startButton" class="primary-button" disabled>素材加载中…</button>
           <button id="continueButton" class="title-menu-button" disabled>继续游戏</button>
+          <button id="howToPlayButton" class="title-menu-button" type="button" aria-controls="howToPlayPanel" aria-expanded="false">游戏玩法</button>
           <button id="titleSettingsButton" class="title-menu-button" type="button">设置</button>
         </div>
         <button id="retryAssetsButton" class="retry-assets-button hidden">重新加载素材</button>
         <p class="title-tip">警告：不要回应雾里的声音</p>
+      </div>
+    </section>
+
+    <section id="howToPlayPanel" class="how-to-play-panel hidden" role="dialog" aria-modal="true" aria-labelledby="howToPlayTitle">
+      <div class="how-to-play-card">
+        <header class="how-to-play-header">
+          <div>
+            <small>SURVIVAL MANUAL // 07</small>
+            <h2 id="howToPlayTitle">游戏玩法</h2>
+          </div>
+          <button id="howToPlayCloseButton" type="button" aria-label="关闭游戏玩法">×</button>
+        </header>
+
+        <div class="guide-story-grid">
+          <article class="guide-story">
+            <div class="guide-visual guide-day-visual" aria-hidden="true">
+              <span class="guide-tree"></span>
+              <span class="guide-player"></span>
+              <span class="item-sprite item-wood guide-loot guide-loot-one"></span>
+              <span class="item-sprite item-stone guide-loot guide-loot-two"></span>
+            </div>
+            <div>
+              <small>DAY // EXPLORE</small>
+              <h3>白天收集</h3>
+              <p>寻找木材、石头、废铁和玻璃瓶，先制作工作台，再准备工具、武器与补给。</p>
+            </div>
+          </article>
+          <article class="guide-story">
+            <div class="guide-visual guide-night-visual" aria-hidden="true">
+              <span class="guide-flashlight"></span>
+              <span class="guide-player"></span>
+              <span class="guide-mimic"></span>
+            </div>
+            <div>
+              <small>NIGHT // SURVIVE</small>
+              <h3>夜晚别让它看见你</h3>
+              <p>模仿者靠近后才会追击。观察附近动静，利用手电筒、建筑和陷阱活下来。</p>
+            </div>
+          </article>
+          <article class="guide-story">
+            <div class="guide-visual guide-inventory-visual" aria-hidden="true">
+              <span class="guide-slot"><i class="item-sprite item-berry"></i></span>
+              <span class="guide-slot"><i class="item-sprite item-medkit"></i></span>
+              <span class="guide-slot"><i class="item-sprite weapon-axe"></i></span>
+              <b>1</b>
+            </div>
+            <div>
+              <small>LOADOUT // CHOOSE</small>
+              <h3>职业与物品</h3>
+              <p>森林会记住你的职业选择，技能立刻生效且本局无法更换。物品优先进入快捷栏。</p>
+            </div>
+          </article>
+          <article class="guide-story">
+            <div class="guide-visual guide-gate-visual" aria-hidden="true">
+              <span class="guide-gate"></span>
+              <span class="guide-player"></span>
+            </div>
+            <div>
+              <small>OBJECTIVE // ESCAPE</small>
+              <h3>找到逃生大门</h3>
+              <p>大门在出生点至少 600 格外。穿过森林找到它，靠近后按 E 才能通关。</p>
+            </div>
+          </article>
+        </div>
+
+        <section class="guide-controls" aria-label="游戏按键">
+          <div class="guide-section-title">
+            <span>游戏按键</span>
+            <small>KEY BINDINGS</small>
+          </div>
+          <div class="guide-key-grid">
+            <div><kbd>W A S D</kbd><span>移动</span></div>
+            <div><kbd>SHIFT</kbd><span>奔跑</span></div>
+            <div><kbd>左键</kbd><span>攻击 / 采集</span></div>
+            <div><kbd>右键</kbd><span>放置建筑</span></div>
+            <div><kbd>1 — 9</kbd><span>选择快捷栏</span></div>
+            <div><kbd>E</kbd><span>互动 / 装水</span></div>
+            <div><kbd>R</kbd><span>枪械换弹</span></div>
+            <div><kbd>F</kbd><span>手电筒</span></div>
+            <div><kbd>I</kbd><span>背包 / 合成</span></div>
+            <div><kbd>Y</kbd><span>动作菜单</span></div>
+            <div><kbd>M</kbd><span>声音开关</span></div>
+            <div><kbd>ESC</kbd><span>暂停 / 设置</span></div>
+          </div>
+        </section>
+
+        <div class="guide-inventory-note">
+          <span class="item-sprite item-berry" aria-hidden="true"></span>
+          <p>打开背包后可拖动物品整理，右键拆分；点击浆果、医疗包或药水直接使用。</p>
+        </div>
       </div>
     </section>
 
@@ -43,7 +134,6 @@
         <div class="class-select-card">
           <p class="eyebrow">IDENTITY REQUIRED</p>
           <h2 id="classSelectTitle">选择职业</h2>
-          <p class="class-select-note">森林会记住你的选择 · 职业技能会立刻生效 · 本局无法更换</p>
           <div class="class-buttons">
             <button type="button" class="class-button" data-class="0"><span class="class-portrait" aria-hidden="true"></span><span class="class-copy"><strong>枪手</strong><small>精准射击 · 武器伤害 +25%，攻击更快<br><b>初始：手枪（7发）＋弹药箱 ×2</b></small></span></button>
             <button type="button" class="class-button" data-class="1"><span class="class-portrait" aria-hidden="true"></span><span class="class-copy"><strong>护士</strong><small>急救护理 · 浆果翻倍，医疗包恢复50<br><b>初始：医疗包 ×3</b></small></span></button>
@@ -202,7 +292,6 @@
             <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="10"><span class="item-sprite" aria-hidden="true"></span></button>
             <button type="button" class="inventory-slot item-empty empty-slot" data-inventory-slot="11"><span class="item-sprite" aria-hidden="true"></span></button>
           </div>
-          <p class="inventory-tip">拖到快捷栏使用，右键拆分；点击浆果、医疗包或药水直接使用</p>
         </section>
       </div>
       <div id="message" class="message" aria-live="polite"></div>
@@ -236,7 +325,6 @@
           <span class="quick-key">9</span><span class="item-sprite"></span><span class="quick-name">空</span>
         </button>
       </nav>
-      <div class="controls">WASD 移动　/　左键 攻击或采集　/　R 枪械换弹　/　右键 建造　/　E 互动　/　F 手电筒　/　Y 动作　/　I 背包　/　M 声音　/　ESC 暂停</div>
       <section id="pausePanel" class="pause-panel hidden" role="dialog" aria-modal="true" aria-labelledby="pauseTitle">
         <small>GAME PAUSED // 07</small>
         <h2 id="pauseTitle">游戏暂停</h2>
@@ -300,6 +388,6 @@
       <p class="settings-tip">设置会自动保存在这个浏览器中</p>
     </section>
   </main>
-  <script type="module" src="game.js?v=20260730-inventory1"></script>
+  <script type="module" src="game.js?v=20260730-gameplay1"></script>
 </body>
 </html>

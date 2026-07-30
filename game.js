@@ -416,6 +416,8 @@ const RESOURCE_CHUNK_TILES = 16;
 const RESOURCE_CHUNK_SIZE = RESOURCE_CHUNK_TILES * TILE_SIZE;
 const RESOURCE_CHUNK_LOAD_RADIUS = 1;
 const RESOURCE_CHUNK_KEEP_RADIUS = 2;
+const RESOURCE_MAX_PER_CHUNK = 8;
+const RESOURCE_MIN_GAP = 34;
 const STARTER_RESOURCES = [
   { type: "branch", offsetX: -66, offsetY: 0 },
   { type: "branch", offsetX: 66, offsetY: 0 },
@@ -554,7 +556,7 @@ function generateResourceChunk(chunkX, chunkY) {
   const originY = chunkY * RESOURCE_CHUNK_SIZE;
   let generated = 0;
 
-  for (let candidate = 0; candidate < 30 && generated < 14; candidate += 1) {
+  for (let candidate = 0; candidate < 30 && generated < RESOURCE_MAX_PER_CHUNK; candidate += 1) {
     const spawnKey = `${key}:${candidate}`;
     if (harvestedResourceKeys.has(spawnKey)) continue;
     const x = originX + 36 + gridHash(chunkX, chunkY, candidate * 4 + 1) * (RESOURCE_CHUNK_SIZE - 72);
@@ -586,7 +588,9 @@ function generateResourceChunk(chunkX, chunkY) {
     if ((type === "branch" || type === "pebble" || type === "scrap")
       && terrainAtWorld(x, y) !== TERRAIN_FRAME.grass) continue;
     if (type === "glass_bottle" && terrainAtWorld(x, y) === TERRAIN_FRAME.water) continue;
-    if (resources.some((item) => Math.hypot(x - item.x, y - item.y) < radius + item.radius + 22)) continue;
+    if (resources.some((item) => (
+      Math.hypot(x - item.x, y - item.y) < radius + item.radius + RESOURCE_MIN_GAP
+    ))) continue;
     resources.push({
       id: resourceId++,
       spawnKey,

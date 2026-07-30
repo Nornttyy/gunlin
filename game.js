@@ -77,7 +77,6 @@ const brightnessSettingValue = document.getElementById("brightnessSettingValue")
 const fogSetting = document.getElementById("fogSetting");
 const fogSettingValue = document.getElementById("fogSettingValue");
 const screenShakeSetting = document.getElementById("screenShakeSetting");
-const jumpscareSetting = document.getElementById("jumpscareSetting");
 const fullscreenButton = document.getElementById("fullscreenButton");
 const resetSettingsButton = document.getElementById("resetSettingsButton");
 const pausePanel = document.getElementById("pausePanel");
@@ -338,8 +337,7 @@ const DEFAULT_GAME_SETTINGS = {
   volume: 70,
   nightBrightness: 50,
   fogDensity: 100,
-  screenShake: true,
-  jumpscare: true
+  screenShake: true
 };
 
 const keys = new Set();
@@ -715,8 +713,7 @@ function loadGameSettings() {
       volume: clampPercent(parsed.volume, DEFAULT_GAME_SETTINGS.volume),
       nightBrightness: clampPercent(parsed.nightBrightness, DEFAULT_GAME_SETTINGS.nightBrightness),
       fogDensity: clampPercent(parsed.fogDensity, DEFAULT_GAME_SETTINGS.fogDensity),
-      screenShake: parsed.screenShake !== false,
-      jumpscare: parsed.jumpscare !== false
+      screenShake: parsed.screenShake !== false
     };
   } catch {
     return { ...DEFAULT_GAME_SETTINGS };
@@ -743,7 +740,6 @@ function renderSettings() {
   if (fogSetting) fogSetting.value = String(gameSettings.fogDensity);
   if (fogSettingValue) fogSettingValue.textContent = `${Math.round(gameSettings.fogDensity)}%`;
   if (screenShakeSetting) screenShakeSetting.checked = gameSettings.screenShake;
-  if (jumpscareSetting) jumpscareSetting.checked = gameSettings.jumpscare;
   if (masterGain && audioContext) {
     masterGain.gain.setTargetAtTime(audioEnabled ? masterVolumeValue() : 0.0001, audioContext.currentTime, 0.025);
   }
@@ -3347,7 +3343,7 @@ function spawnMonster() {
 }
 
 function triggerMimicJumpscare(worldX = player.x) {
-  if (!mimicJumpscare || !gameSettings.jumpscare) return;
+  if (!mimicJumpscare) return;
   playMimicJumpscare(worldX);
   const sequence = ++jumpscareSequence;
   mimicJumpscare.classList.remove("active");
@@ -5096,7 +5092,6 @@ brightnessSetting?.addEventListener("input", () => (
 ));
 fogSetting?.addEventListener("input", () => updateGameSetting("fogDensity", clampPercent(fogSetting.value, 100)));
 screenShakeSetting?.addEventListener("change", () => updateGameSetting("screenShake", screenShakeSetting.checked));
-jumpscareSetting?.addEventListener("change", () => updateGameSetting("jumpscare", jumpscareSetting.checked));
 fullscreenButton?.addEventListener("click", toggleFullscreen);
 resetSettingsButton?.addEventListener("click", () => {
   gameSettings = { ...DEFAULT_GAME_SETTINGS };

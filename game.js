@@ -56,11 +56,11 @@ const PLAYER_TURN_ACCELERATION = 1900;
 const PLAYER_DECELERATION = 900;
 const PLAYER_STOP_SPEED = 2;
 const BUILD_GRID_SIZE = TILE_SIZE;
-const ESCAPE_GATE_MIN_DISTANCE = 600 * TILE_SIZE;
+const ESCAPE_GATE_MIN_DISTANCE = 700 * TILE_SIZE;
 const ESCAPE_GATE_MAX_DISTANCE = 900 * TILE_SIZE;
 const ESCAPE_GATE_DISCOVERY_DISTANCE = 550;
 const ESCAPE_GATE_INTERACT_DISTANCE = 120;
-const ABANDONED_CABIN_COUNT = 6;
+const ABANDONED_CABIN_COUNT = 20;
 const ABANDONED_CABIN_MIN_DISTANCE = 90 * TILE_SIZE;
 const ABANDONED_CABIN_MAX_DISTANCE = 420 * TILE_SIZE;
 const ABANDONED_CABIN_MIN_SPACING = 60 * TILE_SIZE;
@@ -686,7 +686,7 @@ function generateAbandonedCabin(cabinIndex = abandonedCabins.length) {
   let cabinX = 0;
   let cabinY = 0;
 
-  for (let attempt = 0; attempt < 240; attempt += 1) {
+  for (let attempt = 0; attempt < 800; attempt += 1) {
     const distanceRoll = Math.sqrt(Math.random());
     const distance = ABANDONED_CABIN_MIN_DISTANCE
       + distanceRoll * (ABANDONED_CABIN_MAX_DISTANCE - ABANDONED_CABIN_MIN_DISTANCE);

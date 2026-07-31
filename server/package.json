@@ -1,0 +1,17 @@
+{
+  "name": "guilin-multiplayer-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "归林公开房间与玩家同步服务器",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "ws": "^8.18.3"
+  }
+}

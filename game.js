@@ -1,3 +1,5 @@
+import { GuilinMultiplayerClient } from "./multiplayer.js?v=20260731-multiplayer1";
+
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 ctx.imageSmoothingEnabled = false;
@@ -98,8 +100,26 @@ const SOLID_BUILDING_COLLIDER = {
 
 const titleScreen = document.getElementById("titleScreen");
 const gameScreen = document.getElementById("gameScreen");
-const startButton = document.getElementById("startButton");
-const continueButton = document.getElementById("continueButton");
+const quickJoinButton = document.getElementById("quickJoinButton");
+const roomsButton = document.getElementById("roomsButton");
+const roomsPanel = document.getElementById("roomsPanel");
+const roomsCloseButton = document.getElementById("roomsCloseButton");
+const roomsConnectionStatus = document.getElementById("roomsConnectionStatus");
+const roomsList = document.getElementById("roomsList");
+const roomsError = document.getElementById("roomsError");
+const refreshRoomsButton = document.getElementById("refreshRoomsButton");
+const nicknameInput = document.getElementById("nicknameInput");
+const createRoomForm = document.getElementById("createRoomForm");
+const createRoomButton = document.getElementById("createRoomButton");
+const roomNameInput = document.getElementById("roomNameInput");
+const roomPasswordInput = document.getElementById("roomPasswordInput");
+const joinPasswordForm = document.getElementById("joinPasswordForm");
+const joinPasswordTitle = document.getElementById("joinPasswordTitle");
+const joinPasswordInput = document.getElementById("joinPasswordInput");
+const joinPasswordCancelButton = document.getElementById("joinPasswordCancelButton");
+const multiplayerHud = document.getElementById("multiplayerHud");
+const multiplayerRoomName = document.getElementById("multiplayerRoomName");
+const multiplayerPlayerCount = document.getElementById("multiplayerPlayerCount");
 const howToPlayButton = document.getElementById("howToPlayButton");
 const howToPlayPanel = document.getElementById("howToPlayPanel");
 const howToPlayCloseButton = document.getElementById("howToPlayCloseButton");
@@ -476,6 +496,8 @@ const DEFAULT_GAME_SETTINGS = {
   screenShake: true
 };
 
+const multiplayer = new GuilinMultiplayerClient();
+const remotePlayers = new Map();
 const keys = new Set();
 let state = "title";
 let lastTime = 0;
@@ -494,6 +516,7 @@ let selectedClass = -1;
 let classSelectionOpen = false;
 let inventoryOpen = false;
 let howToPlayOpen = false;
+let roomsOpen = false;
 let settingsOpen = false;
 let pauseOpen = false;
 let emoteOpen = false;
@@ -539,6 +562,10 @@ let bloodMoonActive = false;
 let bloodMoonNightNumber = 0;
 let bloodMoonPulse = 0;
 let actionEffectId = 0;
+let multiplayerRoom = null;
+let pendingPasswordRoom = null;
+let multiplayerSendTimer = 0;
+let worldRandomState = 1;
 
 const player = {
   x: PLAYER_START.x,
@@ -617,6 +644,19 @@ function hash(index) {
   return value - Math.floor(value);
 }
 
+// 同一联机房间使用同一个随机种子，木屋、大门和物资箱的位置就会一致。
+function resetWorldRandom(seed) {
+  worldRandomState = (Number(seed) >>> 0) || 1;
+}
+
+function worldRandom() {
+  worldRandomState += 0x6d2b79f5;
+  let value = worldRandomState;
+  value = Math.imul(value ^ value >>> 15, value | 1);
+  value ^= value + Math.imul(value ^ value >>> 7, value | 61);
+  return ((value ^ value >>> 14) >>> 0) / 4294967296;
+}
+
 function gridHash(x, y, seed = 0) {
   return hash(x * 374761 + y * 668265 + seed * 69069);
 }
@@ -670,9 +710,9 @@ function escapeGateGroundIsClear(x, y) {
 
 function generateEscapeGate() {
   for (let attempt = 0; attempt < 100; attempt += 1) {
-    const angle = Math.random() * Math.PI * 2;
+    const angle = worldRandom() * Math.PI * 2;
     const distance = ESCAPE_GATE_MIN_DISTANCE
-      + Math.random() * (ESCAPE_GATE_MAX_DISTANCE - ESCAPE_GATE_MIN_DISTANCE);
+      + worldRandom() * (ESCAPE_GATE_MAX_DISTANCE - ESCAPE_GATE_MIN_DISTANCE);
     const x = Math.floor((CAMP_POSITION.x + Math.cos(angle) * distance) / TILE_SIZE) * TILE_SIZE + TILE_SIZE / 2;
     const y = Math.floor((CAMP_POSITION.y + Math.sin(angle) * distance) / TILE_SIZE) * TILE_SIZE + TILE_SIZE / 2;
     if (x < WORLD.margin + 180 || y < WORLD.margin + 220
@@ -749,7 +789,7 @@ function chooseAbandonedCabinType() {
   });
   const minimum = Math.min(...Object.values(counts));
   const candidates = types.filter((type) => counts[type] === minimum);
-  return candidates[Math.floor(Math.random() * candidates.length)];
+  return candidates[Math.floor(worldRandom() * candidates.length)];
 }
 
 function cabinLootItem(type, count = 1) {
@@ -765,43 +805,43 @@ function createAbandonedCabinLoot(cabinType = "normal") {
   let loot = [];
   if (type === "damaged") {
     loot = [
-      cabinLootItem("scrap", 2 + Math.floor(Math.random() * 4)),
-      cabinLootItem("wood", 2 + Math.floor(Math.random() * 3)),
-      cabinLootItem("stone", 1 + Math.floor(Math.random() * 3)),
-      cabinLootItem("berry", 1 + Math.floor(Math.random() * 2))
+      cabinLootItem("scrap", 2 + Math.floor(worldRandom() * 4)),
+      cabinLootItem("wood", 2 + Math.floor(worldRandom() * 3)),
+      cabinLootItem("stone", 1 + Math.floor(worldRandom() * 3)),
+      cabinLootItem("berry", 1 + Math.floor(worldRandom() * 2))
     ];
-    if (Math.random() < 0.35) loot.push(cabinLootItem("glass_bottle"));
+    if (worldRandom() < 0.35) loot.push(cabinLootItem("glass_bottle"));
   } else if (type === "tool") {
     const toolTypes = ["wood_axe", "axe", "wood_pickaxe", "pickaxe"];
     loot = [
-      cabinLootItem("scrap", 8 + Math.floor(Math.random() * 7)),
-      cabinLootItem("wood", 4 + Math.floor(Math.random() * 4)),
-      cabinLootItem("stone", 4 + Math.floor(Math.random() * 4)),
-      cabinLootItem(toolTypes[Math.floor(Math.random() * toolTypes.length)]),
+      cabinLootItem("scrap", 8 + Math.floor(worldRandom() * 7)),
+      cabinLootItem("wood", 4 + Math.floor(worldRandom() * 4)),
+      cabinLootItem("stone", 4 + Math.floor(worldRandom() * 4)),
+      cabinLootItem(toolTypes[Math.floor(worldRandom() * toolTypes.length)]),
       cabinLootItem("glass_bottle")
     ];
-    if (Math.random() < 0.45) loot.push(cabinLootItem("medkit"));
+    if (worldRandom() < 0.45) loot.push(cabinLootItem("medkit"));
   } else if (type === "danger") {
     loot = [
-      cabinLootItem("scrap", 10 + Math.floor(Math.random() * 6)),
-      cabinLootItem("wood", 6 + Math.floor(Math.random() * 5)),
-      cabinLootItem("stone", 6 + Math.floor(Math.random() * 4)),
-      cabinLootItem("berry", 3 + Math.floor(Math.random() * 4)),
+      cabinLootItem("scrap", 10 + Math.floor(worldRandom() * 6)),
+      cabinLootItem("wood", 6 + Math.floor(worldRandom() * 5)),
+      cabinLootItem("stone", 6 + Math.floor(worldRandom() * 4)),
+      cabinLootItem("berry", 3 + Math.floor(worldRandom() * 4)),
       cabinLootItem("glass_bottle"),
       cabinLootItem("medkit"),
       cabinLootItem("ammo_box")
     ];
-    if (Math.random() < 0.35) loot.push(cabinLootItem("strength_potion"));
+    if (worldRandom() < 0.35) loot.push(cabinLootItem("strength_potion"));
   } else {
     loot = [
-      cabinLootItem("scrap", 5 + Math.floor(Math.random() * 5)),
-      cabinLootItem("wood", 4 + Math.floor(Math.random() * 4)),
-      cabinLootItem("stone", 3 + Math.floor(Math.random() * 4)),
-      cabinLootItem("berry", 2 + Math.floor(Math.random() * 3)),
+      cabinLootItem("scrap", 5 + Math.floor(worldRandom() * 5)),
+      cabinLootItem("wood", 4 + Math.floor(worldRandom() * 4)),
+      cabinLootItem("stone", 3 + Math.floor(worldRandom() * 4)),
+      cabinLootItem("berry", 2 + Math.floor(worldRandom() * 3)),
       cabinLootItem("glass_bottle")
     ];
-    if (Math.random() < 0.6) loot.push(cabinLootItem("medkit"));
-    if (Math.random() < 0.35) loot.push(cabinLootItem("ammo_box"));
+    if (worldRandom() < 0.6) loot.push(cabinLootItem("medkit"));
+    if (worldRandom() < 0.35) loot.push(cabinLootItem("ammo_box"));
   }
   return Array.from({ length: CHEST_SLOT_COUNT }, (_, index) => loot[index] || null);
 }
@@ -812,10 +852,10 @@ function generateAbandonedCabin(cabinIndex = abandonedCabins.length) {
   let cabinY = 0;
 
   for (let attempt = 0; attempt < 800; attempt += 1) {
-    const distanceRoll = Math.sqrt(Math.random());
+    const distanceRoll = Math.sqrt(worldRandom());
     const distance = ABANDONED_CABIN_MIN_DISTANCE
       + distanceRoll * (ABANDONED_CABIN_MAX_DISTANCE - ABANDONED_CABIN_MIN_DISTANCE);
-    const angle = Math.random() * Math.PI * 2;
+    const angle = worldRandom() * Math.PI * 2;
     const rawX = CAMP_POSITION.x + Math.cos(angle) * distance;
     const rawY = CAMP_POSITION.y + Math.sin(angle) * distance;
     const x = Math.round(rawX / BUILD_GRID_SIZE) * BUILD_GRID_SIZE;
@@ -859,7 +899,7 @@ function generateAbandonedCabin(cabinIndex = abandonedCabins.length) {
   }
   const missingWalls = new Set();
   while (cabinType === "damaged" && missingWalls.size < 4) {
-    missingWalls.add(Math.floor(Math.random() * wallSegments.length));
+    missingWalls.add(Math.floor(worldRandom() * wallSegments.length));
   }
   wallSegments.forEach((segment, index) => {
     if (!missingWalls.has(index)) addWall(...segment);
@@ -887,7 +927,7 @@ function generateAbandonedCabin(cabinIndex = abandonedCabins.length) {
   }
   const missingFloors = new Set();
   while (cabinType === "damaged" && missingFloors.size < 3) {
-    missingFloors.add(Math.floor(Math.random() * floorTiles.length));
+    missingFloors.add(Math.floor(worldRandom() * floorTiles.length));
   }
   floorTiles.forEach(([gridX, gridY], index) => {
     if (!missingFloors.has(index)) {
@@ -1085,7 +1125,7 @@ function chooseSupplyCacheType() {
   });
   const minimum = Math.min(...Object.values(counts));
   const candidates = SUPPLY_CACHE_TYPES.filter((type) => counts[type] === minimum);
-  return candidates[Math.floor(Math.random() * candidates.length)];
+  return candidates[Math.floor(worldRandom() * candidates.length)];
 }
 
 function supplyCacheLootItem(type, count = 1) {
@@ -1101,29 +1141,29 @@ function createSupplyCacheLoot(cacheType = SUPPLY_CACHE_TYPES[0]) {
   let loot = [];
   if (type === "forager") {
     loot = [
-      supplyCacheLootItem("berry", 2 + Math.floor(Math.random() * 3)),
-      supplyCacheLootItem("wood", 1 + Math.floor(Math.random() * 2))
+      supplyCacheLootItem("berry", 2 + Math.floor(worldRandom() * 3)),
+      supplyCacheLootItem("wood", 1 + Math.floor(worldRandom() * 2))
     ];
-    if (Math.random() < 0.35) loot.push(supplyCacheLootItem("medkit"));
-    if (Math.random() < 0.45) loot.push(supplyCacheLootItem("glass_bottle"));
+    if (worldRandom() < 0.35) loot.push(supplyCacheLootItem("medkit"));
+    if (worldRandom() < 0.45) loot.push(supplyCacheLootItem("glass_bottle"));
   } else if (type === "scavenger") {
     loot = [
-      supplyCacheLootItem("scrap", 3 + Math.floor(Math.random() * 3)),
-      supplyCacheLootItem("stone", 1 + Math.floor(Math.random() * 2))
+      supplyCacheLootItem("scrap", 3 + Math.floor(worldRandom() * 3)),
+      supplyCacheLootItem("stone", 1 + Math.floor(worldRandom() * 2))
     ];
-    if (Math.random() < 0.55) loot.push(supplyCacheLootItem("glass_bottle"));
+    if (worldRandom() < 0.55) loot.push(supplyCacheLootItem("glass_bottle"));
   } else if (type === "hunter") {
     loot = [
-      supplyCacheLootItem("berry", 2 + Math.floor(Math.random() * 2)),
-      supplyCacheLootItem("scrap", 2 + Math.floor(Math.random() * 2))
+      supplyCacheLootItem("berry", 2 + Math.floor(worldRandom() * 2)),
+      supplyCacheLootItem("scrap", 2 + Math.floor(worldRandom() * 2))
     ];
-    if (Math.random() < 0.3) loot.push(supplyCacheLootItem("ammo_box"));
+    if (worldRandom() < 0.3) loot.push(supplyCacheLootItem("ammo_box"));
   } else {
     loot = [
-      supplyCacheLootItem("wood", 3 + Math.floor(Math.random() * 3)),
-      supplyCacheLootItem("stone", 2 + Math.floor(Math.random() * 2))
+      supplyCacheLootItem("wood", 3 + Math.floor(worldRandom() * 3)),
+      supplyCacheLootItem("stone", 2 + Math.floor(worldRandom() * 2))
     ];
-    if (Math.random() < 0.4) loot.push(supplyCacheLootItem("scrap", 1 + Math.floor(Math.random() * 2)));
+    if (worldRandom() < 0.4) loot.push(supplyCacheLootItem("scrap", 1 + Math.floor(worldRandom() * 2)));
   }
   return Array.from({ length: CHEST_SLOT_COUNT }, (_, index) => loot[index] || null);
 }
@@ -1159,10 +1199,10 @@ function generateSupplyCache(cacheIndex = supplyCaches.length) {
   let cacheX = 0;
   let cacheY = 0;
   for (let attempt = 0; attempt < 600; attempt += 1) {
-    const distanceRoll = Math.pow(Math.random(), 1.35);
+    const distanceRoll = Math.pow(worldRandom(), 1.35);
     const distance = SUPPLY_CACHE_MIN_DISTANCE
       + distanceRoll * (SUPPLY_CACHE_MAX_DISTANCE - SUPPLY_CACHE_MIN_DISTANCE);
-    const angle = Math.random() * Math.PI * 2;
+    const angle = worldRandom() * Math.PI * 2;
     const x = Math.round(
       (CAMP_POSITION.x + Math.cos(angle) * distance) / BUILD_GRID_SIZE
     ) * BUILD_GRID_SIZE;
@@ -1543,12 +1583,270 @@ function readSavedGame() {
 }
 
 function updateContinueButton() {
-  if (!continueButton) return;
-  const saved = readSavedGame();
-  continueButton.disabled = !assetsReady || !saved;
-  continueButton.textContent = saved
-    ? `继续游戏 · 第 ${Math.max(1, saved.dayNumber || 1)} 天`
-    : "继续游戏 · 暂无存档";
+  // 主菜单已经改为公开联机房间，旧存档仍暂时保留在浏览器中。
+}
+
+function fallbackNickname() {
+  const suffix = Math.floor(100 + Math.random() * 900);
+  return `旅人${suffix}`;
+}
+
+function loadMultiplayerNickname() {
+  try {
+    return window.localStorage?.getItem("guilin-player-name-v1") || fallbackNickname();
+  } catch {
+    return fallbackNickname();
+  }
+}
+
+function currentMultiplayerNickname() {
+  const nickname = String(nicknameInput?.value || "").trim().slice(0, 14) || fallbackNickname();
+  if (nicknameInput) nicknameInput.value = nickname;
+  try {
+    window.localStorage?.setItem("guilin-player-name-v1", nickname);
+  } catch {
+    // 浏览器不允许保存时，只在当前页面使用这个名字。
+  }
+  return nickname;
+}
+
+function setRoomsError(message = "") {
+  if (roomsError) roomsError.textContent = message;
+}
+
+function setRoomsConnectionStatus(status) {
+  if (!roomsConnectionStatus) return;
+  const labels = {
+    connecting: "正在唤醒联机服务器…",
+    connected: "服务器已连接",
+    disconnected: "连接已经断开",
+    error: "服务器暂时无法连接"
+  };
+  roomsConnectionStatus.dataset.status = status;
+  roomsConnectionStatus.textContent = labels[status] || "尚未连接服务器";
+}
+
+function setRoomsBusy(busy) {
+  const disabled = Boolean(busy);
+  refreshRoomsButton.disabled = disabled;
+  createRoomButton.disabled = disabled;
+  quickJoinButton.disabled = disabled || !assetsReady;
+  roomsButton.disabled = !assetsReady;
+  roomsList?.querySelectorAll("button").forEach((button) => {
+    button.disabled = disabled || button.dataset.full === "true";
+  });
+}
+
+async function connectMultiplayer() {
+  setRoomsConnectionStatus("connecting");
+  await multiplayer.connect(currentMultiplayerNickname());
+  setRoomsConnectionStatus("connected");
+}
+
+function renderPublicRooms(roomList = []) {
+  if (!roomsList) return;
+  roomsList.replaceChildren();
+  if (!roomList.length) {
+    const empty = document.createElement("p");
+    empty.className = "rooms-empty";
+    empty.textContent = "还没有公开房间，创建一个就会成为房主。";
+    roomsList.append(empty);
+    return;
+  }
+
+  roomList.forEach((room) => {
+    const entry = document.createElement("article");
+    entry.className = "room-entry";
+    const copy = document.createElement("div");
+    copy.className = "room-entry-copy";
+    const name = document.createElement("strong");
+    name.textContent = room.name || "未命名房间";
+    const details = document.createElement("small");
+    details.textContent = `${room.id} · ${room.locked ? "需要密码" : "无需密码"}`;
+    copy.append(name, details);
+
+    const count = document.createElement("span");
+    count.className = "room-entry-count";
+    count.textContent = `${room.playerCount} / ${room.maxPlayers}`;
+
+    const joinButton = document.createElement("button");
+    const full = room.playerCount >= room.maxPlayers;
+    joinButton.type = "button";
+    joinButton.dataset.full = String(full);
+    joinButton.disabled = full;
+    joinButton.textContent = full ? "已满" : "加入";
+    joinButton.addEventListener("click", () => {
+      if (room.locked) {
+        pendingPasswordRoom = room;
+        joinPasswordTitle.textContent = `加入：${room.name}`;
+        joinPasswordInput.value = "";
+        joinPasswordForm.classList.remove("hidden");
+        joinPasswordInput.focus();
+        return;
+      }
+      joinPublicRoom(room, "");
+    });
+
+    entry.append(copy, count, joinButton);
+    roomsList.append(entry);
+  });
+}
+
+async function refreshPublicRooms() {
+  setRoomsError("");
+  try {
+    await connectMultiplayer();
+    await multiplayer.listRooms();
+  } catch (error) {
+    setRoomsConnectionStatus("error");
+    setRoomsError(error.message || "无法读取房间列表");
+  }
+}
+
+function setRoomsOpen(open) {
+  roomsOpen = Boolean(open);
+  roomsPanel?.classList.toggle("hidden", !roomsOpen);
+  if (!roomsOpen) {
+    pendingPasswordRoom = null;
+    joinPasswordForm?.classList.add("hidden");
+    setRoomsError("");
+    return;
+  }
+  setHowToPlayOpen(false);
+  if (settingsOpen) setSettingsOpen(false);
+  refreshPublicRooms();
+}
+
+async function joinPublicRoom(room, password) {
+  if (!assetsReady || !room) return;
+  setRoomsError("");
+  setRoomsBusy(true);
+  try {
+    await connectMultiplayer();
+    await multiplayer.joinRoom({
+      nickname: currentMultiplayerNickname(),
+      roomId: room.id,
+      password
+    });
+  } catch (error) {
+    setRoomsError(error.message || "加入房间失败");
+  } finally {
+    setRoomsBusy(false);
+  }
+}
+
+async function quickJoinPublicRoom() {
+  if (!assetsReady) return;
+  setRoomsError("");
+  setRoomsBusy(true);
+  quickJoinButton.textContent = "正在寻找房间…";
+  try {
+    await connectMultiplayer();
+    await multiplayer.quickJoin(currentMultiplayerNickname());
+  } catch (error) {
+    setRoomsOpen(true);
+    setRoomsConnectionStatus("error");
+    setRoomsError(error.message || "快速加入失败");
+  } finally {
+    if (state === "title") {
+      quickJoinButton.textContent = "快速加入";
+      setRoomsBusy(false);
+    }
+  }
+}
+
+function updateMultiplayerHud(disconnected = false) {
+  if (!multiplayerHud) return;
+  multiplayerHud.classList.toggle("hidden", !multiplayerRoom);
+  multiplayerHud.classList.toggle("disconnected", disconnected);
+  if (!multiplayerRoom) return;
+  multiplayerRoomName.textContent = disconnected
+    ? `${multiplayerRoom.name} · 连接断开`
+    : multiplayerRoom.name;
+  multiplayerPlayerCount.textContent = `${multiplayerRoom.playerCount || 1} / ${multiplayerRoom.maxPlayers || 4}`;
+}
+
+function applyRemotePlayer(playerInfo) {
+  if (!playerInfo?.playerId || playerInfo.playerId === multiplayer.playerId) return;
+  const stateData = playerInfo.state;
+  const remote = remotePlayers.get(playerInfo.playerId) || {
+    playerId: playerInfo.playerId,
+    nickname: playerInfo.nickname || "旅人",
+    x: stateData?.x ?? PLAYER_START.x,
+    y: stateData?.y ?? PLAYER_START.y,
+    targetX: stateData?.x ?? PLAYER_START.x,
+    targetY: stateData?.y ?? PLAYER_START.y,
+    classRow: 0,
+    moving: false,
+    dirX: 0,
+    dirY: -1,
+    animation: 0,
+    flashlight: true,
+    health: 100,
+    heldType: "",
+    emote: ""
+  };
+  remote.nickname = playerInfo.nickname || remote.nickname;
+  if (stateData) {
+    const distance = Math.hypot(stateData.x - remote.x, stateData.y - remote.y);
+    if (distance > 520) {
+      remote.x = stateData.x;
+      remote.y = stateData.y;
+    }
+    remote.targetX = stateData.x;
+    remote.targetY = stateData.y;
+    remote.classRow = stateData.classRow;
+    remote.moving = stateData.moving;
+    remote.dirX = stateData.dirX;
+    remote.dirY = stateData.dirY;
+    remote.animation = stateData.animation;
+    remote.flashlight = stateData.flashlight;
+    remote.health = stateData.health;
+    remote.heldType = stateData.heldType;
+    remote.emote = stateData.emote;
+  }
+  remotePlayers.set(playerInfo.playerId, remote);
+}
+
+function handleMultiplayerRoomState(message) {
+  if (!multiplayerRoom) return;
+  multiplayerRoom = { ...multiplayerRoom, ...(message.room || {}) };
+  const presentPlayers = new Set();
+  (message.players || []).forEach((playerInfo) => {
+    presentPlayers.add(playerInfo.playerId);
+    applyRemotePlayer(playerInfo);
+  });
+  for (const playerId of remotePlayers.keys()) {
+    if (!presentPlayers.has(playerId)) remotePlayers.delete(playerId);
+  }
+  updateMultiplayerHud();
+}
+
+function enterMultiplayerRoom(message) {
+  multiplayerRoom = message.room || null;
+  if (!multiplayerRoom) return;
+  remotePlayers.clear();
+  (message.players || []).forEach(applyRemotePlayer);
+  setRoomsOpen(false);
+  updateMultiplayerHud();
+  startGame();
+}
+
+function sendMultiplayerPlayerState() {
+  const heldItem = quickbarItems[selectedQuickSlot];
+  multiplayer.sendPlayerState({
+    x: player.x,
+    y: player.y,
+    classRow: player.classRow,
+    moving: player.moving,
+    dirX: player.dirX,
+    dirY: player.dirY,
+    animation: player.animation,
+    flashlight: player.flashlight,
+    health: player.health,
+    heldType: heldItem?.type || "",
+    emote: activeEmote || ""
+  });
 }
 
 function saveGame(announce = true) {
@@ -2340,9 +2638,9 @@ async function loadGameAssets() {
   if (assetsLoading) return;
   assetsLoading = true;
   assetsReady = false;
-  startButton.disabled = true;
-  startButton.textContent = "素材加载中…";
-  if (continueButton) continueButton.disabled = true;
+  quickJoinButton.disabled = true;
+  quickJoinButton.textContent = "素材加载中…";
+  roomsButton.disabled = true;
   retryAssetsButton.classList.add("hidden");
   loadingStatus.classList.remove("ready", "failed");
   let loaded = 0;
@@ -2369,20 +2667,20 @@ async function loadGameAssets() {
     assetsReady = true;
     loadingStatus.classList.add("ready");
     showLoadingProgress(jobs.length, jobs.length, "素材准备完成");
-    startButton.disabled = false;
-    startButton.textContent = "新游戏";
-    updateContinueButton();
+    quickJoinButton.disabled = false;
+    quickJoinButton.textContent = "快速加入";
+    roomsButton.disabled = false;
     return;
   }
 
   loadingStatus.classList.add("failed");
   loadingText.textContent = `${failed.length} 个素材加载失败`;
-  startButton.textContent = "素材未准备完成";
+  quickJoinButton.textContent = "素材未准备完成";
   retryAssetsButton.classList.remove("hidden");
-  updateContinueButton();
 }
 
 function resetWorld() {
+  resetWorldRandom(multiplayerRoom?.seed || Date.now());
   resources.length = 0;
   loadedResourceChunks.clear();
   harvestedResourceKeys.clear();
@@ -2424,15 +2722,19 @@ function startGame() {
   updateAudioButton();
   titleScreen.classList.add("hidden");
   gameScreen.classList.remove("hidden");
+  multiplayerHud?.classList.toggle("hidden", !multiplayerRoom);
   gameOverPanel.classList.add("hidden");
   victoryPanel?.classList.add("hidden");
-  elapsed = 0;
-  dayNumber = 1;
+  elapsed = multiplayerRoom?.createdAt
+    ? Math.max(0, (Date.now() - multiplayerRoom.createdAt) / 1000)
+    : 0;
+  dayNumber = Math.floor(elapsed / CYCLE_LENGTH) + 1;
   wasNight = false;
   spawnTimer = 4;
   resetWeather();
   resetBloodMoon();
   autosaveTimer = 20;
+  multiplayerSendTimer = 0;
   selectedBuild = 0;
   selectedQuickSlot = -1;
   selectedClass = -1;
@@ -2673,6 +2975,7 @@ function returnToTitle() {
   stopPlayerMotion();
   inventoryOpen = false;
   howToPlayOpen = false;
+  roomsOpen = false;
   settingsOpen = false;
   pauseOpen = false;
   emoteOpen = false;
@@ -2685,6 +2988,7 @@ function returnToTitle() {
   inventoryPanel.classList.add("hidden");
   settingsPanel?.classList.add("hidden");
   howToPlayPanel?.classList.add("hidden");
+  roomsPanel?.classList.add("hidden");
   pausePanel?.classList.add("hidden");
   emotePanel?.classList.add("hidden");
   mapPanel?.classList.add("hidden");
@@ -2694,7 +2998,10 @@ function returnToTitle() {
   victoryPanel?.classList.add("hidden");
   gameScreen.classList.add("hidden");
   titleScreen.classList.remove("hidden");
-  updateContinueButton();
+  multiplayer.leaveRoom();
+  multiplayerRoom = null;
+  remotePlayers.clear();
+  multiplayerHud?.classList.add("hidden");
 }
 
 function endGame() {
@@ -3062,6 +3369,11 @@ function update(delta) {
   player.hurtTimer = Math.max(0, player.hurtTimer - delta);
   player.strengthTimer = Math.max(0, player.strengthTimer - delta);
   pistolShot.timer = Math.max(0, pistolShot.timer - delta);
+  multiplayerSendTimer -= delta;
+  if (multiplayerRoom && selectedClass >= 0 && multiplayerSendTimer <= 0) {
+    sendMultiplayerPlayerState();
+    multiplayerSendTimer = 0.08;
+  }
   updateHud();
 }
 
@@ -5623,6 +5935,7 @@ function render() {
   drawEscapeGate();
   drawMonsters();
   drawBuildPreview();
+  drawRemotePlayers();
   drawPlayer();
   drawResources("front");
   drawActionImpacts();
@@ -6882,6 +7195,83 @@ function drawThunderSpinEffect(time) {
   ctx.restore();
 }
 
+function drawRemoteHeldItem(remote) {
+  const frame = HELD_WEAPON_FRAME[remote.heldType];
+  if (!Number.isInteger(frame) || remote.emote) return;
+  const angle = Math.atan2(remote.dirY, remote.dirX);
+  const aimX = Math.cos(angle);
+  const aimY = Math.sin(angle);
+  ctx.save();
+  ctx.translate(remote.x + aimX * 5, remote.y - 15 + aimY * 3);
+  ctx.rotate(angle);
+  if (aimX < 0) ctx.scale(1, -1);
+  if (worldSprite.complete && worldSprite.naturalWidth >= 128 && worldSprite.naturalHeight >= 96) {
+    ctx.globalAlpha = .9;
+    ctx.drawImage(worldSprite, frame * 16, 64, 16, 16, -3, -16, 32, 32);
+  }
+  ctx.restore();
+}
+
+function drawRemotePlayers() {
+  const now = performance.now() / 1000;
+  for (const remote of remotePlayers.values()) {
+    remote.x += (remote.targetX - remote.x) * .2;
+    remote.y += (remote.targetY - remote.y) * .2;
+    if (remote.x < camera.x - 80 || remote.x > camera.x + W + 80
+      || remote.y < camera.y - 90 || remote.y > camera.y + H + 80) continue;
+
+    const emoteSpin = remote.emote === "thunder_spin" ? Math.cos(now * 9.2) : 1;
+    const emoteScaleX = remote.emote === "thunder_spin"
+      ? Math.sign(emoteSpin || 1) * Math.max(.16, Math.abs(emoteSpin))
+      : 1;
+    const drawY = remote.y - 37;
+
+    ctx.save();
+    ctx.fillStyle = "rgba(1, 4, 5, .5)";
+    ctx.beginPath();
+    ctx.ellipse(remote.x, remote.y + 13, 17, 5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    drawRemoteHeldItem(remote);
+    ctx.translate(remote.x, remote.y);
+    ctx.scale(emoteScaleX, 1);
+    ctx.translate(-remote.x, -remote.y);
+
+    if (sprite.complete && sprite.naturalWidth >= 128 && sprite.naturalHeight >= 96) {
+      const frameRow = Math.max(0, Math.min(5, remote.classRow || 0)) * 16;
+      const frameColumn = remote.moving
+        ? 2 + (Math.floor(remote.animation || 0) % 6)
+        : Math.floor(elapsed * 2) % 2;
+      if (remote.dirX < -.1) {
+        ctx.translate(remote.x * 2, 0);
+        ctx.scale(-1, 1);
+        ctx.drawImage(sprite, frameColumn * 16, frameRow, 16, 16, remote.x - 24, drawY, 48, 48);
+      } else {
+        ctx.drawImage(sprite, frameColumn * 16, frameRow, 16, 16, remote.x - 24, drawY, 48, 48);
+      }
+    } else {
+      ctx.fillStyle = "#b7d2ae";
+      ctx.fillRect(remote.x - 10, remote.y - 24, 20, 24);
+    }
+    ctx.restore();
+
+    ctx.save();
+    ctx.font = "12px ArkPixel, monospace";
+    ctx.textAlign = "center";
+    const labelWidth = Math.max(44, ctx.measureText(remote.nickname).width + 12);
+    ctx.fillStyle = "rgba(3, 8, 9, .78)";
+    ctx.fillRect(remote.x - labelWidth / 2, remote.y - 56, labelWidth, 16);
+    ctx.fillStyle = "#d6e2cf";
+    ctx.fillText(remote.nickname, remote.x, remote.y - 44);
+    if (remote.health < 100) {
+      ctx.fillStyle = "#1b2520";
+      ctx.fillRect(remote.x - 20, remote.y - 36, 40, 3);
+      ctx.fillStyle = remote.health <= 30 ? "#b94d48" : "#789b6f";
+      ctx.fillRect(remote.x - 20, remote.y - 36, 40 * remote.health / 100, 3);
+    }
+    ctx.restore();
+  }
+}
+
 function drawPlayer() {
   const heldWeapon = !activeEmote && quickbarItems[selectedQuickSlot]?.kind === "weapon"
     ? quickbarItems[selectedQuickSlot]
@@ -7145,6 +7535,31 @@ function drawNightCurtain(darkness) {
     mask.fill();
   }
 
+  // 队友手电筒也从同一张夜幕遮罩中挖出亮区，光源重叠不会重新变黑。
+  for (const remote of remotePlayers.values()) {
+    if (!remote.flashlight) continue;
+    const remoteX = remote.x - camera.x;
+    const remoteY = remote.y - camera.y - 12;
+    if (remoteX < -360 || remoteY < -360 || remoteX > W + 360 || remoteY > H + 360) continue;
+    const remoteAngle = Math.atan2(remote.dirY, remote.dirX);
+    const remoteRadius = remote.classRow === 3 ? 302 : 232;
+    const remoteHalfAngle = remote.classRow === 3 ? .5 : .39;
+    mask.beginPath();
+    mask.moveTo(remoteX, remoteY);
+    mask.arc(
+      remoteX,
+      remoteY,
+      remoteRadius,
+      remoteAngle - remoteHalfAngle,
+      remoteAngle + remoteHalfAngle
+    );
+    mask.closePath();
+    mask.fill();
+    mask.beginPath();
+    mask.arc(remoteX, remoteY, 42, 0, Math.PI * 2);
+    mask.fill();
+  }
+
   if (fireX > -150 && fireY > -150 && fireX < W + 150 && fireY < H + 150) {
     const safeRadius = 68 + darkness * 32;
     mask.beginPath();
@@ -7361,6 +7776,10 @@ function loop(now) {
 
 window.addEventListener("keydown", (event) => {
   if (["Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.code)) event.preventDefault();
+  if (roomsOpen) {
+    if (event.code === "Escape" && !event.repeat) setRoomsOpen(false);
+    return;
+  }
   if (howToPlayOpen) {
     if (event.code === "Escape" && !event.repeat) setHowToPlayOpen(false);
     return;
@@ -7442,8 +7861,41 @@ window.addEventListener("blur", () => {
   keys.clear();
   stopPlayerMotion();
 });
-startButton.addEventListener("click", startGame);
-continueButton?.addEventListener("click", continueGame);
+quickJoinButton.addEventListener("click", quickJoinPublicRoom);
+roomsButton.addEventListener("click", () => setRoomsOpen(true));
+roomsCloseButton?.addEventListener("click", () => setRoomsOpen(false));
+refreshRoomsButton?.addEventListener("click", refreshPublicRooms);
+nicknameInput?.addEventListener("change", currentMultiplayerNickname);
+createRoomForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!assetsReady) return;
+  setRoomsError("");
+  setRoomsBusy(true);
+  try {
+    await connectMultiplayer();
+    await multiplayer.createRoom({
+      nickname: currentMultiplayerNickname(),
+      name: roomNameInput.value,
+      password: roomPasswordInput.value,
+      maxPlayers: 4
+    });
+  } catch (error) {
+    setRoomsError(error.message || "创建房间失败");
+  } finally {
+    setRoomsBusy(false);
+  }
+});
+joinPasswordForm?.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const room = pendingPasswordRoom;
+  if (!room) return;
+  joinPasswordForm.classList.add("hidden");
+  joinPublicRoom(room, joinPasswordInput.value);
+});
+joinPasswordCancelButton?.addEventListener("click", () => {
+  pendingPasswordRoom = null;
+  joinPasswordForm.classList.add("hidden");
+});
 howToPlayButton?.addEventListener("click", () => setHowToPlayOpen(true));
 howToPlayCloseButton?.addEventListener("click", () => setHowToPlayOpen(false));
 titleSettingsButton?.addEventListener("click", () => setSettingsOpen(true, "title"));
@@ -7662,11 +8114,37 @@ classButtons.forEach((button) => {
     const startingItems = giveClassStartingItems(selectedClass);
     showMessage(`${CLASS_NAMES[selectedClass]} · ${skill.name}已生效；获得${startingItems}`, 2.6);
     updateHud();
+    sendMultiplayerPlayerState();
     saveGame(false);
   });
 });
 
+multiplayer.addEventListener("status", (event) => {
+  setRoomsConnectionStatus(event.detail.status);
+  if (event.detail.status === "disconnected" && multiplayerRoom) {
+    updateMultiplayerHud(true);
+  }
+});
+multiplayer.addEventListener("rooms", (event) => renderPublicRooms(event.detail.rooms));
+multiplayer.addEventListener("room_joined", (event) => enterMultiplayerRoom(event.detail));
+multiplayer.addEventListener("room_state", (event) => handleMultiplayerRoomState(event.detail));
+multiplayer.addEventListener("player_joined", (event) => applyRemotePlayer(event.detail.player));
+multiplayer.addEventListener("player_left", (event) => {
+  remotePlayers.delete(event.detail.playerId);
+});
+multiplayer.addEventListener("player_state", (event) => {
+  applyRemotePlayer({
+    playerId: event.detail.playerId,
+    nickname: event.detail.nickname,
+    state: event.detail.state
+  });
+});
+multiplayer.addEventListener("server_error", (event) => {
+  setRoomsError(event.detail.message || "服务器返回了一个错误");
+});
+
 window.addEventListener("beforeunload", () => saveGame(false));
+if (nicknameInput) nicknameInput.value = loadMultiplayerNickname();
 updateHud();
 updateAudioButton();
 renderSettings();

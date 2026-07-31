@@ -683,35 +683,16 @@ function createAbandonedCabinLoot() {
 
 function generateAbandonedCabin(cabinIndex = abandonedCabins.length) {
   if (cabinIndex >= ABANDONED_CABIN_COUNT) return null;
-  const gateAngle = Math.atan2(
-    escapeGate.y - CAMP_POSITION.y,
-    escapeGate.x - CAMP_POSITION.x
-  );
   let cabinX = 0;
   let cabinY = 0;
 
   for (let attempt = 0; attempt < 240; attempt += 1) {
-    const progress = cabinIndex / Math.max(1, ABANDONED_CABIN_COUNT - 1);
-    const minimumDistance = cabinIndex === 0
-      ? ABANDONED_CABIN_MIN_DISTANCE
-      : (135 + progress * 80) * TILE_SIZE;
-    const maximumDistance = cabinIndex === 0
-      ? 160 * TILE_SIZE
-      : Math.min(ABANDONED_CABIN_MAX_DISTANCE, (260 + progress * 160) * TILE_SIZE);
-    const distance = minimumDistance + Math.random() * (maximumDistance - minimumDistance);
-    const baseAngle = cabinIndex === 0
-      ? gateAngle
-      : gateAngle + cabinIndex * Math.PI * 2 / ABANDONED_CABIN_COUNT;
-    const angle = baseAngle + (Math.random() - 0.5) * (cabinIndex === 0 ? 0.7 : 0.9);
-    const perpendicularOffset = cabinIndex === 0
-      ? (Math.random() - 0.5) * 32 * TILE_SIZE
-      : 0;
-    const rawX = CAMP_POSITION.x
-      + Math.cos(angle) * distance
-      + Math.cos(angle + Math.PI / 2) * perpendicularOffset;
-    const rawY = CAMP_POSITION.y
-      + Math.sin(angle) * distance
-      + Math.sin(angle + Math.PI / 2) * perpendicularOffset;
+    const distanceRoll = Math.sqrt(Math.random());
+    const distance = ABANDONED_CABIN_MIN_DISTANCE
+      + distanceRoll * (ABANDONED_CABIN_MAX_DISTANCE - ABANDONED_CABIN_MIN_DISTANCE);
+    const angle = Math.random() * Math.PI * 2;
+    const rawX = CAMP_POSITION.x + Math.cos(angle) * distance;
+    const rawY = CAMP_POSITION.y + Math.sin(angle) * distance;
     const x = Math.round(rawX / BUILD_GRID_SIZE) * BUILD_GRID_SIZE;
     const y = Math.round(rawY / BUILD_GRID_SIZE) * BUILD_GRID_SIZE;
     if (!abandonedCabinSiteIsClear(x, y)) continue;

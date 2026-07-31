@@ -3462,3 +3462,202 @@ h1 {
     font-size: 11px;
   }
 }
+
+/* M 键探索地图：旧测绘终端只记录玩家真正走过的区域。 */
+.map-panel {
+  position: fixed;
+  z-index: 8;
+  left: 50%;
+  top: 50%;
+  display: grid;
+  width: min(760px, calc(100vw - 28px));
+  max-height: calc(100vh - 24px);
+  padding: 16px 18px 14px;
+  border: 1px solid #58675e;
+  border-top: 3px solid #7e5f43;
+  color: #d8d7c8;
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, .012) 0 1px, transparent 1px 7px),
+    linear-gradient(148deg, rgba(16, 26, 23, .99), rgba(3, 7, 8, .99));
+  box-shadow:
+    0 0 0 100vmax rgba(1, 3, 4, .82),
+    15px 18px 0 rgba(0, 0, 0, .38),
+    0 28px 90px rgba(0, 0, 0, .72);
+  transform: translate(-50%, -50%);
+}
+
+.map-header,
+.map-readout,
+.map-legend {
+  display: flex;
+  align-items: center;
+}
+
+.map-header {
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.map-header small {
+  color: #7b8d83;
+  font-size: 8px;
+  letter-spacing: .17em;
+}
+
+.map-header h2 {
+  margin: 4px 0 9px;
+  color: #e2dfce;
+  font-size: 24px;
+  font-weight: 400;
+  letter-spacing: .1em;
+  text-shadow: 3px 3px 0 #000;
+}
+
+#mapCloseButton {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #5d6c63;
+  color: #b9c4ba;
+  background: #09100e;
+  cursor: pointer;
+  font-size: 21px;
+}
+
+#mapCloseButton:hover,
+#mapCloseButton:focus-visible {
+  border-color: #a18868;
+  color: #f0e8d2;
+  background: #1a1e17;
+  outline: none;
+}
+
+.map-readout {
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 26px;
+  padding: 5px 8px;
+  border: 1px solid #35443d;
+  border-bottom: 0;
+  color: #aab8ad;
+  background: #08100e;
+  font-size: 9px;
+  letter-spacing: .04em;
+}
+
+#mapStatus {
+  color: #d2c49d;
+}
+
+#mapExplored {
+  color: #718a7b;
+  white-space: nowrap;
+}
+
+.map-frame {
+  position: relative;
+  justify-self: center;
+  width: min(640px, 64vh, calc(100vw - 64px));
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 1px solid #526158;
+  background: #020606;
+  box-shadow:
+    inset 0 0 36px rgba(0, 0, 0, .72),
+    0 8px 24px rgba(0, 0, 0, .44);
+}
+
+#mapCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  cursor: crosshair;
+}
+
+.map-frame::before {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(0deg, rgba(190, 216, 199, .025) 0 1px, transparent 1px 4px),
+    radial-gradient(circle, transparent 62%, rgba(0, 0, 0, .58) 100%);
+}
+
+.map-scanline {
+  position: absolute;
+  z-index: 3;
+  left: 0;
+  right: 0;
+  height: 10%;
+  pointer-events: none;
+  background: linear-gradient(transparent, rgba(149, 181, 159, .045), transparent);
+  animation: map-scan 5.8s linear infinite;
+}
+
+.map-legend {
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 7px 14px;
+  padding: 10px 5px 3px;
+  color: #84938a;
+  font-size: 8px;
+}
+
+.map-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.map-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border: 1px solid rgba(238, 240, 220, .55);
+  background: #9baa9e;
+  box-shadow: 0 0 5px currentColor;
+}
+
+.map-dot.player { color: #f4e9bd; background: #f4e9bd; transform: rotate(45deg); }
+.map-dot.camp { color: #e08d50; background: #e08d50; border-radius: 50%; }
+.map-dot.normal { color: #a8b89e; background: #6d8268; }
+.map-dot.damaged { color: #b77658; background: #8d503c; }
+.map-dot.tool { color: #86afc0; background: #537b8c; }
+.map-dot.danger { color: #d45d5a; background: #9f3e3c; }
+.map-dot.gate { color: #dec365; background: #b1983f; transform: rotate(45deg); }
+
+.map-tip {
+  margin: 5px 0 0;
+  color: #697970;
+  font-size: 8px;
+  text-align: center;
+  letter-spacing: .05em;
+}
+
+@keyframes map-scan {
+  from { top: -12%; }
+  to { top: 102%; }
+}
+
+@media (max-height: 760px) {
+  .map-panel {
+    width: min(650px, calc(100vw - 24px));
+    padding: 10px 12px 9px;
+  }
+
+  .map-header h2 { margin-bottom: 5px; font-size: 19px; }
+  .map-frame { width: min(520px, 61vh, calc(100vw - 52px)); }
+  .map-legend { padding-top: 6px; }
+}
+
+@media (max-width: 560px) {
+  .map-panel { padding: 11px 10px 10px; }
+  .map-header h2 { font-size: 19px; }
+  .map-readout { align-items: flex-start; flex-direction: column; gap: 2px; }
+  .map-frame { width: min(640px, 56vh, calc(100vw - 50px)); }
+  .map-legend { gap: 6px 9px; }
+}

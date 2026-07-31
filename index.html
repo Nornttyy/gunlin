@@ -12,7 +12,7 @@
   <link rel="preload" href="assets/escape-gate.png?v=20260729-gate-drawn1" as="image" />
   <link rel="preload" href="assets/forest-assets.png?v=20260730-bottles1" as="image" />
   <link rel="preload" href="assets/ark-pixel-12px-zh_cn.woff2?v=20260728-assets2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=20260731-chestitems1" />
+  <link rel="stylesheet" href="styles.css?v=20260731-explorationmap1" />
 </head>
 <body>
   <main id="app">
@@ -97,7 +97,7 @@
             <div>
               <small>OBJECTIVE // ESCAPE</small>
               <h3>找到逃生大门</h3>
-              <p>大门在出生点至少 600 格外。穿过森林找到它，靠近后按 E 才能通关。</p>
+              <p>大门在出生点至少 700 格外。用 M 打开探索地图；旧地图线索只会标出大致区域，亲自发现后才显示准确位置。</p>
             </div>
           </article>
         </div>
@@ -118,7 +118,8 @@
             <div><kbd>F</kbd><span>手电筒</span></div>
             <div><kbd>I</kbd><span>背包 / 合成</span></div>
             <div><kbd>Y</kbd><span>动作菜单</span></div>
-            <div><kbd>M</kbd><span>声音开关</span></div>
+            <div><kbd>M</kbd><span>探索地图</span></div>
+            <div><kbd>O</kbd><span>声音开关</span></div>
             <div><kbd>ESC</kbd><span>暂停 / 设置</span></div>
           </div>
         </section>
@@ -171,6 +172,33 @@
         </div>
         <p>移动、攻击或受伤会停止动作</p>
       </section>
+      <section id="mapPanel" class="map-panel hidden" role="dialog" aria-modal="true" aria-labelledby="mapTitle">
+        <header class="map-header">
+          <div>
+            <small>FIELD SURVEY // 3000 × 3000</small>
+            <h2 id="mapTitle">探索地图</h2>
+          </div>
+          <button id="mapCloseButton" type="button" aria-label="关闭探索地图">×</button>
+        </header>
+        <div class="map-readout">
+          <span id="mapStatus">尚未找到逃生大门线索</span>
+          <span id="mapExplored">已探索 0%</span>
+        </div>
+        <div class="map-frame">
+          <canvas id="mapCanvas" width="640" height="640" aria-label="森林探索地图"></canvas>
+          <span class="map-scanline" aria-hidden="true"></span>
+        </div>
+        <div class="map-legend" aria-label="地图图例">
+          <span><i class="map-dot player"></i>玩家</span>
+          <span><i class="map-dot camp"></i>营地</span>
+          <span><i class="map-dot normal"></i>普通屋</span>
+          <span><i class="map-dot damaged"></i>破损屋</span>
+          <span><i class="map-dot tool"></i>工具屋</span>
+          <span><i class="map-dot danger"></i>危险屋</span>
+          <span><i class="map-dot gate"></i>逃生大门</span>
+        </div>
+        <p class="map-tip">迷雾只会在你亲自走过的区域散去 · 按 M 关闭</p>
+      </section>
       <div class="hud">
         <div class="hud-stamp">REC // FOREST SIGNAL</div>
         <div class="hud-primary">
@@ -206,7 +234,7 @@
         <span id="inventoryButtonLabel">背包</span> <span>[I]</span>
       </button>
       <button id="audioButton" class="audio-button" aria-pressed="true">
-        <span id="audioButtonLabel">声音 开</span> <b>[M]</b>
+        <span id="audioButtonLabel">声音 开</span> <b>[O]</b>
       </button>
       <div id="inventoryWorkspace" class="inventory-workspace hidden">
         <section id="craftPanel" class="craft-panel" aria-label="合成栏">
@@ -398,6 +426,6 @@
       <p class="settings-tip">设置会自动保存在这个浏览器中</p>
     </section>
   </main>
-  <script type="module" src="game.js?v=20260731-cabinvariants1"></script>
+  <script type="module" src="game.js?v=20260731-explorationmap1"></script>
 </body>
 </html>

@@ -65,6 +65,10 @@ const ABANDONED_CABIN_MIN_DISTANCE = 90 * TILE_SIZE;
 const ABANDONED_CABIN_MAX_DISTANCE = 420 * TILE_SIZE;
 const ABANDONED_CABIN_MIN_SPACING = 60 * TILE_SIZE;
 const ABANDONED_CABIN_LANDMARK = "abandoned_cabin";
+const MAP_CELL_TILES = 24;
+const MAP_CELL_WORLD_SIZE = MAP_CELL_TILES * TILE_SIZE;
+const MAP_COLUMNS = Math.ceil(WORLD.tileWidth / MAP_CELL_TILES);
+const MAP_ROWS = Math.ceil(WORLD.tileHeight / MAP_CELL_TILES);
 const ABANDONED_CABIN_TYPES = {
   normal: { label: "普通木屋" },
   damaged: { label: "破损木屋" },
@@ -120,6 +124,13 @@ const exitToTitleButton = document.getElementById("exitToTitleButton");
 const saveStatus = document.getElementById("saveStatus");
 const emotePanel = document.getElementById("emotePanel");
 const emoteButtons = [...document.querySelectorAll(".emote-button")];
+const mapPanel = document.getElementById("mapPanel");
+const mapCanvas = document.getElementById("mapCanvas");
+const mapContext = mapCanvas?.getContext("2d");
+const mapCloseButton = document.getElementById("mapCloseButton");
+const mapStatus = document.getElementById("mapStatus");
+const mapExplored = document.getElementById("mapExplored");
+if (mapContext) mapContext.imageSmoothingEnabled = false;
 const messageElement = document.getElementById("message");
 const classButtons = [...document.querySelectorAll(".class-button")];
 const classSelectPanel = document.getElementById("classSelectPanel");
@@ -471,6 +482,7 @@ let howToPlayOpen = false;
 let settingsOpen = false;
 let pauseOpen = false;
 let emoteOpen = false;
+let mapOpen = false;
 let activeEmote = null;
 let emoteStartedAt = 0;
 let settingsReturnTarget = "title";
@@ -582,6 +594,7 @@ const pistolShot = {
 const campfire = { ...CAMP_POSITION };
 const escapeGate = { x: 0, y: 0, discovered: false };
 const abandonedCabins = [];
+const exploredMapCells = new Set();
 
 function hash(index) {
   const value = Math.sin(index * 91.173 + 12.91) * 43758.5453;
@@ -590,6 +603,42 @@ function hash(index) {
 
 function gridHash(x, y, seed = 0) {
   return hash(x * 374761 + y * 668265 + seed * 69069);
+}
+
+function mapCellKey(column, row) {
+  return `${column}:${row}`;
+}
+
+function parseMapCellKey(key) {
+  const [rawColumn, rawRow] = String(key).split(":");
+  const column = Number(rawColumn);
+  const row = Number(rawRow);
+  if (!Number.isInteger(column) || !Number.isInteger(row)
+    || column < 0 || row < 0 || column >= MAP_COLUMNS || row >= MAP_ROWS) return null;
+  return { column, row };
+}
+
+function revealMapAroundPlayer() {
+  const column = Math.max(0, Math.min(
+    MAP_COLUMNS - 1,
+    Math.floor(player.x / MAP_CELL_WORLD_SIZE)
+  ));
+  const row = Math.max(0, Math.min(
+    MAP_ROWS - 1,
+    Math.floor(player.y / MAP_CELL_WORLD_SIZE)
+  ));
+  exploredMapCells.add(mapCellKey(column, row));
+}
+
+function restoreExploredMapCells(savedCells) {
+  exploredMapCells.clear();
+  if (Array.isArray(savedCells)) {
+    savedCells.forEach((key) => {
+      const cell = parseMapCellKey(key);
+      if (cell) exploredMapCells.add(mapCellKey(cell.column, cell.row));
+    });
+  }
+  revealMapAroundPlayer();
 }
 
 function escapeGateGroundIsClear(x, y) {
@@ -1242,6 +1291,7 @@ function saveGame(announce = true) {
     doors,
     buildings,
     escapeGate: { ...escapeGate },
+    exploredMapCells: [...exploredMapCells],
     abandonedCabins: abandonedCabins.map((cabin) => ({ ...cabin })),
     abandonedCabin: abandonedCabins[0]
       ? { generated: true, ...abandonedCabins[0] }
@@ -2052,6 +2102,8 @@ function resetWorld() {
   generateAbandonedCabins();
   updateResourceChunks(true);
   generateStarterResources();
+  exploredMapCells.clear();
+  revealMapAroundPlayer();
 }
 
 function startGame() {
@@ -2120,6 +2172,7 @@ function startGame() {
   setSettingsOpen(false);
   setInventoryOpen(false);
   setEmoteOpen(false);
+  setMapOpen(false);
   stopEmote();
   inventoryButton.disabled = true;
   classButtons.forEach((button) => button.classList.remove("selected"));
@@ -2162,6 +2215,7 @@ function continueGame() {
   settingsOpen = false;
   pauseOpen = false;
   emoteOpen = false;
+  mapOpen = false;
   activeEmote = null;
   activeChestId = null;
   inventoryWorkspace?.classList.add("hidden");
@@ -2173,6 +2227,7 @@ function continueGame() {
   settingsPanel?.classList.add("hidden");
   pausePanel?.classList.add("hidden");
   emotePanel?.classList.add("hidden");
+  mapPanel?.classList.add("hidden");
   gameScreen.dataset.emote = "";
   inventoryButton.disabled = false;
   inventoryButton.classList.remove("active");
@@ -2288,6 +2343,7 @@ function continueGame() {
   doorId = nextEntityId(doors);
   buildingId = nextEntityId(buildings);
   restoreAbandonedCabins(saved.abandonedCabins, saved.abandonedCabin);
+  restoreExploredMapCells(saved.exploredMapCells);
   updateResourceChunks(true);
   generateStarterResources();
 
@@ -2314,6 +2370,7 @@ function returnToTitle() {
   settingsOpen = false;
   pauseOpen = false;
   emoteOpen = false;
+  mapOpen = false;
   activeEmote = null;
   activeChestId = null;
   classSelectionOpen = false;
@@ -2324,6 +2381,7 @@ function returnToTitle() {
   howToPlayPanel?.classList.add("hidden");
   pausePanel?.classList.add("hidden");
   emotePanel?.classList.add("hidden");
+  mapPanel?.classList.add("hidden");
   gameScreen.dataset.emote = "";
   classSelectPanel.classList.add("hidden");
   gameOverPanel.classList.add("hidden");
@@ -2342,6 +2400,7 @@ function endGame() {
   setSettingsOpen(false);
   setInventoryOpen(false);
   setEmoteOpen(false);
+  setMapOpen(false);
   stopEmote();
   victoryPanel?.classList.add("hidden");
   gameOverPanel.classList.remove("hidden");
@@ -2358,6 +2417,7 @@ function winGame() {
   setSettingsOpen(false);
   setInventoryOpen(false);
   setEmoteOpen(false);
+  setMapOpen(false);
   stopEmote();
   gameOverPanel.classList.add("hidden");
   if (victorySummary) {
@@ -2395,7 +2455,8 @@ function setEmoteOpen(open) {
     && !classSelectionOpen
     && !inventoryOpen
     && !settingsOpen
-    && !pauseOpen;
+    && !pauseOpen
+    && !mapOpen;
   emoteOpen = shouldOpen;
   emotePanel?.classList.toggle("hidden", !emoteOpen);
   keys.clear();
@@ -2667,6 +2728,7 @@ function update(delta) {
 
   if (bloodMoonActive) bloodMoonPulse += delta;
   updatePlayer(delta);
+  revealMapAroundPlayer();
   updateEscapeGateDiscovery();
   updateDoors(delta);
   updateProjectiles(delta);
@@ -3577,7 +3639,7 @@ function craftSupply(recipeIndex) {
 
 // 背包打开时会暂停游戏，就像先把桌面上的玩具按下暂停键再整理盒子。
 function setInventoryOpen(open) {
-  inventoryOpen = open && state === "game" && !classSelectionOpen;
+  inventoryOpen = open && state === "game" && !classSelectionOpen && !mapOpen;
   if (!inventoryOpen) activeChestId = null;
   const chest = inventoryOpen ? currentChest() : null;
   if (inventoryWorkspace) inventoryWorkspace.classList.toggle("hidden", !inventoryOpen);
@@ -3595,6 +3657,22 @@ function setInventoryOpen(open) {
     if (craftStatus && !chest) craftStatus.textContent = "选择配方制作，成品会优先进入快捷栏";
   }
   updateHud();
+}
+
+function setMapOpen(open) {
+  const shouldOpen = Boolean(open)
+    && state === "game"
+    && !classSelectionOpen
+    && !inventoryOpen
+    && !settingsOpen
+    && !pauseOpen
+    && !emoteOpen;
+  mapOpen = shouldOpen;
+  mapPanel?.classList.toggle("hidden", !mapOpen);
+  keys.clear();
+  stopPlayerMotion();
+  if (mapOpen) renderExplorationMap();
+  else lastTime = performance.now();
 }
 
 function setHowToPlayOpen(open) {
@@ -3625,6 +3703,7 @@ function setSettingsOpen(open, returnTarget = null) {
 function setPauseOpen(open) {
   const shouldOpen = Boolean(open) && state === "game" && !classSelectionOpen;
   if (shouldOpen && inventoryOpen) setInventoryOpen(false);
+  if (shouldOpen && mapOpen) setMapOpen(false);
   pauseOpen = shouldOpen;
   pausePanel?.classList.toggle("hidden", !pauseOpen);
   if (pauseOpen) {
@@ -5349,6 +5428,138 @@ function terrainAtWorld(worldX, worldY) {
   return terrainAt(Math.floor(worldX / TILE_SIZE), Math.floor(worldY / TILE_SIZE));
 }
 
+function mapPointFromWorld(worldX, worldY) {
+  return {
+    x: worldX / WORLD.width * mapCanvas.width,
+    y: worldY / WORLD.height * mapCanvas.height
+  };
+}
+
+function drawExplorationMapMarker(worldX, worldY, color, size = 5, diamond = false) {
+  if (!mapContext || !mapCanvas) return;
+  const point = mapPointFromWorld(worldX, worldY);
+  mapContext.save();
+  mapContext.translate(point.x, point.y);
+  if (diamond) mapContext.rotate(Math.PI / 4);
+  mapContext.fillStyle = color;
+  mapContext.shadowColor = color;
+  mapContext.shadowBlur = Math.max(3, size);
+  mapContext.fillRect(-size / 2, -size / 2, size, size);
+  mapContext.strokeStyle = "rgba(244, 241, 216, .72)";
+  mapContext.lineWidth = 1;
+  mapContext.strokeRect(-size / 2, -size / 2, size, size);
+  mapContext.restore();
+}
+
+function approximateEscapeGateMapRegion() {
+  const gateTileX = Math.floor(escapeGate.x / TILE_SIZE);
+  const gateTileY = Math.floor(escapeGate.y / TILE_SIZE);
+  const angle = gridHash(gateTileX, gateTileY, 503) * Math.PI * 2;
+  const offset = (42 + gridHash(gateTileX, gateTileY, 509) * 46) * TILE_SIZE;
+  return {
+    x: Math.max(0, Math.min(WORLD.width, escapeGate.x + Math.cos(angle) * offset)),
+    y: Math.max(0, Math.min(WORLD.height, escapeGate.y + Math.sin(angle) * offset)),
+    radius: 118 * TILE_SIZE
+  };
+}
+
+function renderExplorationMap() {
+  if (!mapContext || !mapCanvas) return;
+  const width = mapCanvas.width;
+  const height = mapCanvas.height;
+  const cellWidth = width / MAP_COLUMNS;
+  const cellHeight = height / MAP_ROWS;
+  const terrainColors = {
+    [TERRAIN_FRAME.grass]: "#294437",
+    [TERRAIN_FRAME.sand]: "#655e41",
+    [TERRAIN_FRAME.water]: "#205361"
+  };
+  const cabinColors = {
+    normal: "#8da184",
+    damaged: "#a05d43",
+    tool: "#598ca0",
+    danger: "#bd4845"
+  };
+
+  mapContext.clearRect(0, 0, width, height);
+  mapContext.fillStyle = "#020707";
+  mapContext.fillRect(0, 0, width, height);
+
+  exploredMapCells.forEach((key) => {
+    const cell = parseMapCellKey(key);
+    if (!cell) return;
+    const worldX = Math.min(
+      WORLD.width - 1,
+      (cell.column + 0.5) * MAP_CELL_WORLD_SIZE
+    );
+    const worldY = Math.min(
+      WORLD.height - 1,
+      (cell.row + 0.5) * MAP_CELL_WORLD_SIZE
+    );
+    const terrain = terrainAtWorld(worldX, worldY);
+    mapContext.fillStyle = terrainColors[terrain] || terrainColors[TERRAIN_FRAME.grass];
+    mapContext.fillRect(
+      cell.column * cellWidth,
+      cell.row * cellHeight,
+      Math.ceil(cellWidth + 0.35),
+      Math.ceil(cellHeight + 0.35)
+    );
+  });
+
+  mapContext.save();
+  mapContext.strokeStyle = "rgba(120, 148, 132, .2)";
+  mapContext.lineWidth = 1;
+  mapContext.strokeRect(.5, .5, width - 1, height - 1);
+  mapContext.restore();
+
+  abandonedCabins.filter((cabin) => cabin.searched).forEach((cabin) => {
+    const type = normalizeAbandonedCabinType(cabin.type);
+    drawExplorationMapMarker(cabin.x, cabin.y, cabinColors[type], 5);
+  });
+
+  const clueFound = abandonedCabins.some((cabin) => cabin.clueFound);
+  if (escapeGate.discovered) {
+    drawExplorationMapMarker(escapeGate.x, escapeGate.y, "#e0c35d", 8, true);
+  } else if (clueFound) {
+    const region = approximateEscapeGateMapRegion();
+    const point = mapPointFromWorld(region.x, region.y);
+    const radiusX = region.radius / WORLD.width * width;
+    const radiusY = region.radius / WORLD.height * height;
+    mapContext.save();
+    mapContext.beginPath();
+    mapContext.ellipse(point.x, point.y, radiusX, radiusY, 0, 0, Math.PI * 2);
+    mapContext.fillStyle = "rgba(204, 177, 78, .1)";
+    mapContext.fill();
+    mapContext.setLineDash([5, 4]);
+    mapContext.strokeStyle = "rgba(220, 193, 92, .85)";
+    mapContext.lineWidth = 1.5;
+    mapContext.stroke();
+    mapContext.setLineDash([]);
+    mapContext.fillStyle = "#e0c76e";
+    mapContext.font = "16px ArkPixel, monospace";
+    mapContext.textAlign = "center";
+    mapContext.textBaseline = "middle";
+    mapContext.fillText("?", point.x, point.y + 1);
+    mapContext.restore();
+  }
+
+  drawExplorationMapMarker(CAMP_POSITION.x, CAMP_POSITION.y, "#df8b4d", 7);
+  drawExplorationMapMarker(player.x, player.y, "#f4e9b7", 8, true);
+
+  if (mapStatus) {
+    mapStatus.textContent = escapeGate.discovered
+      ? "逃生大门已准确定位"
+      : clueFound
+        ? "旧地图只能确定大门的大致区域"
+        : "尚未找到逃生大门线索";
+  }
+  if (mapExplored) {
+    const percentage = exploredMapCells.size / (MAP_COLUMNS * MAP_ROWS) * 100;
+    const label = percentage > 0 && percentage < 0.1 ? "不足 0.1" : percentage.toFixed(1);
+    mapExplored.textContent = `已探索 ${label}% · ${exploredMapCells.size} 区域`;
+  }
+}
+
 // 植物不仅检查中心，还检查根部周围，防止树或灌木压到沙滩和水面上。
 function canPlantGrowAt(x, y, radius) {
   const footprint = Math.max(12, radius * 0.72);
@@ -6635,8 +6846,8 @@ function loop(now) {
   if (state !== "game") return;
   const delta = Math.min(0.04, Math.max(0, (now - lastTime) / 1000));
   lastTime = now;
-  // 打开物品栏、设置或暂停菜单时只画画面，不推进时间、玩家或怪物。
-  if (!inventoryOpen && !settingsOpen && !pauseOpen && !classSelectionOpen && !emoteOpen) update(delta);
+  // 打开物品栏、地图、设置或暂停菜单时只画画面，不推进时间、玩家或怪物。
+  if (!inventoryOpen && !mapOpen && !settingsOpen && !pauseOpen && !classSelectionOpen && !emoteOpen) update(delta);
   render();
   requestAnimationFrame(loop);
 }
@@ -6655,9 +6866,14 @@ window.addEventListener("keydown", (event) => {
   if (classSelectionOpen) return;
   if (event.code === "Escape") {
     if (event.repeat) return;
-    if (emoteOpen) setEmoteOpen(false);
+    if (mapOpen) setMapOpen(false);
+    else if (emoteOpen) setEmoteOpen(false);
     else if (inventoryOpen) setInventoryOpen(false);
     else setPauseOpen(!pauseOpen);
+    return;
+  }
+  if (mapOpen) {
+    if (event.code === "KeyM" && !event.repeat) setMapOpen(false);
     return;
   }
   if (emoteOpen) {
@@ -6665,7 +6881,7 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   if (pauseOpen) return;
-  if (event.code === "KeyM") {
+  if (event.code === "KeyO") {
     if (!event.repeat) setAudioEnabled(!audioEnabled);
     return;
   }
@@ -6674,6 +6890,10 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   if (inventoryOpen) return;
+  if (event.code === "KeyM") {
+    if (!event.repeat) setMapOpen(true);
+    return;
+  }
   if (event.code === "KeyY") {
     if (!event.repeat) setEmoteOpen(true);
     return;
@@ -6695,7 +6915,7 @@ window.addEventListener("keydown", (event) => {
 });
 
 canvas.addEventListener("pointerdown", (event) => {
-  if (state !== "game" || inventoryOpen || settingsOpen || pauseOpen || classSelectionOpen || emoteOpen) return;
+  if (state !== "game" || inventoryOpen || mapOpen || settingsOpen || pauseOpen || classSelectionOpen || emoteOpen) return;
   if (event.button !== 0 && event.button !== 2) return;
   event.preventDefault();
   aimAtPointer(event);
@@ -6704,7 +6924,7 @@ canvas.addEventListener("pointerdown", (event) => {
 });
 
 canvas.addEventListener("pointermove", (event) => {
-  if (state !== "game" || inventoryOpen || settingsOpen || pauseOpen || classSelectionOpen || emoteOpen) return;
+  if (state !== "game" || inventoryOpen || mapOpen || settingsOpen || pauseOpen || classSelectionOpen || emoteOpen) return;
   aimAtPointer(event);
 });
 
@@ -6724,12 +6944,13 @@ retryAssetsButton.addEventListener("click", loadGameAssets);
 restartButton.addEventListener("click", startGame);
 victoryTitleButton?.addEventListener("click", returnToTitle);
 inventoryButton.addEventListener("click", () => {
-  if (!pauseOpen && !settingsOpen) setInventoryOpen(!inventoryOpen);
+  if (!pauseOpen && !settingsOpen && !mapOpen) setInventoryOpen(!inventoryOpen);
 });
 emoteButtons.forEach((button) => {
   button.addEventListener("click", () => startEmote(button.dataset.emote));
 });
 audioButton?.addEventListener("click", () => setAudioEnabled(!audioEnabled));
+mapCloseButton?.addEventListener("click", () => setMapOpen(false));
 resumeButton?.addEventListener("click", () => setPauseOpen(false));
 saveButton?.addEventListener("click", () => saveGame(true));
 pauseSettingsButton?.addEventListener("click", () => setSettingsOpen(true, "pause"));

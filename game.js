@@ -65,6 +65,12 @@ const ABANDONED_CABIN_MIN_DISTANCE = 90 * TILE_SIZE;
 const ABANDONED_CABIN_MAX_DISTANCE = 420 * TILE_SIZE;
 const ABANDONED_CABIN_MIN_SPACING = 60 * TILE_SIZE;
 const ABANDONED_CABIN_LANDMARK = "abandoned_cabin";
+const ABANDONED_CABIN_TYPES = {
+  normal: { label: "普通木屋" },
+  damaged: { label: "破损木屋" },
+  tool: { label: "工具木屋" },
+  danger: { label: "危险木屋" }
+};
 const DEFENSE_COLLIDER = {
   wall: { length: 48, thickness: 15, edgeOffset: 16 },
   door: { length: 48, thickness: 9, edgeOffset: 16 }
@@ -664,19 +670,71 @@ function abandonedCabinSiteIsClear(x, y) {
     && !buildings.some((item) => Math.hypot(x - item.x, y - item.y) < 260);
 }
 
-function createAbandonedCabinLoot() {
-  const loot = [
-    normalizePortableItem({ type: "scrap", count: 5 + Math.floor(Math.random() * 5), source: ABANDONED_CABIN_LANDMARK }),
-    normalizePortableItem({ type: "wood", count: 4 + Math.floor(Math.random() * 4), source: ABANDONED_CABIN_LANDMARK }),
-    normalizePortableItem({ type: "stone", count: 3 + Math.floor(Math.random() * 4), source: ABANDONED_CABIN_LANDMARK }),
-    normalizePortableItem({ type: "berry", count: 2 + Math.floor(Math.random() * 3), source: ABANDONED_CABIN_LANDMARK }),
-    normalizePortableItem({ type: "glass_bottle", count: 1, source: ABANDONED_CABIN_LANDMARK })
-  ];
-  if (Math.random() < 0.6) {
-    loot.push(normalizePortableItem({ type: "medkit", count: 1, source: ABANDONED_CABIN_LANDMARK }));
-  }
-  if (Math.random() < 0.35) {
-    loot.push(normalizePortableItem({ type: "ammo_box", count: 1, source: ABANDONED_CABIN_LANDMARK }));
+function normalizeAbandonedCabinType(type) {
+  return ABANDONED_CABIN_TYPES[type] ? type : "normal";
+}
+
+function chooseAbandonedCabinType() {
+  const types = Object.keys(ABANDONED_CABIN_TYPES);
+  const counts = Object.fromEntries(types.map((type) => [type, 0]));
+  abandonedCabins.forEach((cabin) => {
+    counts[normalizeAbandonedCabinType(cabin.type)] += 1;
+  });
+  const minimum = Math.min(...Object.values(counts));
+  const candidates = types.filter((type) => counts[type] === minimum);
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+function cabinLootItem(type, count = 1) {
+  return normalizePortableItem({
+    type,
+    count,
+    source: ABANDONED_CABIN_LANDMARK
+  });
+}
+
+function createAbandonedCabinLoot(cabinType = "normal") {
+  const type = normalizeAbandonedCabinType(cabinType);
+  let loot = [];
+  if (type === "damaged") {
+    loot = [
+      cabinLootItem("scrap", 2 + Math.floor(Math.random() * 4)),
+      cabinLootItem("wood", 2 + Math.floor(Math.random() * 3)),
+      cabinLootItem("stone", 1 + Math.floor(Math.random() * 3)),
+      cabinLootItem("berry", 1 + Math.floor(Math.random() * 2))
+    ];
+    if (Math.random() < 0.35) loot.push(cabinLootItem("glass_bottle"));
+  } else if (type === "tool") {
+    const toolTypes = ["wood_axe", "axe", "wood_pickaxe", "pickaxe"];
+    loot = [
+      cabinLootItem("scrap", 8 + Math.floor(Math.random() * 7)),
+      cabinLootItem("wood", 4 + Math.floor(Math.random() * 4)),
+      cabinLootItem("stone", 4 + Math.floor(Math.random() * 4)),
+      cabinLootItem(toolTypes[Math.floor(Math.random() * toolTypes.length)]),
+      cabinLootItem("glass_bottle")
+    ];
+    if (Math.random() < 0.45) loot.push(cabinLootItem("medkit"));
+  } else if (type === "danger") {
+    loot = [
+      cabinLootItem("scrap", 10 + Math.floor(Math.random() * 6)),
+      cabinLootItem("wood", 6 + Math.floor(Math.random() * 5)),
+      cabinLootItem("stone", 6 + Math.floor(Math.random() * 4)),
+      cabinLootItem("berry", 3 + Math.floor(Math.random() * 4)),
+      cabinLootItem("glass_bottle"),
+      cabinLootItem("medkit"),
+      cabinLootItem("ammo_box")
+    ];
+    if (Math.random() < 0.35) loot.push(cabinLootItem("strength_potion"));
+  } else {
+    loot = [
+      cabinLootItem("scrap", 5 + Math.floor(Math.random() * 5)),
+      cabinLootItem("wood", 4 + Math.floor(Math.random() * 4)),
+      cabinLootItem("stone", 3 + Math.floor(Math.random() * 4)),
+      cabinLootItem("berry", 2 + Math.floor(Math.random() * 3)),
+      cabinLootItem("glass_bottle")
+    ];
+    if (Math.random() < 0.6) loot.push(cabinLootItem("medkit"));
+    if (Math.random() < 0.35) loot.push(cabinLootItem("ammo_box"));
   }
   return Array.from({ length: CHEST_SLOT_COUNT }, (_, index) => loot[index] || null);
 }
@@ -707,6 +765,7 @@ function generateAbandonedCabin(cabinIndex = abandonedCabins.length) {
   const floorDefinition = playerBuildingDefinition("floor");
   const chestDefinition = playerBuildingDefinition("chest");
   const cabinId = `${ABANDONED_CABIN_LANDMARK}:${cabinIndex}`;
+  const cabinType = chooseAbandonedCabinType();
   const addWall = (offsetX, offsetY, rotation) => {
     const health = wallDefinition.health;
     barricades.push({
@@ -722,14 +781,22 @@ function generateAbandonedCabin(cabinIndex = abandonedCabins.length) {
     });
   };
 
+  const wallSegments = [];
   for (let gridX = -2; gridX <= 2; gridX += 1) {
-    addWall(gridX, -2, 0);
-    if (gridX !== 0) addWall(gridX, 2, Math.PI);
+    wallSegments.push([gridX, -2, 0]);
+    if (gridX !== 0) wallSegments.push([gridX, 2, Math.PI]);
   }
   for (let gridY = -1; gridY <= 1; gridY += 1) {
-    addWall(-2, gridY, -Math.PI / 2);
-    addWall(2, gridY, Math.PI / 2);
+    wallSegments.push([-2, gridY, -Math.PI / 2]);
+    wallSegments.push([2, gridY, Math.PI / 2]);
   }
+  const missingWalls = new Set();
+  while (cabinType === "damaged" && missingWalls.size < 4) {
+    missingWalls.add(Math.floor(Math.random() * wallSegments.length));
+  }
+  wallSegments.forEach((segment, index) => {
+    if (!missingWalls.has(index)) addWall(...segment);
+  });
 
   doors.push({
     id: doorId++,
@@ -745,8 +812,18 @@ function generateAbandonedCabin(cabinIndex = abandonedCabins.length) {
     landmarkId: cabinId
   });
 
+  const floorTiles = [];
   for (let gridY = -1; gridY <= 1; gridY += 1) {
     for (let gridX = -1; gridX <= 1; gridX += 1) {
+      floorTiles.push([gridX, gridY]);
+    }
+  }
+  const missingFloors = new Set();
+  while (cabinType === "damaged" && missingFloors.size < 3) {
+    missingFloors.add(Math.floor(Math.random() * floorTiles.length));
+  }
+  floorTiles.forEach(([gridX, gridY], index) => {
+    if (!missingFloors.has(index)) {
       buildings.push({
         id: buildingId++,
         type: "floor",
@@ -758,6 +835,20 @@ function generateAbandonedCabin(cabinIndex = abandonedCabins.length) {
         landmarkId: cabinId
       });
     }
+  });
+
+  if (cabinType === "tool") {
+    const workbenchDefinition = playerBuildingDefinition("workbench");
+    buildings.push({
+      id: buildingId++,
+      type: "workbench",
+      x: cabinX - BUILD_GRID_SIZE,
+      y: cabinY - BUILD_GRID_SIZE,
+      health: workbenchDefinition.health,
+      maxHealth: workbenchDefinition.health,
+      landmark: ABANDONED_CABIN_LANDMARK,
+      landmarkId: cabinId
+    });
   }
 
   const chest = {
@@ -767,7 +858,7 @@ function generateAbandonedCabin(cabinIndex = abandonedCabins.length) {
     y: cabinY - BUILD_GRID_SIZE,
     health: chestDefinition.health,
     maxHealth: chestDefinition.health,
-    items: createAbandonedCabinLoot(),
+    items: createAbandonedCabinLoot(cabinType),
     landmark: ABANDONED_CABIN_LANDMARK,
     landmarkId: cabinId
   };
@@ -776,10 +867,19 @@ function generateAbandonedCabin(cabinIndex = abandonedCabins.length) {
     id: cabinId,
     x: cabinX,
     y: cabinY,
+    type: cabinType,
     chestId: chest.id,
-    searched: false
+    searched: false,
+    hasGateClue: cabinIndex % 4 === 0,
+    clueFound: false
   };
   abandonedCabins.push(cabin);
+  if (cabinType === "danger") {
+    spawnMonsterAt("mimic", cabinX, cabinY, {
+      cabinGuard: true,
+      cabinId
+    });
+  }
   return cabin;
 }
 
@@ -801,8 +901,13 @@ function restoreAbandonedCabins(savedCabins, savedLegacyCabin) {
           : `${ABANDONED_CABIN_LANDMARK}:${index}`,
         x: cabin.x,
         y: cabin.y,
+        type: normalizeAbandonedCabinType(cabin.type),
         chestId: Number.isFinite(cabin.chestId) ? cabin.chestId : null,
-        searched: Boolean(cabin.searched)
+        searched: Boolean(cabin.searched),
+        hasGateClue: typeof cabin.hasGateClue === "boolean"
+          ? cabin.hasGateClue
+          : index % 4 === 0,
+        clueFound: Boolean(cabin.clueFound)
       });
     });
   } else if (savedLegacyCabin?.generated
@@ -813,8 +918,11 @@ function restoreAbandonedCabins(savedCabins, savedLegacyCabin) {
       id: legacyId,
       x: savedLegacyCabin.x,
       y: savedLegacyCabin.y,
+      type: normalizeAbandonedCabinType(savedLegacyCabin.type),
       chestId: Number.isFinite(savedLegacyCabin.chestId) ? savedLegacyCabin.chestId : null,
-      searched: Boolean(savedLegacyCabin.searched)
+      searched: Boolean(savedLegacyCabin.searched),
+      hasGateClue: true,
+      clueFound: Boolean(savedLegacyCabin.clueFound)
     });
     for (const item of [...barricades, ...doors, ...buildings]) {
       if (item.landmark === ABANDONED_CABIN_LANDMARK && !item.landmarkId) {
@@ -2961,7 +3069,13 @@ function openChest(chest) {
     const cabin = abandonedCabins.find((item) => (
       item.id === chest.landmarkId || item.chestId === chest.id
     ));
-    if (cabin) cabin.searched = true;
+    if (cabin) {
+      cabin.searched = true;
+      if (cabin.hasGateClue) {
+        cabin.clueFound = true;
+        showMessage(`箱底的旧地图标出了逃生大门：${escapeGateDirection()}方`, 1.6);
+      }
+    }
   }
   playContainerSound(chest.x, chest.y);
   setInventoryOpen(true);
@@ -4296,7 +4410,12 @@ function spawnMonster(forcedType = null) {
   const distance = (isZombie ? 480 : 560) + Math.random() * 180;
   const x = Math.max(WORLD.margin, Math.min(WORLD.width - WORLD.margin, player.x + Math.cos(angle) * distance));
   const y = Math.max(WORLD.margin, Math.min(WORLD.height - WORLD.margin, player.y + Math.sin(angle) * distance));
-  monsters.push({
+  return spawnMonsterAt(type, x, y);
+}
+
+function spawnMonsterAt(type, x, y, extra = {}) {
+  const isZombie = type === "zombie";
+  const monster = {
     type,
     name: isZombie ? "僵尸" : "模仿者",
     x,
@@ -4312,9 +4431,12 @@ function spawnMonster(forcedType = null) {
     dirX: 1,
     animation: Math.random() * 2,
     dead: false,
-    deathTimer: 0
-  });
-  if (bloodMoonActive) applyBloodMoonBuff(monsters[monsters.length - 1]);
+    deathTimer: 0,
+    ...extra
+  };
+  monsters.push(monster);
+  if (bloodMoonActive) applyBloodMoonBuff(monster);
+  return monster;
 }
 
 function triggerMimicJumpscare(worldX = player.x) {
@@ -4333,6 +4455,7 @@ function triggerMimicJumpscare(worldX = player.x) {
 }
 
 function teleportMimicAway(monster) {
+  monster.cabinGuard = false;
   for (let attempt = 0; attempt < 14; attempt += 1) {
     const angle = Math.random() * Math.PI * 2;
     const distance = MIMIC_TELEPORT_MIN_DISTANCE
@@ -4416,7 +4539,16 @@ function updateMonsters(delta, night) {
 
     monster.animation = (monster.animation || 0)
       + delta * (monster.alerted ? (isZombie ? 6 : 7.5) : (isZombie ? 1.8 : 2.2));
-    if (!night) {
+    const dx = player.x - monster.x;
+    const dy = player.y - monster.y;
+    const distance = Math.hypot(dx, dy) || 1;
+    if (!night && monster.cabinGuard) {
+      if (!monster.alerted && monster.detectionCooldown <= 0 && distance <= detectionDistance) {
+        monster.alerted = true;
+        playMimicDetected(monster);
+      }
+      if (!monster.alerted) continue;
+    } else if (!night) {
       monster.alerted = false;
       const retreatX = monster.x - player.x;
       const retreatY = monster.y - player.y;
@@ -4427,9 +4559,6 @@ function updateMonsters(delta, night) {
       if (retreatDistance > 980) monsters.splice(i, 1);
       continue;
     }
-    const dx = player.x - monster.x;
-    const dy = player.y - monster.y;
-    const distance = Math.hypot(dx, dy) || 1;
 
     if (!monster.alerted && monster.detectionCooldown <= 0 && distance <= detectionDistance) {
       monster.alerted = true;
@@ -4872,25 +5001,33 @@ function quickbarItemAmount(item) {
 function updateSurvivalReadout() {
   if (objectiveLabel) {
     const gateDistance = escapeGateDistance();
-    const cabinDistance = abandonedCabins
+    const gateClueCount = abandonedCabins.filter((cabin) => cabin.clueFound).length;
+    const nearestCabin = abandonedCabins
       .filter((cabin) => !cabin.searched)
-      .reduce((nearest, cabin) => (
-        Math.min(nearest, Math.hypot(player.x - cabin.x, player.y - cabin.y))
-      ), Infinity);
+      .map((cabin) => ({
+        cabin,
+        distance: Math.hypot(player.x - cabin.x, player.y - cabin.y)
+      }))
+      .sort((left, right) => left.distance - right.distance)[0] || null;
     if (classSelectionOpen) {
       objectiveLabel.textContent = "选择职业后进入森林";
     } else if (gateDistance < ESCAPE_GATE_INTERACT_DISTANCE * 1.4) {
       objectiveLabel.textContent = "逃生大门就在前方 · 靠近按 E";
-    } else if (cabinDistance < 440) {
-      objectiveLabel.textContent = "发现废弃木屋 · 搜索里面的储物箱";
+    } else if (nearestCabin?.distance < 440) {
+      const cabinType = normalizeAbandonedCabinType(nearestCabin.cabin.type);
+      objectiveLabel.textContent = `发现${ABANDONED_CABIN_TYPES[cabinType].label} · 搜索里面的储物箱`;
     } else if (player.health <= 30) {
       objectiveLabel.textContent = "寻找浆果，先处理伤势";
     } else if (escapeGate.discovered) {
       objectiveLabel.textContent = `返回逃生大门 · 大致在${escapeGateDirection()}方`;
-    } else if (isNight()) {
+    } else if (gateClueCount > 0 && isNight()) {
       objectiveLabel.textContent = `活过夜晚 · 继续向${escapeGateDirection()}方搜索`;
+    } else if (gateClueCount > 0) {
+      objectiveLabel.textContent = `找到木屋地图 · 逃生大门大致在${escapeGateDirection()}方`;
+    } else if (isNight()) {
+      objectiveLabel.textContent = "活过夜晚 · 搜索木屋寻找大门线索";
     } else {
-      objectiveLabel.textContent = `寻找逃生大门 · 迹象指向${escapeGateDirection()}方`;
+      objectiveLabel.textContent = "搜索废弃木屋 · 寻找逃生大门线索";
     }
   }
 

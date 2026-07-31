@@ -60,6 +60,12 @@ const ESCAPE_GATE_MIN_DISTANCE = 700 * TILE_SIZE;
 const ESCAPE_GATE_MAX_DISTANCE = 900 * TILE_SIZE;
 const ESCAPE_GATE_DISCOVERY_DISTANCE = 550;
 const ESCAPE_GATE_INTERACT_DISTANCE = 120;
+const GATE_REPAIR_PARTS = [
+  { type: "gate_fuse", label: "保险丝" },
+  { type: "gate_gear", label: "齿轮" },
+  { type: "gate_battery", label: "电池" }
+];
+const GATE_REPAIR_CABIN_INDEXES = [2, 9, 16];
 const ABANDONED_CABIN_COUNT = 20;
 const ABANDONED_CABIN_MIN_DISTANCE = 90 * TILE_SIZE;
 const ABANDONED_CABIN_MAX_DISTANCE = 420 * TILE_SIZE;
@@ -183,7 +189,10 @@ const PORTABLE_ITEMS = [
   { type: "healing_potion", kind: "consumable", label: "治疗药水" },
   { type: "strength_potion", kind: "consumable", label: "力量药水" },
   { type: "glass_bottle", kind: "container", label: "空玻璃瓶" },
-  { type: "water_bottle", kind: "container", label: "水瓶" }
+  { type: "water_bottle", kind: "container", label: "水瓶" },
+  { type: "gate_fuse", kind: "key_item", label: "保险丝" },
+  { type: "gate_gear", kind: "key_item", label: "齿轮" },
+  { type: "gate_battery", kind: "key_item", label: "电池" }
 ];
 const PISTOL_MAGAZINE_SIZE = 7;
 const SHOTGUN_MAGAZINE_SIZE = 2;
@@ -598,7 +607,7 @@ const pistolShot = {
   hit: false
 };
 const campfire = { ...CAMP_POSITION };
-const escapeGate = { x: 0, y: 0, discovered: false };
+const escapeGate = { x: 0, y: 0, discovered: false, repaired: false };
 const abandonedCabins = [];
 const supplyCaches = [];
 const exploredMapCells = new Set();
@@ -669,13 +678,14 @@ function generateEscapeGate() {
     if (x < WORLD.margin + 180 || y < WORLD.margin + 220
       || x > WORLD.width - WORLD.margin - 180 || y > WORLD.height - WORLD.margin - 180) continue;
     if (!escapeGateGroundIsClear(x, y)) continue;
-    Object.assign(escapeGate, { x, y, discovered: false });
+    Object.assign(escapeGate, { x, y, discovered: false, repaired: false });
     return;
   }
   Object.assign(escapeGate, {
     x: CAMP_POSITION.x + ESCAPE_GATE_MIN_DISTANCE,
     y: CAMP_POSITION.y,
-    discovered: false
+    discovered: false,
+    repaired: false
   });
 }
 
@@ -699,7 +709,8 @@ function restoreEscapeGate(savedGate) {
   Object.assign(escapeGate, {
     x: savedGate.x,
     y: savedGate.y,
-    discovered: Boolean(savedGate.discovered)
+    discovered: Boolean(savedGate.discovered),
+    repaired: Boolean(savedGate.repaired)
   });
 }
 
@@ -963,7 +974,10 @@ function restoreAbandonedCabins(savedCabins, savedLegacyCabin) {
         hasGateClue: typeof cabin.hasGateClue === "boolean"
           ? cabin.hasGateClue
           : index % 4 === 0,
-        clueFound: Boolean(cabin.clueFound)
+        clueFound: Boolean(cabin.clueFound),
+        gateRepairPartType: GATE_REPAIR_PARTS.some((part) => part.type === cabin.gateRepairPartType)
+          ? cabin.gateRepairPartType
+          : undefined
       });
     });
   } else if (savedLegacyCabin?.generated
@@ -978,7 +992,10 @@ function restoreAbandonedCabins(savedCabins, savedLegacyCabin) {
       chestId: Number.isFinite(savedLegacyCabin.chestId) ? savedLegacyCabin.chestId : null,
       searched: Boolean(savedLegacyCabin.searched),
       hasGateClue: true,
-      clueFound: Boolean(savedLegacyCabin.clueFound)
+      clueFound: Boolean(savedLegacyCabin.clueFound),
+      gateRepairPartType: GATE_REPAIR_PARTS.some((part) => (
+        part.type === savedLegacyCabin.gateRepairPartType
+      )) ? savedLegacyCabin.gateRepairPartType : undefined
     });
     for (const item of [...barricades, ...doors, ...buildings]) {
       if (item.landmark === ABANDONED_CABIN_LANDMARK && !item.landmarkId) {
@@ -987,6 +1004,74 @@ function restoreAbandonedCabins(savedCabins, savedLegacyCabin) {
     }
   }
   generateAbandonedCabins();
+}
+
+function gateRepairPartLocation(type) {
+  const quickIndex = quickbarItems.findIndex((item) => item?.type === type);
+  if (quickIndex >= 0) return { collection: "quickbar", index: quickIndex };
+  const inventoryIndex = inventoryItems.findIndex((item) => item?.type === type);
+  if (inventoryIndex >= 0) return { collection: "inventory", index: inventoryIndex };
+  for (const chest of buildings.filter((building) => building.type === "chest")) {
+    const chestIndex = normalizeChestStorage(chest).findIndex((item) => item?.type === type);
+    if (chestIndex >= 0) return { collection: "chest", chest, index: chestIndex };
+  }
+  return null;
+}
+
+function ensureGateRepairPartsAvailable() {
+  if (escapeGate.repaired) return;
+  const claimedChestIds = new Set();
+  GATE_REPAIR_PARTS.forEach((part) => {
+    const location = gateRepairPartLocation(part.type);
+    if (location?.chest) claimedChestIds.add(location.chest.id);
+  });
+
+  GATE_REPAIR_PARTS.forEach((part, partIndex) => {
+    if (gateRepairPartLocation(part.type)) return;
+    const preferredCabin = abandonedCabins[GATE_REPAIR_CABIN_INDEXES[partIndex]];
+    const preferredChest = buildings.find((building) => (
+      building.type === "chest" && building.id === preferredCabin?.chestId
+    ));
+    const cabinChests = abandonedCabins.map((cabin) => (
+      buildings.find((building) => building.type === "chest" && building.id === cabin.chestId)
+    )).filter(Boolean);
+    const chest = [preferredChest, ...cabinChests].find((candidate) => (
+      candidate
+      && !claimedChestIds.has(candidate.id)
+      && normalizeChestStorage(candidate).some((item) => item === null)
+    ));
+    if (!chest) {
+      addPortableItem(part.type, 1, "legacy_repair_part");
+      return;
+    }
+    const items = normalizeChestStorage(chest);
+    const emptyIndex = items.findIndex((item) => item === null);
+    items[emptyIndex] = normalizePortableItem({
+      type: part.type,
+      count: 1,
+      source: ABANDONED_CABIN_LANDMARK
+    });
+    chest.gateRepairPartType = part.type;
+    const cabin = abandonedCabins.find((item) => item.chestId === chest.id);
+    if (cabin) cabin.gateRepairPartType = part.type;
+    claimedChestIds.add(chest.id);
+  });
+}
+
+function missingGateRepairParts() {
+  return GATE_REPAIR_PARTS.filter((part) => portableItemCount(part.type) < 1);
+}
+
+function gateRepairPartList(parts = missingGateRepairParts()) {
+  return parts.map((part) => part.label).join("、");
+}
+
+function escapeGateInteractionLabel() {
+  if (escapeGate.repaired) return "靠近按 E 逃离森林";
+  const missing = missingGateRepairParts();
+  return missing.length > 0
+    ? `大门损坏 · 缺少${gateRepairPartList(missing)}`
+    : "零件已齐 · 按 E 维修大门";
 }
 
 function normalizeSupplyCacheType(type) {
@@ -2316,6 +2401,7 @@ function resetWorld() {
   generateEscapeGate();
   abandonedCabins.length = 0;
   generateAbandonedCabins();
+  ensureGateRepairPartsAvailable();
   supplyCaches.length = 0;
   generateSupplyCaches();
   updateResourceChunks(true);
@@ -2561,6 +2647,7 @@ function continueGame() {
   doorId = nextEntityId(doors);
   buildingId = nextEntityId(buildings);
   restoreAbandonedCabins(saved.abandonedCabins, saved.abandonedCabin);
+  ensureGateRepairPartsAvailable();
   restoreSupplyCaches(saved.supplyCaches);
   restoreExploredMapCells(saved.exploredMapCells);
   updateResourceChunks(true);
@@ -2640,7 +2727,7 @@ function winGame() {
   stopEmote();
   gameOverPanel.classList.add("hidden");
   if (victorySummary) {
-    victorySummary.textContent = `你在第 ${dayNumber} 天找到了逃生大门，终于离开了森林。`;
+    victorySummary.textContent = `你在第 ${dayNumber} 天修复了逃生大门，终于离开了森林。`;
   }
   victoryPanel?.classList.remove("hidden");
   playTone({ frequency: 392, endFrequency: 784, type: "sine", duration: 0.7, volume: 0.08 });
@@ -2921,7 +3008,7 @@ function applyBloodMoonBuff(monster) {
 function updateEscapeGateDiscovery() {
   if (escapeGate.discovered || escapeGateDistance() > ESCAPE_GATE_DISCOVERY_DISTANCE) return;
   escapeGate.discovered = true;
-  showMessage("你发现了逃生大门！靠近后按 E 离开森林", 2);
+  showMessage("你发现了逃生大门，但它已经损坏", 2);
   saveGame(false);
 }
 
@@ -3202,6 +3289,22 @@ function updateDoors(delta) {
 function interact() {
   if (escapeGateDistance() < ESCAPE_GATE_INTERACT_DISTANCE) {
     escapeGate.discovered = true;
+    if (!escapeGate.repaired) {
+      const missing = missingGateRepairParts();
+      if (missing.length > 0) {
+        showMessage(`大门损坏，缺少${gateRepairPartList(missing)}`, 1.6);
+        updateHud();
+        saveGame(false);
+        return;
+      }
+      GATE_REPAIR_PARTS.forEach((part) => spendPortableItem(part.type, 1));
+      escapeGate.repaired = true;
+      playContainerSound(escapeGate.x, escapeGate.y);
+      showMessage("逃生大门维修完成，再按 E 离开森林", 1.8);
+      updateHud();
+      saveGame(false);
+      return;
+    }
     showMessage("逃生大门打开了", 1);
     winGame();
     return;
@@ -5346,10 +5449,15 @@ function updateSurvivalReadout() {
         ].label
       } : null
     ].filter(Boolean).sort((left, right) => left.distance - right.distance)[0] || null;
+    const missingRepairParts = missingGateRepairParts();
     if (classSelectionOpen) {
       objectiveLabel.textContent = "选择职业后进入森林";
     } else if (gateDistance < ESCAPE_GATE_INTERACT_DISTANCE * 1.4) {
-      objectiveLabel.textContent = "逃生大门就在前方 · 靠近按 E";
+      objectiveLabel.textContent = escapeGate.repaired
+        ? "逃生大门已修复 · 靠近按 E"
+        : missingRepairParts.length > 0
+          ? `大门损坏 · 缺少${gateRepairPartList(missingRepairParts)}`
+          : "维修零件已齐 · 靠近按 E 维修";
     } else if (nearestCabin?.distance < 440) {
       const cabinType = normalizeAbandonedCabinType(nearestCabin.cabin.type);
       objectiveLabel.textContent = `发现${ABANDONED_CABIN_TYPES[cabinType].label} · 搜索里面的储物箱`;
@@ -5358,7 +5466,11 @@ function updateSurvivalReadout() {
     } else if (player.health <= 30) {
       objectiveLabel.textContent = "寻找浆果，先处理伤势";
     } else if (escapeGate.discovered) {
-      objectiveLabel.textContent = `返回逃生大门 · 大致在${escapeGateDirection()}方`;
+      objectiveLabel.textContent = escapeGate.repaired
+        ? `大门已修复 · 返回${escapeGateDirection()}方`
+        : missingRepairParts.length > 0
+          ? `逃生大门损坏 · 还缺${gateRepairPartList(missingRepairParts)}`
+          : `零件已齐 · 返回${escapeGateDirection()}方维修大门`;
     } else if (gateClueCount > 0 && isNight()) {
       objectiveLabel.textContent = `活过夜晚 · 继续向${escapeGateDirection()}方搜索`;
     } else if (gateClueCount > 0) {
@@ -5935,7 +6047,9 @@ function renderExplorationMap() {
 
   if (mapStatus) {
     mapStatus.textContent = escapeGate.discovered
-      ? "逃生大门已准确定位"
+      ? escapeGate.repaired
+        ? "逃生大门已准确定位 · 已修复"
+        : "逃生大门已准确定位 · 等待维修"
       : clueFound
         ? "旧地图只能确定大门的大致区域"
         : "尚未找到逃生大门线索";
@@ -6005,7 +6119,9 @@ function drawEscapeGate() {
   if (escapeGateSprite.complete
     && escapeGateSprite.naturalWidth >= 64
     && escapeGateSprite.naturalHeight >= 64) {
+    if (!escapeGate.repaired) ctx.filter = "grayscale(.42) brightness(.76)";
     ctx.drawImage(escapeGateSprite, 0, 0, 64, 64, -128, -244, 256, 256);
+    ctx.filter = "none";
   } else {
     ctx.fillStyle = "#18201d";
     ctx.fillRect(-70, -190, 140, 196);
@@ -6020,14 +6136,16 @@ function drawEscapeGate() {
   }
 
   if (escapeGateDistance() < ESCAPE_GATE_DISCOVERY_DISTANCE) {
+    const interactionLabel = escapeGateInteractionLabel();
     ctx.textAlign = "center";
-    ctx.fillStyle = "rgba(3, 7, 7, .88)";
-    ctx.fillRect(-63, 31, 126, 23);
-    ctx.strokeStyle = "#7c4a43";
-    ctx.strokeRect(-63, 31, 126, 23);
-    ctx.fillStyle = "#ded7bd";
     ctx.font = "10px ArkPixel, monospace";
-    ctx.fillText("靠近按 E 逃离森林", 0, 47);
+    const promptWidth = Math.max(150, Math.min(232, ctx.measureText(interactionLabel).width + 20));
+    ctx.fillStyle = "rgba(3, 7, 7, .88)";
+    ctx.fillRect(-promptWidth / 2, 31, promptWidth, 23);
+    ctx.strokeStyle = "#7c4a43";
+    ctx.strokeRect(-promptWidth / 2, 31, promptWidth, 23);
+    ctx.fillStyle = "#ded7bd";
+    ctx.fillText(interactionLabel, 0, 47);
   }
   ctx.restore();
 }

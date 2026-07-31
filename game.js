@@ -4619,6 +4619,7 @@ function renderChestStorage() {
     const item = items[index] || null;
     slot.classList.toggle("item-empty", !item);
     slot.classList.toggle("empty-slot", !item);
+    slot.classList.toggle("has-item", Boolean(item));
     slot.dataset.itemType = item?.type || "empty";
     slot.dataset.itemTier = item?.tier || "";
     slot.dataset.equipmentClass = item?.equipmentClass || "";
@@ -4626,7 +4627,7 @@ function renderChestStorage() {
     slot.dataset.count = item ? String(item.count) : "";
     slot.draggable = Boolean(item);
     slot.title = item
-      ? `${equipmentDisplayLabel(item)} ×${item.count}；拖回背包可取出，右键拆分`
+      ? `${equipmentDisplayLabel(item)} ×${item.count}；单击直接拿取，也可拖动，右键拆分`
       : "储物箱空格，把背包物品拖到这里";
     slot.setAttribute("aria-label", slot.title);
   });
@@ -4689,6 +4690,46 @@ function moveChestToInventory(chestIndex, inventoryIndex) {
   const amount = item.count;
   items[chestIndex] = null;
   finishStorageMove(`已取出${carried.label} ×${amount}`);
+  return true;
+}
+
+function takeChestItem(chestIndex) {
+  const chest = currentChest();
+  if (!chest) return false;
+  const items = normalizeChestStorage(chest);
+  const item = items[chestIndex];
+  const carried = normalizePortableItem(item);
+  const amount = Math.max(1, Math.floor(Number(item?.count) || 1));
+  if (!item || !carried) return false;
+
+  let destination = null;
+  if (isStackableItem(carried)) {
+    const quickIndex = quickbarItems.findIndex((entry) => entry?.type === carried.type);
+    const inventoryIndex = inventoryItems.findIndex((entry) => entry?.type === carried.type);
+    if (quickIndex >= 0) {
+      quickbarItems[quickIndex].count += amount;
+      destination = `快捷栏 ${quickIndex + 1}`;
+    } else if (inventoryIndex >= 0) {
+      inventoryItems[inventoryIndex].count += amount;
+      destination = `背包 ${inventoryIndex + 1}`;
+    }
+  }
+  if (!destination) {
+    const placed = addToFirstCarriedSlot({ ...carried, count: amount });
+    if (!placed) {
+      showMessage("快捷栏和背包都已满", 1);
+      return false;
+    }
+    destination = placed.collection === "quickbar"
+      ? `快捷栏 ${placed.index + 1}`
+      : `背包 ${placed.index + 1}`;
+  }
+
+  if (resourceItemDefinition(carried.type)) {
+    player[carried.type] = Math.max(0, Number(player[carried.type]) || 0) + amount;
+  }
+  items[chestIndex] = null;
+  finishStorageMove(`已取出${carried.label} ×${amount}，放入${destination}`);
   return true;
 }
 
@@ -6676,6 +6717,7 @@ chestSlots.forEach((slot, index) => {
     if (sourceChestIndex >= 0) moveChestItem(sourceChestIndex, index);
   });
   slot.addEventListener("dragend", clearStorageDragState);
+  slot.addEventListener("click", () => takeChestItem(index));
   slot.addEventListener("contextmenu", (event) => {
     event.preventDefault();
     splitChestStack(index);

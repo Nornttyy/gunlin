@@ -3195,6 +3195,13 @@ h1 {
   height: 73px;
 }
 
+.chest-slot.has-item > .item-sprite,
+.chest-slot[data-item-type]:not([data-item-type="empty"]) > .item-sprite {
+  display: block;
+  visibility: visible;
+  opacity: 1;
+}
+
 @media (max-width: 860px) {
   .inventory-workspace.chest-open {
     grid-template-columns: minmax(0, 530px);

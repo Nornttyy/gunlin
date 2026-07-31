@@ -65,6 +65,12 @@ const ABANDONED_CABIN_MIN_DISTANCE = 90 * TILE_SIZE;
 const ABANDONED_CABIN_MAX_DISTANCE = 420 * TILE_SIZE;
 const ABANDONED_CABIN_MIN_SPACING = 60 * TILE_SIZE;
 const ABANDONED_CABIN_LANDMARK = "abandoned_cabin";
+const SUPPLY_CACHE_COUNT = 12;
+const SUPPLY_CACHE_MIN_DISTANCE = 28 * TILE_SIZE;
+const SUPPLY_CACHE_MAX_DISTANCE = 88 * TILE_SIZE;
+const SUPPLY_CACHE_MIN_SPACING = 16 * TILE_SIZE;
+const SUPPLY_CACHE_LANDMARK = "supply_cache";
+const SUPPLY_CACHE_TYPES = ["builder", "forager", "scavenger", "hunter"];
 const MAP_CELL_TILES = 24;
 const MAP_CELL_WORLD_SIZE = MAP_CELL_TILES * TILE_SIZE;
 const MAP_COLUMNS = Math.ceil(WORLD.tileWidth / MAP_CELL_TILES);
@@ -594,6 +600,7 @@ const pistolShot = {
 const campfire = { ...CAMP_POSITION };
 const escapeGate = { x: 0, y: 0, discovered: false };
 const abandonedCabins = [];
+const supplyCaches = [];
 const exploredMapCells = new Set();
 
 function hash(index) {
@@ -982,15 +989,214 @@ function restoreAbandonedCabins(savedCabins, savedLegacyCabin) {
   generateAbandonedCabins();
 }
 
+function normalizeSupplyCacheType(type) {
+  return SUPPLY_CACHE_TYPES.includes(type) ? type : SUPPLY_CACHE_TYPES[0];
+}
+
+function chooseSupplyCacheType() {
+  const counts = Object.fromEntries(SUPPLY_CACHE_TYPES.map((type) => [type, 0]));
+  supplyCaches.forEach((cache) => {
+    counts[normalizeSupplyCacheType(cache.type)] += 1;
+  });
+  const minimum = Math.min(...Object.values(counts));
+  const candidates = SUPPLY_CACHE_TYPES.filter((type) => counts[type] === minimum);
+  return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
+function supplyCacheLootItem(type, count = 1) {
+  return normalizePortableItem({
+    type,
+    count,
+    source: SUPPLY_CACHE_LANDMARK
+  });
+}
+
+function createSupplyCacheLoot(cacheType = SUPPLY_CACHE_TYPES[0]) {
+  const type = normalizeSupplyCacheType(cacheType);
+  let loot = [];
+  if (type === "forager") {
+    loot = [
+      supplyCacheLootItem("berry", 2 + Math.floor(Math.random() * 3)),
+      supplyCacheLootItem("wood", 1 + Math.floor(Math.random() * 2))
+    ];
+    if (Math.random() < 0.35) loot.push(supplyCacheLootItem("medkit"));
+    if (Math.random() < 0.45) loot.push(supplyCacheLootItem("glass_bottle"));
+  } else if (type === "scavenger") {
+    loot = [
+      supplyCacheLootItem("scrap", 3 + Math.floor(Math.random() * 3)),
+      supplyCacheLootItem("stone", 1 + Math.floor(Math.random() * 2))
+    ];
+    if (Math.random() < 0.55) loot.push(supplyCacheLootItem("glass_bottle"));
+  } else if (type === "hunter") {
+    loot = [
+      supplyCacheLootItem("berry", 2 + Math.floor(Math.random() * 2)),
+      supplyCacheLootItem("scrap", 2 + Math.floor(Math.random() * 2))
+    ];
+    if (Math.random() < 0.3) loot.push(supplyCacheLootItem("ammo_box"));
+  } else {
+    loot = [
+      supplyCacheLootItem("wood", 3 + Math.floor(Math.random() * 3)),
+      supplyCacheLootItem("stone", 2 + Math.floor(Math.random() * 2))
+    ];
+    if (Math.random() < 0.4) loot.push(supplyCacheLootItem("scrap", 1 + Math.floor(Math.random() * 2)));
+  }
+  return Array.from({ length: CHEST_SLOT_COUNT }, (_, index) => loot[index] || null);
+}
+
+function supplyCacheSiteIsClear(x, y) {
+  if (x < WORLD.margin + 80 || y < WORLD.margin + 80
+    || x > WORLD.width - WORLD.margin - 80 || y > WORLD.height - WORLD.margin - 80) return false;
+  const distanceFromCamp = Math.hypot(x - CAMP_POSITION.x, y - CAMP_POSITION.y);
+  if (distanceFromCamp < SUPPLY_CACHE_MIN_DISTANCE - TILE_SIZE
+    || distanceFromCamp > SUPPLY_CACHE_MAX_DISTANCE + TILE_SIZE) return false;
+  const groundPoints = [
+    [0, 0],
+    [-32, 0],
+    [32, 0],
+    [0, -32],
+    [0, 32]
+  ];
+  if (!groundPoints.every(([offsetX, offsetY]) => (
+    terrainAtWorld(x + offsetX, y + offsetY) === TERRAIN_FRAME.grass
+  ))) return false;
+  if (Math.hypot(x - escapeGate.x, y - escapeGate.y) < 250) return false;
+  if (abandonedCabins.some((cabin) => Math.hypot(x - cabin.x, y - cabin.y) < 300)) return false;
+  if (supplyCaches.some((cache) => (
+    Math.hypot(x - cache.x, y - cache.y) < SUPPLY_CACHE_MIN_SPACING
+  ))) return false;
+  return !barricades.some((item) => Math.hypot(x - item.x, y - item.y) < 96)
+    && !doors.some((item) => Math.hypot(x - item.x, y - item.y) < 96)
+    && !buildings.some((item) => Math.hypot(x - item.x, y - item.y) < 96);
+}
+
+function generateSupplyCache(cacheIndex = supplyCaches.length) {
+  if (cacheIndex >= SUPPLY_CACHE_COUNT) return null;
+  let cacheX = 0;
+  let cacheY = 0;
+  for (let attempt = 0; attempt < 600; attempt += 1) {
+    const distanceRoll = Math.pow(Math.random(), 1.35);
+    const distance = SUPPLY_CACHE_MIN_DISTANCE
+      + distanceRoll * (SUPPLY_CACHE_MAX_DISTANCE - SUPPLY_CACHE_MIN_DISTANCE);
+    const angle = Math.random() * Math.PI * 2;
+    const x = Math.round(
+      (CAMP_POSITION.x + Math.cos(angle) * distance) / BUILD_GRID_SIZE
+    ) * BUILD_GRID_SIZE;
+    const y = Math.round(
+      (CAMP_POSITION.y + Math.sin(angle) * distance) / BUILD_GRID_SIZE
+    ) * BUILD_GRID_SIZE;
+    if (!supplyCacheSiteIsClear(x, y)) continue;
+    cacheX = x;
+    cacheY = y;
+    break;
+  }
+  if (!cacheX || !cacheY) return null;
+
+  const cacheId = `${SUPPLY_CACHE_LANDMARK}:${cacheIndex}`;
+  const cacheType = chooseSupplyCacheType();
+  const chestDefinition = playerBuildingDefinition("chest");
+  const chest = {
+    id: buildingId++,
+    type: "chest",
+    x: cacheX,
+    y: cacheY,
+    health: chestDefinition.health,
+    maxHealth: chestDefinition.health,
+    items: createSupplyCacheLoot(cacheType),
+    landmark: SUPPLY_CACHE_LANDMARK,
+    landmarkId: cacheId,
+    cacheType,
+    searched: false
+  };
+  buildings.push(chest);
+  const cache = {
+    id: cacheId,
+    x: cacheX,
+    y: cacheY,
+    type: cacheType,
+    chestId: chest.id,
+    searched: false,
+    destroyed: false
+  };
+  supplyCaches.push(cache);
+  return cache;
+}
+
+function generateSupplyCaches() {
+  while (supplyCaches.length < SUPPLY_CACHE_COUNT) {
+    if (!generateSupplyCache(supplyCaches.length)) break;
+  }
+  return supplyCaches.length;
+}
+
+function restoreSupplyCaches(savedCaches) {
+  supplyCaches.length = 0;
+  if (Array.isArray(savedCaches)) {
+    savedCaches.slice(0, SUPPLY_CACHE_COUNT).forEach((cache, index) => {
+      if (!Number.isFinite(cache?.x) || !Number.isFinite(cache?.y)) return;
+      const chest = buildings.find((building) => (
+        building.type === "chest"
+        && (building.id === cache.chestId || building.landmarkId === cache.id)
+      ));
+      const id = typeof cache.id === "string"
+        ? cache.id
+        : `${SUPPLY_CACHE_LANDMARK}:${index}`;
+      if (chest) {
+        chest.landmark = SUPPLY_CACHE_LANDMARK;
+        chest.landmarkId = id;
+        chest.cacheType = normalizeSupplyCacheType(cache.type);
+        chest.searched = Boolean(cache.searched);
+      }
+      supplyCaches.push({
+        id,
+        x: cache.x,
+        y: cache.y,
+        type: normalizeSupplyCacheType(cache.type),
+        chestId: chest?.id ?? (Number.isFinite(cache.chestId) ? cache.chestId : null),
+        searched: Boolean(cache.searched),
+        destroyed: Boolean(cache.destroyed) || !chest
+      });
+    });
+  } else {
+    buildings.filter((building) => (
+      building.type === "chest" && building.landmark === SUPPLY_CACHE_LANDMARK
+    )).slice(0, SUPPLY_CACHE_COUNT).forEach((chest, index) => {
+      const id = chest.landmarkId || `${SUPPLY_CACHE_LANDMARK}:${index}`;
+      chest.landmarkId = id;
+      supplyCaches.push({
+        id,
+        x: chest.x,
+        y: chest.y,
+        type: normalizeSupplyCacheType(chest.cacheType),
+        chestId: chest.id,
+        searched: Boolean(chest.searched),
+        destroyed: false
+      });
+    });
+  }
+  generateSupplyCaches();
+}
+
 function escapeGateDistance() {
   return Math.hypot(player.x - escapeGate.x, player.y - escapeGate.y);
 }
 
-function escapeGateDirection() {
-  const angle = Math.atan2(escapeGate.y - player.y, escapeGate.x - player.x);
+function directionToWorldPosition(x, y) {
+  const angle = Math.atan2(y - player.y, x - player.x);
   const directions = ["东", "东南", "南", "西南", "西", "西北", "北", "东北"];
   const index = Math.round(angle / (Math.PI / 4));
   return directions[(index + 8) % 8];
+}
+
+function escapeGateDirection() {
+  return directionToWorldPosition(escapeGate.x, escapeGate.y);
+}
+
+function qualitativeDistance(distance) {
+  const tiles = distance / TILE_SIZE;
+  if (tiles < 12) return "就在附近";
+  if (tiles < 36) return "不远处";
+  if (tiles < 72) return "较远处";
+  return "远处";
 }
 
 function resourceOverlapsEscapeGate(x, y, radius) {
@@ -1002,6 +1208,14 @@ function resourceOverlapsAbandonedCabin(x, y, radius) {
   return abandonedCabins.some((cabin) => (
     Math.abs(x - cabin.x) < 176 + radius
     && Math.abs(y - cabin.y) < 176 + radius
+  ));
+}
+
+function resourceOverlapsSupplyCache(x, y, radius) {
+  return supplyCaches.some((cache) => (
+    !cache.destroyed
+    && Math.abs(x - cache.x) < 56 + radius
+    && Math.abs(y - cache.y) < 56 + radius
   ));
 }
 
@@ -1049,6 +1263,7 @@ function generateResourceChunk(chunkX, chunkY) {
         : type === "berry" ? 18 : type === "scrap" ? 9 : 8;
     if (resourceOverlapsEscapeGate(x, y, radius)) continue;
     if (resourceOverlapsAbandonedCabin(x, y, radius)) continue;
+    if (resourceOverlapsSupplyCache(x, y, radius)) continue;
     const treeFrame = type === "tree" && gridHash(chunkX, chunkY, candidate * 7 + 101) < 0.22 ? 1 : 0;
     if ((type === "tree" || type === "berry") && !canPlantGrowAt(x, y, radius)) continue;
     if (type === "rock" && !canResourceRestOnDryGround(x, y, radius)) continue;
@@ -1293,6 +1508,7 @@ function saveGame(announce = true) {
     escapeGate: { ...escapeGate },
     exploredMapCells: [...exploredMapCells],
     abandonedCabins: abandonedCabins.map((cabin) => ({ ...cabin })),
+    supplyCaches: supplyCaches.map((cache) => ({ ...cache })),
     abandonedCabin: abandonedCabins[0]
       ? { generated: true, ...abandonedCabins[0] }
       : { generated: false }
@@ -2100,6 +2316,8 @@ function resetWorld() {
   generateEscapeGate();
   abandonedCabins.length = 0;
   generateAbandonedCabins();
+  supplyCaches.length = 0;
+  generateSupplyCaches();
   updateResourceChunks(true);
   generateStarterResources();
   exploredMapCells.clear();
@@ -2343,6 +2561,7 @@ function continueGame() {
   doorId = nextEntityId(doors);
   buildingId = nextEntityId(buildings);
   restoreAbandonedCabins(saved.abandonedCabins, saved.abandonedCabin);
+  restoreSupplyCaches(saved.supplyCaches);
   restoreExploredMapCells(saved.exploredMapCells);
   updateResourceChunks(true);
   generateStarterResources();
@@ -3138,10 +3357,20 @@ function openChest(chest) {
         showMessage(`箱底的旧地图标出了逃生大门：${escapeGateDirection()}方`, 1.6);
       }
     }
+  } else if (chest.landmark === SUPPLY_CACHE_LANDMARK) {
+    const cache = supplyCaches.find((item) => (
+      item.id === chest.landmarkId || item.chestId === chest.id
+    ));
+    if (cache) {
+      cache.searched = true;
+      chest.searched = true;
+    }
   }
   playContainerSound(chest.x, chest.y);
   setInventoryOpen(true);
-  if (chest.landmark === ABANDONED_CABIN_LANDMARK) saveGame(false);
+  updateHud();
+  if (chest.landmark === ABANDONED_CABIN_LANDMARK
+    || chest.landmark === SUPPLY_CACHE_LANDMARK) saveGame(false);
   showMessage("储物箱已打开，拖动物品即可存取", 1.2);
 }
 
@@ -4339,6 +4568,12 @@ function damagePlayerBuilding(target, damage, angle = 0) {
     return { hit: true, destroyed: false, blocked: false };
   }
 
+  if (building.landmark === SUPPLY_CACHE_LANDMARK) {
+    const cache = supplyCaches.find((item) => (
+      item.id === building.landmarkId || item.chestId === building.id
+    ));
+    if (cache) cache.destroyed = true;
+  }
   const index = target.collection.indexOf(building);
   if (index >= 0) target.collection.splice(index, 1);
   if (activeChestId === building.id) activeChestId = null;
@@ -5088,6 +5323,29 @@ function updateSurvivalReadout() {
         distance: Math.hypot(player.x - cabin.x, player.y - cabin.y)
       }))
       .sort((left, right) => left.distance - right.distance)[0] || null;
+    const nearestCache = supplyCaches
+      .filter((cache) => !cache.searched && !cache.destroyed)
+      .map((cache) => ({
+        cache,
+        distance: Math.hypot(player.x - cache.x, player.y - cache.y)
+      }))
+      .sort((left, right) => left.distance - right.distance)[0] || null;
+    const nearestExplorationTarget = [
+      nearestCache ? {
+        x: nearestCache.cache.x,
+        y: nearestCache.cache.y,
+        distance: nearestCache.distance,
+        label: "废弃物资箱"
+      } : null,
+      nearestCabin ? {
+        x: nearestCabin.cabin.x,
+        y: nearestCabin.cabin.y,
+        distance: nearestCabin.distance,
+        label: ABANDONED_CABIN_TYPES[
+          normalizeAbandonedCabinType(nearestCabin.cabin.type)
+        ].label
+      } : null
+    ].filter(Boolean).sort((left, right) => left.distance - right.distance)[0] || null;
     if (classSelectionOpen) {
       objectiveLabel.textContent = "选择职业后进入森林";
     } else if (gateDistance < ESCAPE_GATE_INTERACT_DISTANCE * 1.4) {
@@ -5095,6 +5353,8 @@ function updateSurvivalReadout() {
     } else if (nearestCabin?.distance < 440) {
       const cabinType = normalizeAbandonedCabinType(nearestCabin.cabin.type);
       objectiveLabel.textContent = `发现${ABANDONED_CABIN_TYPES[cabinType].label} · 搜索里面的储物箱`;
+    } else if (nearestCache?.distance < 300) {
+      objectiveLabel.textContent = "发现废弃物资箱 · 靠近按 E";
     } else if (player.health <= 30) {
       objectiveLabel.textContent = "寻找浆果，先处理伤势";
     } else if (escapeGate.discovered) {
@@ -5105,6 +5365,11 @@ function updateSurvivalReadout() {
       objectiveLabel.textContent = `找到木屋地图 · 逃生大门大致在${escapeGateDirection()}方`;
     } else if (isNight()) {
       objectiveLabel.textContent = "活过夜晚 · 搜索木屋寻找大门线索";
+    } else if (nearestExplorationTarget) {
+      objectiveLabel.textContent = `向${directionToWorldPosition(
+        nearestExplorationTarget.x,
+        nearestExplorationTarget.y
+      )}探索 · ${qualitativeDistance(nearestExplorationTarget.distance)}有${nearestExplorationTarget.label}`;
     } else {
       objectiveLabel.textContent = "搜索废弃木屋 · 寻找逃生大门线索";
     }
@@ -5524,6 +5789,20 @@ function drawExplorationCabin(cabin) {
 
 function drawExplorationLandmarks() {
   abandonedCabins.filter((cabin) => cabin.searched).forEach(drawExplorationCabin);
+  supplyCaches.filter((cache) => cache.searched && !cache.destroyed).forEach((cache) => {
+    drawExplorationMapSprite(
+      worldSprite,
+      BUILDING_FRAME.chest * 16,
+      BUILDING_ROW * 16,
+      16,
+      16,
+      cache.x,
+      cache.y,
+      7,
+      7,
+      "rgba(201, 162, 100, .55)"
+    );
+  });
 
   if (escapeGate.discovered) {
     drawExplorationMapSprite(
@@ -5664,7 +5943,9 @@ function renderExplorationMap() {
   if (mapExplored) {
     const percentage = exploredMapCells.size / (MAP_COLUMNS * MAP_ROWS) * 100;
     const label = percentage > 0 && percentage < 0.1 ? "不足 0.1" : percentage.toFixed(1);
-    mapExplored.textContent = `已探索 ${label}% · ${exploredMapCells.size} 区域`;
+    const searchedCabinCount = abandonedCabins.filter((cabin) => cabin.searched).length;
+    const searchedCacheCount = supplyCaches.filter((cache) => cache.searched).length;
+    mapExplored.textContent = `已探索 ${label}% · 木屋 ${searchedCabinCount}/${ABANDONED_CABIN_COUNT} · 物资箱 ${searchedCacheCount}/${SUPPLY_CACHE_COUNT}`;
   }
 }
 

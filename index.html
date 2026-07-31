@@ -12,7 +12,7 @@
   <link rel="preload" href="assets/escape-gate.png?v=20260729-gate-drawn1" as="image" />
   <link rel="preload" href="assets/forest-assets.png?v=20260730-bottles1" as="image" />
   <link rel="preload" href="assets/ark-pixel-12px-zh_cn.woff2?v=20260728-assets2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=20260731-explorationmap2" />
+  <link rel="stylesheet" href="styles.css?v=20260731-supplycaches1" />
 </head>
 <body>
   <main id="app">
@@ -97,7 +97,7 @@
             <div>
               <small>OBJECTIVE // ESCAPE</small>
               <h3>找到逃生大门</h3>
-              <p>大门在出生点至少 700 格外。用 M 打开探索地图；旧地图线索只会标出大致区域，亲自发现后才显示准确位置。</p>
+              <p>途中有 12 个随机废弃物资箱和 20 座木屋。跟随大致方向探索；旧地图只会标出逃生大门的范围。</p>
             </div>
           </article>
         </div>
@@ -188,7 +188,7 @@
           <canvas id="mapCanvas" width="640" height="640" aria-label="森林探索地图"></canvas>
           <span class="map-scanline" aria-hidden="true"></span>
         </div>
-        <p class="map-tip">玩家、营地、木屋与大门均使用实际画面缩略显示 · 按 M 关闭</p>
+        <p class="map-tip">玩家、营地、搜索过的物资箱、木屋与大门均直接缩小显示 · 按 M 关闭</p>
       </section>
       <div class="hud">
         <div class="hud-stamp">REC // FOREST SIGNAL</div>
@@ -417,6 +417,6 @@
       <p class="settings-tip">设置会自动保存在这个浏览器中</p>
     </section>
   </main>
-  <script type="module" src="game.js?v=20260731-explorationmap2"></script>
+  <script type="module" src="game.js?v=20260731-supplycaches1"></script>
 </body>
 </html>

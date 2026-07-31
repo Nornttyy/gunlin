@@ -3,6 +3,7 @@ services:
     name: gunlin-multiplayer-nornttyy
     runtime: node
     plan: free
+    region: singapore
     rootDir: server
     buildCommand: npm ci --omit=dev
     startCommand: npm start

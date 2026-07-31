@@ -5435,20 +5435,145 @@ function mapPointFromWorld(worldX, worldY) {
   };
 }
 
-function drawExplorationMapMarker(worldX, worldY, color, size = 5, diamond = false) {
-  if (!mapContext || !mapCanvas) return;
+function drawExplorationMapSprite(
+  image,
+  sourceX,
+  sourceY,
+  sourceWidth,
+  sourceHeight,
+  worldX,
+  worldY,
+  drawWidth,
+  drawHeight,
+  glowColor = ""
+) {
+  if (!mapContext || !mapCanvas || !image?.complete
+    || image.naturalWidth < sourceX + sourceWidth
+    || image.naturalHeight < sourceY + sourceHeight) return;
   const point = mapPointFromWorld(worldX, worldY);
   mapContext.save();
   mapContext.translate(point.x, point.y);
-  if (diamond) mapContext.rotate(Math.PI / 4);
-  mapContext.fillStyle = color;
-  mapContext.shadowColor = color;
-  mapContext.shadowBlur = Math.max(3, size);
-  mapContext.fillRect(-size / 2, -size / 2, size, size);
-  mapContext.strokeStyle = "rgba(244, 241, 216, .72)";
-  mapContext.lineWidth = 1;
-  mapContext.strokeRect(-size / 2, -size / 2, size, size);
+  if (glowColor) {
+    mapContext.shadowColor = glowColor;
+    mapContext.shadowBlur = 5;
+  }
+  mapContext.drawImage(
+    image,
+    sourceX,
+    sourceY,
+    sourceWidth,
+    sourceHeight,
+    -drawWidth / 2,
+    -drawHeight / 2,
+    drawWidth,
+    drawHeight
+  );
   mapContext.restore();
+}
+
+function drawExplorationCabin(cabin) {
+  if (!mapContext || !worldSprite.complete
+    || worldSprite.naturalWidth < 128 || worldSprite.naturalHeight < 96) return;
+  const point = mapPointFromWorld(cabin.x, cabin.y);
+  const previewTileSize = 1.8;
+  const drawCabinPiece = (item, frame, rotation = 0) => {
+    const offsetX = (item.x - cabin.x) / BUILD_GRID_SIZE * previewTileSize;
+    const offsetY = (item.y - cabin.y) / BUILD_GRID_SIZE * previewTileSize;
+    mapContext.save();
+    mapContext.translate(offsetX, offsetY);
+    mapContext.rotate(rotation);
+    mapContext.drawImage(
+      worldSprite,
+      frame * 16,
+      BUILDING_ROW * 16,
+      16,
+      16,
+      -previewTileSize / 2,
+      -previewTileSize / 2,
+      previewTileSize,
+      previewTileSize
+    );
+    mapContext.restore();
+  };
+  const cabinBuildings = buildings.filter((item) => item.landmarkId === cabin.id);
+  const cabinWalls = barricades.filter((item) => item.landmarkId === cabin.id);
+  const cabinDoors = doors.filter((item) => item.landmarkId === cabin.id);
+
+  mapContext.save();
+  mapContext.translate(point.x, point.y);
+  mapContext.shadowColor = "rgba(218, 224, 199, .45)";
+  mapContext.shadowBlur = 3;
+  cabinBuildings.filter((item) => item.type === "floor")
+    .forEach((item) => drawCabinPiece(item, BUILDING_FRAME.floor));
+  cabinWalls.forEach((item) => (
+    drawCabinPiece(item, BUILDING_FRAME.wall, item.rotation || 0)
+  ));
+  cabinDoors.forEach((item) => (
+    drawCabinPiece(
+      item,
+      item.open ? BUILDING_FRAME.doorOpen : BUILDING_FRAME.doorClosed,
+      item.rotation || 0
+    )
+  ));
+  cabinBuildings.filter((item) => item.type !== "floor").forEach((item) => {
+    const frame = BUILDING_FRAME[item.type];
+    if (Number.isFinite(frame)) drawCabinPiece(item, frame);
+  });
+  mapContext.restore();
+}
+
+function drawExplorationLandmarks() {
+  abandonedCabins.filter((cabin) => cabin.searched).forEach(drawExplorationCabin);
+
+  if (escapeGate.discovered) {
+    drawExplorationMapSprite(
+      escapeGateSprite,
+      0,
+      0,
+      64,
+      64,
+      escapeGate.x,
+      escapeGate.y,
+      15,
+      15,
+      "rgba(225, 196, 91, .75)"
+    );
+  }
+
+  drawExplorationMapSprite(
+    worldSprite,
+    BUILDING_FRAME.campfire * 16,
+    BUILDING_ROW * 16,
+    16,
+    16,
+    CAMP_POSITION.x,
+    CAMP_POSITION.y,
+    11,
+    11,
+    "rgba(223, 139, 77, .7)"
+  );
+
+  const playerFrame = Math.floor(elapsed * 2) % 2;
+  const playerPoint = mapPointFromWorld(player.x, player.y);
+  if (sprite.complete && sprite.naturalWidth >= 16 && sprite.naturalHeight >= 16) {
+    mapContext.save();
+    mapContext.translate(playerPoint.x, playerPoint.y);
+    if (player.dirX < 0) mapContext.scale(-1, 1);
+    mapContext.shadowColor = "rgba(244, 233, 183, .72)";
+    mapContext.shadowBlur = 5;
+    mapContext.drawImage(
+      sprite,
+      playerFrame * 16,
+      player.classRow * 16,
+      16,
+      16,
+      -6,
+      -7,
+      12,
+      12
+    );
+    mapContext.restore();
+  }
 }
 
 function approximateEscapeGateMapRegion() {
@@ -5469,16 +5594,13 @@ function renderExplorationMap() {
   const height = mapCanvas.height;
   const cellWidth = width / MAP_COLUMNS;
   const cellHeight = height / MAP_ROWS;
+  const terrainDetail = 5;
+  const detailWidth = cellWidth / terrainDetail;
+  const detailHeight = cellHeight / terrainDetail;
   const terrainColors = {
     [TERRAIN_FRAME.grass]: "#294437",
     [TERRAIN_FRAME.sand]: "#655e41",
     [TERRAIN_FRAME.water]: "#205361"
-  };
-  const cabinColors = {
-    normal: "#8da184",
-    damaged: "#a05d43",
-    tool: "#598ca0",
-    danger: "#bd4845"
   };
 
   mapContext.clearRect(0, 0, width, height);
@@ -5488,22 +5610,26 @@ function renderExplorationMap() {
   exploredMapCells.forEach((key) => {
     const cell = parseMapCellKey(key);
     if (!cell) return;
-    const worldX = Math.min(
-      WORLD.width - 1,
-      (cell.column + 0.5) * MAP_CELL_WORLD_SIZE
-    );
-    const worldY = Math.min(
-      WORLD.height - 1,
-      (cell.row + 0.5) * MAP_CELL_WORLD_SIZE
-    );
-    const terrain = terrainAtWorld(worldX, worldY);
-    mapContext.fillStyle = terrainColors[terrain] || terrainColors[TERRAIN_FRAME.grass];
-    mapContext.fillRect(
-      cell.column * cellWidth,
-      cell.row * cellHeight,
-      Math.ceil(cellWidth + 0.35),
-      Math.ceil(cellHeight + 0.35)
-    );
+    for (let detailY = 0; detailY < terrainDetail; detailY += 1) {
+      for (let detailX = 0; detailX < terrainDetail; detailX += 1) {
+        const worldX = Math.min(
+          WORLD.width - 1,
+          (cell.column + (detailX + 0.5) / terrainDetail) * MAP_CELL_WORLD_SIZE
+        );
+        const worldY = Math.min(
+          WORLD.height - 1,
+          (cell.row + (detailY + 0.5) / terrainDetail) * MAP_CELL_WORLD_SIZE
+        );
+        const terrain = terrainAtWorld(worldX, worldY);
+        mapContext.fillStyle = terrainColors[terrain] || terrainColors[TERRAIN_FRAME.grass];
+        mapContext.fillRect(
+          cell.column * cellWidth + detailX * detailWidth,
+          cell.row * cellHeight + detailY * detailHeight,
+          Math.ceil(detailWidth + 0.2),
+          Math.ceil(detailHeight + 0.2)
+        );
+      }
+    }
   });
 
   mapContext.save();
@@ -5512,15 +5638,8 @@ function renderExplorationMap() {
   mapContext.strokeRect(.5, .5, width - 1, height - 1);
   mapContext.restore();
 
-  abandonedCabins.filter((cabin) => cabin.searched).forEach((cabin) => {
-    const type = normalizeAbandonedCabinType(cabin.type);
-    drawExplorationMapMarker(cabin.x, cabin.y, cabinColors[type], 5);
-  });
-
   const clueFound = abandonedCabins.some((cabin) => cabin.clueFound);
-  if (escapeGate.discovered) {
-    drawExplorationMapMarker(escapeGate.x, escapeGate.y, "#e0c35d", 8, true);
-  } else if (clueFound) {
+  if (!escapeGate.discovered && clueFound) {
     const region = approximateEscapeGateMapRegion();
     const point = mapPointFromWorld(region.x, region.y);
     const radiusX = region.radius / WORLD.width * width;
@@ -5528,23 +5647,12 @@ function renderExplorationMap() {
     mapContext.save();
     mapContext.beginPath();
     mapContext.ellipse(point.x, point.y, radiusX, radiusY, 0, 0, Math.PI * 2);
-    mapContext.fillStyle = "rgba(204, 177, 78, .1)";
+    mapContext.fillStyle = "rgba(204, 177, 78, .13)";
     mapContext.fill();
-    mapContext.setLineDash([5, 4]);
-    mapContext.strokeStyle = "rgba(220, 193, 92, .85)";
-    mapContext.lineWidth = 1.5;
-    mapContext.stroke();
-    mapContext.setLineDash([]);
-    mapContext.fillStyle = "#e0c76e";
-    mapContext.font = "16px ArkPixel, monospace";
-    mapContext.textAlign = "center";
-    mapContext.textBaseline = "middle";
-    mapContext.fillText("?", point.x, point.y + 1);
     mapContext.restore();
   }
 
-  drawExplorationMapMarker(CAMP_POSITION.x, CAMP_POSITION.y, "#df8b4d", 7);
-  drawExplorationMapMarker(player.x, player.y, "#f4e9b7", 8, true);
+  drawExplorationLandmarks();
 
   if (mapStatus) {
     mapStatus.textContent = escapeGate.discovered

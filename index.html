@@ -12,7 +12,7 @@
   <link rel="preload" href="assets/escape-gate.png?v=20260729-gate-drawn1" as="image" />
   <link rel="preload" href="assets/forest-assets.png?v=20260730-bottles1" as="image" />
   <link rel="preload" href="assets/ark-pixel-12px-zh_cn.woff2?v=20260728-assets2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="styles.css?v=20260731-explorationmap1" />
+  <link rel="stylesheet" href="styles.css?v=20260731-explorationmap2" />
 </head>
 <body>
   <main id="app">
@@ -188,16 +188,7 @@
           <canvas id="mapCanvas" width="640" height="640" aria-label="森林探索地图"></canvas>
           <span class="map-scanline" aria-hidden="true"></span>
         </div>
-        <div class="map-legend" aria-label="地图图例">
-          <span><i class="map-dot player"></i>玩家</span>
-          <span><i class="map-dot camp"></i>营地</span>
-          <span><i class="map-dot normal"></i>普通屋</span>
-          <span><i class="map-dot damaged"></i>破损屋</span>
-          <span><i class="map-dot tool"></i>工具屋</span>
-          <span><i class="map-dot danger"></i>危险屋</span>
-          <span><i class="map-dot gate"></i>逃生大门</span>
-        </div>
-        <p class="map-tip">迷雾只会在你亲自走过的区域散去 · 按 M 关闭</p>
+        <p class="map-tip">玩家、营地、木屋与大门均使用实际画面缩略显示 · 按 M 关闭</p>
       </section>
       <div class="hud">
         <div class="hud-stamp">REC // FOREST SIGNAL</div>
@@ -426,6 +417,6 @@
       <p class="settings-tip">设置会自动保存在这个浏览器中</p>
     </section>
   </main>
-  <script type="module" src="game.js?v=20260731-explorationmap1"></script>
+  <script type="module" src="game.js?v=20260731-explorationmap2"></script>
 </body>
 </html>

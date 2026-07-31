@@ -3487,8 +3487,7 @@ h1 {
 }
 
 .map-header,
-.map-readout,
-.map-legend {
+.map-readout {
   display: flex;
   align-items: center;
 }
@@ -3598,40 +3597,8 @@ h1 {
   animation: map-scan 5.8s linear infinite;
 }
 
-.map-legend {
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 7px 14px;
-  padding: 10px 5px 3px;
-  color: #84938a;
-  font-size: 8px;
-}
-
-.map-legend span {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.map-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  border: 1px solid rgba(238, 240, 220, .55);
-  background: #9baa9e;
-  box-shadow: 0 0 5px currentColor;
-}
-
-.map-dot.player { color: #f4e9bd; background: #f4e9bd; transform: rotate(45deg); }
-.map-dot.camp { color: #e08d50; background: #e08d50; border-radius: 50%; }
-.map-dot.normal { color: #a8b89e; background: #6d8268; }
-.map-dot.damaged { color: #b77658; background: #8d503c; }
-.map-dot.tool { color: #86afc0; background: #537b8c; }
-.map-dot.danger { color: #d45d5a; background: #9f3e3c; }
-.map-dot.gate { color: #dec365; background: #b1983f; transform: rotate(45deg); }
-
 .map-tip {
-  margin: 5px 0 0;
+  margin: 9px 0 0;
   color: #697970;
   font-size: 8px;
   text-align: center;
@@ -3651,7 +3618,6 @@ h1 {
 
   .map-header h2 { margin-bottom: 5px; font-size: 19px; }
   .map-frame { width: min(520px, 61vh, calc(100vw - 52px)); }
-  .map-legend { padding-top: 6px; }
 }
 
 @media (max-width: 560px) {
@@ -3659,5 +3625,4 @@ h1 {
   .map-header h2 { font-size: 19px; }
   .map-readout { align-items: flex-start; flex-direction: column; gap: 2px; }
   .map-frame { width: min(640px, 56vh, calc(100vw - 50px)); }
-  .map-legend { gap: 6px 9px; }
 }

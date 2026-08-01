@@ -3108,19 +3108,6 @@ function isNight() {
   return elapsed % CYCLE_LENGTH >= DAY_LENGTH;
 }
 
-// 仅供局内快捷键使用：立即跳到当前这一天的夜晚，并同步夜晚事件。
-function skipToNight() {
-  if (isNight()) return;
-  const cycleStart = Math.floor(elapsed / CYCLE_LENGTH) * CYCLE_LENGTH;
-  elapsed = cycleStart + DAY_LENGTH;
-  dayNumber = Math.floor(elapsed / CYCLE_LENGTH) + 1;
-  wasNight = true;
-  beginNightSpecialWeather();
-  playPhaseSound(true);
-  spawnMonster();
-  spawnTimer = bloodMoonActive ? 2.8 : 4;
-}
-
 function currentPhaseProgress() {
   const cycle = elapsed % CYCLE_LENGTH;
   return isNight() ? (cycle - DAY_LENGTH) / NIGHT_LENGTH : cycle / DAY_LENGTH;
@@ -7820,11 +7807,6 @@ window.addEventListener("keydown", (event) => {
     return;
   }
   if (pauseOpen) return;
-  if (event.ctrlKey && event.code === "Digit5") {
-    event.preventDefault();
-    if (!event.repeat) skipToNight();
-    return;
-  }
   if (event.code === "KeyO") {
     if (!event.repeat) setAudioEnabled(!audioEnabled);
     return;
